@@ -12,7 +12,6 @@ Invariants (from spec §3.1 / PP-01 / PP-02):
 """
 from __future__ import annotations
 
-import warnings
 from typing import TYPE_CHECKING
 
 from pokerkit import Automation, NoLimitTexasHoldem
@@ -118,16 +117,14 @@ class CanonicalState:
         """Burn one card, then deal the appropriate number of community cards.
 
         PP-01: CARD_BURNING / BOARD_DEALING automations are OFF; all card
-        movement flows through the seeded deck.
+        movement flows through the seeded deck. PokerKit's UserWarning for
+        "not recommended" cards fires only on genuine duplicates — we
+        intentionally do NOT suppress it so deck-logic regressions surface.
         """
         count = {Street.FLOP: 3, Street.TURN: 1, Street.RIVER: 1}[street]
-        with warnings.catch_warnings():
-            # PokerKit emits UserWarnings when dealt cards don't match its
-            # internal dealable-cards set; our seeded deck is authoritative.
-            warnings.simplefilter("ignore", UserWarning)
-            self._state.burn_card(self._next_card())
-            cards = tuple(self._next_card() for _ in range(count))
-            self._state.deal_board(cards)
+        self._state.burn_card(self._next_card())
+        cards = tuple(self._next_card() for _ in range(count))
+        self._state.deal_board(cards)
 
     def community(self) -> list[str]:
         """Current community cards as 2-char string tokens (flat, ordered)."""
