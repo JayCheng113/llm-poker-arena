@@ -9,7 +9,7 @@ description = "Multi-agent LLM 6-max NLHE simulation platform (Phase 1)"
 requires-python = ">=3.11"
 authors = [{ name = "zcheng256" }]
 dependencies = [
-    "pokerkit>=0.5",
+    "pokerkit>=0.7,<0.8",
     "pydantic>=2.0",
 ]
 
