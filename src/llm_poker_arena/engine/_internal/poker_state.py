@@ -12,12 +12,14 @@ Invariants (from spec §3.1 / PP-01 / PP-02):
 """
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 from pokerkit import Automation, NoLimitTexasHoldem
 
 from llm_poker_arena.engine._internal.deck import build_deterministic_deck, card_to_str
 from llm_poker_arena.engine.config import HandContext, SessionConfig
+from llm_poker_arena.engine.types import Street
 
 if TYPE_CHECKING:
     from pokerkit import Card, State
@@ -111,3 +113,22 @@ class CanonicalState:
             assert len(cards) == 2, f"seat {seat} has {len(cards)} hole cards"
             out[seat] = (card_to_str(cards[0]), card_to_str(cards[1]))
         return out
+
+    def deal_community(self, street: Street) -> None:
+        """Burn one card, then deal the appropriate number of community cards.
+
+        PP-01: CARD_BURNING / BOARD_DEALING automations are OFF; all card
+        movement flows through the seeded deck.
+        """
+        count = {Street.FLOP: 3, Street.TURN: 1, Street.RIVER: 1}[street]
+        with warnings.catch_warnings():
+            # PokerKit emits UserWarnings when dealt cards don't match its
+            # internal dealable-cards set; our seeded deck is authoritative.
+            warnings.simplefilter("ignore", UserWarning)
+            self._state.burn_card(self._next_card())
+            cards = tuple(self._next_card() for _ in range(count))
+            self._state.deal_board(cards)
+
+    def community(self) -> list[str]:
+        """Current community cards as 2-char string tokens (flat, ordered)."""
+        return [card_to_str(c) for c in self._state.get_board_cards(0)]

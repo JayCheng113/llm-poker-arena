@@ -100,3 +100,47 @@ def test_hole_cards_are_unique_across_seats() -> None:
     hole = CanonicalState(_cfg(), _ctx(0)).hole_cards()
     flat = [c for pair in hole.values() for c in pair]
     assert len(flat) == len(set(flat)) == 12
+
+
+# --------------------------- community deal ---------------------------
+
+from llm_poker_arena.engine.types import Street  # noqa: E402 — grouped at end intentionally
+
+
+def _fast_forward_preflop_to_flop(state: CanonicalState) -> None:
+    """Close out the current betting street by having every required actor call."""
+    # Expose the underlying state for setup purposes only (test-local).
+    raw = state._state
+    while raw.actor_index is not None:  # FIX: is_actor_required doesn't exist in 0.7.3
+        try:
+            raw.check_or_call()
+        except Exception:  # noqa: BLE001
+            break
+
+
+def test_deal_flop_reveals_three_community_cards() -> None:
+    s = CanonicalState(_cfg(), _ctx(0))
+    _fast_forward_preflop_to_flop(s)
+    s.deal_community(Street.FLOP)
+    assert len(s.community()) == 3
+
+
+def test_deal_turn_adds_fourth_card() -> None:
+    s = CanonicalState(_cfg(), _ctx(0))
+    _fast_forward_preflop_to_flop(s)
+    s.deal_community(Street.FLOP)
+    _fast_forward_preflop_to_flop(s)
+    s.deal_community(Street.TURN)
+    assert len(s.community()) == 4
+
+
+def test_same_seed_yields_same_community_cards() -> None:
+    a = CanonicalState(_cfg(), _ctx(0))
+    _fast_forward_preflop_to_flop(a)
+    a.deal_community(Street.FLOP)
+
+    b = CanonicalState(_cfg(), _ctx(0))
+    _fast_forward_preflop_to_flop(b)
+    b.deal_community(Street.FLOP)
+
+    assert a.community() == b.community()
