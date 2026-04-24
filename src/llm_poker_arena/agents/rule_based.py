@@ -154,7 +154,11 @@ class RuleBasedAgent(Agent):
             return Action(tool_name="fold", args={})
         if "call" in legal:
             return Action(tool_name="call", args={})
-        # very last resort (all_in etc.): fold-equivalent
+        # Phase-2a-audit: preserve always-legal invariant when only all_in
+        # remains in the set (pokerkit 0.7.3 doesn't emit this today, but the
+        # prior `return fold` would have been illegal if it ever did).
+        if "all_in" in legal:
+            return Action(tool_name="all_in", args={})
         return Action(tool_name="fold", args={})
 
     # --------------------------------------------------- postflop
@@ -188,6 +192,11 @@ class RuleBasedAgent(Agent):
             return Action(tool_name="fold", args={})
         if "call" in legal:
             return Action(tool_name="call", args={})
+        # Phase-2a-audit: pokerkit 0.7.3 never emits {"all_in"}-only legal sets
+        # today (see `compute_legal_tool_set`), but if it did the prior fallback
+        # would have returned an illegal `fold`. Cover the case explicitly.
+        if "all_in" in legal:
+            return Action(tool_name="all_in", args={})
         return Action(tool_name="fold", args={})
 
     @staticmethod
@@ -198,4 +207,6 @@ class RuleBasedAgent(Agent):
             return Action(tool_name="check", args={})
         if "call" in legal:
             return Action(tool_name="call", args={})
+        if "all_in" in legal:
+            return Action(tool_name="all_in", args={})
         return Action(tool_name="fold", args={})

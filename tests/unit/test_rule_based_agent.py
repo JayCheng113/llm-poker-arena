@@ -185,3 +185,32 @@ def test_returned_action_is_always_in_legal_set() -> None:
 
 def test_provider_id_starts_with_rule_based() -> None:
     assert RuleBasedAgent().provider_id().startswith("rule_based")
+
+
+def test_rule_based_falls_back_to_all_in_when_only_all_in_legal() -> None:
+    """Phase-2a-audit: when legal set is {all_in} only, the agent must return
+    an action in the legal set. Prior fallback would have returned an illegal
+    `fold`. pokerkit 0.7.3 doesn't emit this legal shape today, but the
+    always-legal invariant should hold regardless.
+    """
+    agent = RuleBasedAgent()
+
+    # Junk preflop view: JUNK branch previously fell through to an illegal fold.
+    junk_v = _view(
+        hole=("7c", "2d"),
+        legal_names=("all_in",),
+    )
+    act = agent.decide(junk_v)
+    assert act.tool_name == "all_in"
+
+    # Postflop missed-hand view: hits `_safe_fold_or_check` fallback.
+    flop_v = _view(
+        hole=("5s", "6d"),
+        street=Street.FLOP,
+        community=("Ah", "Kc", "Qd"),
+        current_bet_to_match=10_000,
+        my_invested_this_round=0,
+        legal_names=("all_in",),
+    )
+    act = agent.decide(flop_v)
+    assert act.tool_name == "all_in"
