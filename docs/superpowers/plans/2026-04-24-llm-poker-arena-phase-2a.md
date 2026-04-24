@@ -219,20 +219,23 @@ def test_close_drains_remaining(tmp_path: Path) -> None:
 
 
 def test_time_based_flush(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """After FLUSH_INTERVAL_MS elapses since last flush, next write triggers a drain."""
-    p = tmp_path / "out.jsonl"
-    w = BatchedJsonlWriter(p)
+    """After FLUSH_INTERVAL_MS elapses since last flush, next write triggers a drain.
 
-    # Advance monotonic clock by > FLUSH_INTERVAL_MS between writes.
-    clock = [0]
+    Note: monkeypatch BEFORE construction so `__init__`'s `_last_flush_ns`
+    capture uses the mocked clock. Starting `clock` at a non-trivial value
+    (1e9) avoids negative-elapsed foot-guns if anything subtracts from it.
+    """
+    p = tmp_path / "out.jsonl"
+    clock = [1_000_000_000]  # start at a large value; writer's __init__ captures this
     monkeypatch.setattr(
         "llm_poker_arena.storage.jsonl_writer.time.monotonic_ns",
         lambda: clock[0],
     )
-    w.write({"i": 0})
+    w = BatchedJsonlWriter(p)  # captures _last_flush_ns = 1_000_000_000
+    w.write({"i": 0})  # elapsed = 0 < interval → buffered
+    assert _lines(p) == []
     clock[0] += (BatchedJsonlWriter.FLUSH_INTERVAL_MS + 50) * 1_000_000
-    w.write({"i": 1})
-    # First write buffered; second write after interval triggers flush of both.
+    w.write({"i": 1})  # elapsed ≥ interval → flush both
     assert len(_lines(p)) == 2
     w.close()
 
@@ -317,14 +320,21 @@ class BatchedJsonlWriter:
         self._last_flush_ns: int = time.monotonic_ns()
         self._closed: bool = False
         atexit.register(self._drain_silent)
-        # SIGTERM: drain then re-raise default behavior. We do not replace the
-        # handler globally because multiple writers may register; each writes
-        # independently and then the default terminator runs.
+        # SIGTERM: drain then let the default handler terminate the process.
+        # `signal.getsignal` returns an int (SIG_DFL/SIG_IGN) for non-Python
+        # handlers, so we cannot just call it. Instead, drain, restore the
+        # previous handler, and re-send SIGTERM so the process actually exits.
+        # If a prior handler was a callable (e.g. another writer chained), we
+        # restore it and re-send so the chain continues.
         prev = signal.getsignal(signal.SIGTERM)
+
         def _on_sigterm(signum: int, frame: Any) -> None:  # noqa: ANN401
             self._drain_silent()
-            if callable(prev):
-                prev(signum, frame)
+            # Restore prior handler and re-send SIGTERM so chain continues or
+            # default termination fires. Without this, SIGTERM gets swallowed.
+            signal.signal(signal.SIGTERM, prev)
+            os.kill(os.getpid(), signal.SIGTERM)
+
         signal.signal(signal.SIGTERM, _on_sigterm)
 
     def write(self, record: dict[str, Any]) -> None:
@@ -421,7 +431,11 @@ from llm_poker_arena.storage.schemas import (
     AgentViewSnapshot,
     CanonicalPrivateHandRecord,
     HandResultPrivate,
-    PublicReplayEvent,
+    PublicAction,
+    PublicHandEnded,
+    PublicHandRecord,
+    PublicHandStarted,
+    PublicShowdown,
     WinnerInfo,
 )
 
@@ -521,33 +535,57 @@ def test_agent_view_snapshot_frozen_and_round_trip() -> None:
     assert back == s
 
 
-def test_public_replay_event_union_roundtrip() -> None:
-    # hand_started
-    e1 = PublicReplayEvent.model_validate(
-        {"type": "hand_started", "hand_id": 1, "button_seat": 4,
-         "blinds": {"sb": 50, "bb": 100}}
+def test_public_hand_record_round_trip_with_mixed_events() -> None:
+    """spec §7.3: one line per hand, `street_events` is a discriminated union."""
+    rec = PublicHandRecord(
+        hand_id=1,
+        street_events=(
+            PublicHandStarted(hand_id=1, button_seat=4, blinds={"sb": 50, "bb": 100}),
+            PublicAction(hand_id=1, seat=3, street="preflop",
+                         action={"type": "raise_to", "amount": 300}),
+            PublicShowdown(hand_id=1, revealed={"1": ("Ah", "Kh"), "3": ("2d", "2h")}),
+            PublicHandEnded(hand_id=1, winnings={"1": -1200, "2": 1250}),
+        ),
     )
-    assert e1.type == "hand_started"
-    # action
-    e2 = PublicReplayEvent.model_validate(
-        {"type": "action", "hand_id": 1, "seat": 3, "street": "preflop",
-         "action": {"type": "raise_to", "amount": 300}}
-    )
-    assert e2.type == "action"
-    # showdown with per-seat revealed cards (tuple of 2-char strings)
-    e3 = PublicReplayEvent.model_validate(
-        {"type": "showdown", "hand_id": 1,
-         "revealed": {"1": ("Ah", "Kh"), "3": ("2d", "2h")}}
-    )
-    assert e3.type == "showdown"
-    # round-trip
-    for e in (e1, e2, e3):
-        assert PublicReplayEvent.model_validate_json(e.model_dump_json()) == e
+    back = PublicHandRecord.model_validate_json(rec.model_dump_json())
+    assert back == rec
 
 
-def test_public_replay_event_rejects_unknown_type() -> None:
+def test_public_hand_record_discriminator_selects_correct_variant() -> None:
+    """`Field(discriminator='type')` must produce the correct concrete class."""
+    rec = PublicHandRecord.model_validate(
+        {
+            "hand_id": 1,
+            "street_events": [
+                {"type": "hand_started", "hand_id": 1, "button_seat": 4,
+                 "blinds": {"sb": 50, "bb": 100}},
+                {"type": "action", "hand_id": 1, "seat": 3, "street": "preflop",
+                 "action": {"type": "raise_to", "amount": 300}},
+                {"type": "hand_ended", "hand_id": 1, "winnings": {"1": 100}},
+            ],
+        }
+    )
+    assert isinstance(rec.street_events[0], PublicHandStarted)
+    assert isinstance(rec.street_events[1], PublicAction)
+    assert isinstance(rec.street_events[2], PublicHandEnded)
+    assert rec.street_events[0].button_seat == 4
+
+
+def test_public_hand_record_rejects_unknown_event_type() -> None:
     with pytest.raises(ValidationError):
-        PublicReplayEvent.model_validate({"type": "unknown_event", "hand_id": 1})
+        PublicHandRecord.model_validate(
+            {"hand_id": 1, "street_events": [{"type": "unknown_event", "hand_id": 1}]}
+        )
+
+
+def test_public_hand_record_street_events_is_tuple_not_list() -> None:
+    rec = PublicHandRecord(
+        hand_id=1,
+        street_events=(PublicHandEnded(hand_id=1, winnings={"1": 0}),),
+    )
+    # After round-trip, sequence field is still a tuple (deep immutability).
+    back = PublicHandRecord.model_validate_json(rec.model_dump_json())
+    assert isinstance(back.street_events, tuple)
 
 
 def test_agent_descriptor_supports_all_phase1_provider_values() -> None:
@@ -581,7 +619,7 @@ Create `/Users/zcheng256/llm-poker-arena/src/llm_poker_arena/storage/schemas.py`
 """Frozen Pydantic DTOs for Phase 2a three-layer JSONL observability stack.
 
 - `CanonicalPrivateHandRecord` — one line per hand in canonical_private.jsonl.
-- `PublicReplayEvent` — tagged union; one line per event in public_replay.jsonl.
+- `PublicHandRecord` — one line per hand in public_replay.jsonl; contains a discriminated-union `street_events` tuple (spec §7.3 shape).
 - `AgentViewSnapshot` — one line per turn per agent in agent_view_snapshots.jsonl.
 
 All models are `frozen=True`, `extra="forbid"`. Every sequence field is
@@ -598,7 +636,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def _frozen() -> ConfigDict:
@@ -742,55 +780,38 @@ class PublicHandEnded(BaseModel):
     winnings: dict[str, int]  # per-seat chip delta this hand
 
 
-def _public_event_discriminator(v: Any) -> str:  # noqa: ANN401
-    if isinstance(v, dict):
-        return str(v.get("type"))
-    return getattr(v, "type", "")
+# ----------------------------------------------------------- public hand record
 
-
-PublicReplayEventInner = Annotated[
-    (
-        Annotated[PublicHandStarted, Tag("hand_started")]
-        | Annotated[PublicHoleDealt, Tag("hole_dealt")]
-        | Annotated[PublicAction, Tag("action")]
-        | Annotated[PublicFlop, Tag("flop")]
-        | Annotated[PublicTurn, Tag("turn")]
-        | Annotated[PublicRiver, Tag("river")]
-        | Annotated[PublicShowdown, Tag("showdown")]
-        | Annotated[PublicHandEnded, Tag("hand_ended")]
-    ),
-    Discriminator(_public_event_discriminator),
+# Discriminated union over the 8 event variants. Each variant has a
+# `type: Literal[...]` class attribute; Pydantic 2's `Field(discriminator=...)`
+# inspects that attribute at validation time. No hand-rolled discriminator
+# function or wrapper class needed.
+PublicEvent = Annotated[
+    PublicHandStarted
+    | PublicHoleDealt
+    | PublicAction
+    | PublicFlop
+    | PublicTurn
+    | PublicRiver
+    | PublicShowdown
+    | PublicHandEnded,
+    Field(discriminator="type"),
 ]
 
 
-class PublicReplayEvent(BaseModel):
-    """Tagged union wrapper so callers can `PublicReplayEvent.model_validate(d).inner`."""
+class PublicHandRecord(BaseModel):
+    """One line per hand in public_replay.jsonl (spec §7.3).
+
+    Spec shape: `{"hand_id": N, "street_events": [event, event, ...]}`.
+    The Session buffers events during the hand and flushes one record at
+    hand_end — not one event per line — so `BatchedJsonlWriter`'s BATCH_SIZE
+    bounds durability in units of HANDS (≤ 10 hands lost on crash).
+    """
 
     model_config = _frozen()
 
-    inner: PublicReplayEventInner = Field(discriminator="type")
-
-    @classmethod
-    def model_validate(cls, obj: Any) -> "PublicReplayEvent":  # noqa: ANN401
-        if isinstance(obj, cls):
-            return obj
-        return cls(inner=obj)  # type: ignore[arg-type]
-
-    def model_dump_json(self, **kwargs: Any) -> str:  # noqa: ANN401
-        import json as _json
-        return _json.dumps(self.inner.model_dump(), sort_keys=True)
-
-    @property
-    def type(self) -> str:
-        return self.inner.type
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, PublicReplayEvent):
-            return NotImplemented
-        return self.inner == other.inner
-
-    def __hash__(self) -> int:
-        return hash(self.inner)
+    hand_id: int
+    street_events: tuple[PublicEvent, ...]
 
 
 # ----------------------------------------------------------- agent_view_snapshots
@@ -838,7 +859,7 @@ Run:
 ```bash
 cd /Users/zcheng256/llm-poker-arena && source .venv/bin/activate && pytest tests/unit/test_storage_schemas.py -v
 ```
-Expected: 8 passed. If `PublicReplayEvent.model_validate` dispatch on the discriminator misbehaves (Pydantic 2 discriminator syntax has moved across versions), simplify by wrapping `PublicReplayEvent` around a `RootModel[Union[...]]` instead — same API.
+Expected: 10 passed (6 pre-existing + 4 new around `PublicHandRecord` discriminator + tuple round-trip). If Pydantic 2's `Field(discriminator="type")` syntax misbehaves on your exact Pydantic version (it shipped cleanly in 2.6+ and has been stable since), the fallback is `RootModel[Union[Annotated[X, Tag(...)], ...]]` with an explicit `Discriminator` callable — but the Pydantic 2 pin in Phase 1 (`>=2.0`) targets the working form.
 
 - [ ] **Step 5: Lint + type**
 
@@ -863,9 +884,11 @@ cd /Users/zcheng256/llm-poker-arena && git add src/llm_poker_arena/storage/schem
 - Create: `src/llm_poker_arena/storage/layer_builders.py`
 - Create: `tests/unit/test_layer_builders.py`
 
-Builders are pure functions from `(CanonicalState, turn context)` to layer records. Session wires them to writers. Each builder is deterministic and side-effect-free.
+Builders are pure functions from `(CanonicalState, turn context)` to **typed Pydantic models** (not dicts). Session wires them to writers and calls `model.model_dump(mode="json")` at write time — that way schema validation runs at build time, not write time, and a mis-shaped record fails fast inside the builder where the type is attached.
 
-Per spec §7.3: showdown only reveals seats that reached showdown; folded-mucked hole cards stay private. That selection logic lives here.
+Per spec §7.3: showdown only reveals seats that reached showdown; folded-mucked hole cards stay private. That selection logic lives in `build_public_showdown_event`.
+
+Per spec §7.3 shape: `public_replay.jsonl` is one hand per line, NOT one event per line. The per-event builders produce atomic `Public*` events; `build_public_hand_record(hand_id, events)` wraps them into the top-level `PublicHandRecord` that Session flushes once per hand.
 
 - [ ] **Step 1: Write failing tests**
 
@@ -875,19 +898,32 @@ Create `/Users/zcheng256/llm-poker-arena/tests/unit/test_layer_builders.py`:
 """Tests for layer builders (canonical_private / public_replay / agent_view_snapshots)."""
 from __future__ import annotations
 
-from llm_poker_arena.agents.random_agent import RandomAgent
 from llm_poker_arena.engine._internal.poker_state import CanonicalState
 from llm_poker_arena.engine.config import HandContext, SessionConfig
 from llm_poker_arena.engine.legal_actions import Action
 from llm_poker_arena.engine.projections import build_player_view
 from llm_poker_arena.engine.transition import apply_action
 from llm_poker_arena.engine.types import Street
+from llm_poker_arena.storage.schemas import (
+    ActionRecordPrivate,
+    AgentViewSnapshot,
+    CanonicalPrivateHandRecord,
+    PublicAction,
+    PublicFlop,
+    PublicHandEnded,
+    PublicHandRecord,
+    PublicHandStarted,
+    PublicHoleDealt,
+    PublicShowdown,
+)
 from llm_poker_arena.storage.layer_builders import (
     build_agent_view_snapshot,
     build_canonical_private_hand,
     build_public_action_event,
     build_public_hand_ended_event,
+    build_public_hand_record,
     build_public_hand_started_event,
+    build_public_hole_dealt_event,
     build_public_showdown_event,
     build_public_street_reveal_event,
 )
@@ -915,10 +951,10 @@ def test_public_hand_started_carries_button_and_blinds() -> None:
     cfg = _cfg()
     s = _state(button=0)
     e = build_public_hand_started_event(hand_id=0, state=s, sb=cfg.sb, bb=cfg.bb)
-    assert e["type"] == "hand_started"
-    assert e["hand_id"] == 0
-    assert e["button_seat"] == 0
-    assert e["blinds"] == {"sb": 50, "bb": 100}
+    assert isinstance(e, PublicHandStarted)
+    assert e.hand_id == 0
+    assert e.button_seat == 0
+    assert e.blinds == {"sb": 50, "bb": 100}
 
 
 def test_public_action_event_records_seat_street_action() -> None:
@@ -926,11 +962,11 @@ def test_public_action_event_records_seat_street_action() -> None:
         hand_id=0, seat=3, street=Street.PREFLOP,
         action=Action(tool_name="raise_to", args={"amount": 300}),
     )
-    assert e == {
-        "type": "action", "hand_id": 0, "seat": 3,
-        "street": "preflop",
-        "action": {"type": "raise_to", "amount": 300},
-    }
+    assert isinstance(e, PublicAction)
+    assert e.hand_id == 0
+    assert e.seat == 3
+    assert e.street == "preflop"
+    assert e.action == {"type": "raise_to", "amount": 300}
 
 
 def test_public_street_reveal_flop_contains_3_cards() -> None:
@@ -943,62 +979,76 @@ def test_public_street_reveal_flop_contains_3_cards() -> None:
     assert r.is_valid
     s.deal_community(Street.FLOP)
     e = build_public_street_reveal_event(hand_id=0, state=s, street=Street.FLOP)
-    assert e["type"] == "flop"
-    assert len(e["community"]) == 3
+    assert isinstance(e, PublicFlop)
+    assert len(e.community) == 3
 
 
 def test_public_showdown_event_only_reveals_showdown_seats() -> None:
-    # All-in preflop scenario would showdown all seats; here we just check
-    # that the builder accepts a `showdown_seats` set and uses it to filter.
     s = _state(button=0)
     all_holes = s.hole_cards()  # dict[int, tuple[str, str]]
-    revealed = build_public_showdown_event(
-        hand_id=0, state=s, showdown_seats={1, 3, 5}
-    )
-    assert revealed["type"] == "showdown"
+    e = build_public_showdown_event(hand_id=0, state=s, showdown_seats={1, 3, 5})
+    assert isinstance(e, PublicShowdown)
     # Only the 3 revealed seats appear in the map.
-    assert set(revealed["revealed"].keys()) == {"1", "3", "5"}
-    # Folded (2, 4, 0) seats NOT present.
+    assert set(e.revealed.keys()) == {"1", "3", "5"}
     for absent in ("0", "2", "4"):
-        assert absent not in revealed["revealed"]
-    # And the revealed cards match.
+        assert absent not in e.revealed
     for seat in (1, 3, 5):
-        assert tuple(revealed["revealed"][str(seat)]) == all_holes[seat]
+        assert e.revealed[str(seat)] == all_holes[seat]
 
 
 def test_public_hand_ended_event_has_per_seat_winnings() -> None:
     e = build_public_hand_ended_event(
         hand_id=0, winnings={1: -50, 2: 150, 3: -100, 4: 0, 5: 0, 0: 0},
     )
-    assert e["type"] == "hand_ended"
-    assert e["winnings"] == {"1": -50, "2": 150, "3": -100, "4": 0, "5": 0, "0": 0}
+    assert isinstance(e, PublicHandEnded)
+    assert e.winnings == {"1": -50, "2": 150, "3": -100, "4": 0, "5": 0, "0": 0}
+
+
+def test_build_public_hand_record_wraps_events_in_hand_shape() -> None:
+    """spec §7.3: one hand per line, events in a tuple."""
+    events = (
+        build_public_hand_started_event(hand_id=7, state=_state(button=2),
+                                        sb=50, bb=100),
+        build_public_hole_dealt_event(hand_id=7),
+        build_public_hand_ended_event(hand_id=7, winnings={0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0}),
+    )
+    rec = build_public_hand_record(hand_id=7, events=events)
+    assert isinstance(rec, PublicHandRecord)
+    assert rec.hand_id == 7
+    assert len(rec.street_events) == 3
+    assert isinstance(rec.street_events[0], PublicHandStarted)
+    assert isinstance(rec.street_events[1], PublicHoleDealt)
+    assert isinstance(rec.street_events[2], PublicHandEnded)
 
 
 def test_canonical_private_hand_has_full_hole_cards_and_actions() -> None:
     s = _state(button=0)
-    # Collect actions as we drive to showdown.
-    actions: list[dict] = []
+    action_records: list[ActionRecordPrivate] = []
     for turn_idx, actor in enumerate((3, 4, 5, 0, 1)):
         r = apply_action(s, actor, Action(tool_name="call", args={}))
         assert r.is_valid
-        actions.append({"seat": actor, "street": "preflop",
-                        "action_type": "call", "amount": None,
-                        "is_forced_blind": False, "turn_index": turn_idx})
+        action_records.append(ActionRecordPrivate(
+            seat=actor, street="preflop", action_type="call",
+            amount=None, is_forced_blind=False, turn_index=turn_idx,
+        ))
     r = apply_action(s, 2, Action(tool_name="check", args={}))
     assert r.is_valid
-    actions.append({"seat": 2, "street": "preflop", "action_type": "check",
-                    "amount": None, "is_forced_blind": False, "turn_index": 5})
+    action_records.append(ActionRecordPrivate(
+        seat=2, street="preflop", action_type="check",
+        amount=None, is_forced_blind=False, turn_index=5,
+    ))
 
     rec = build_canonical_private_hand(
         hand_id=0, state=s, started_at="2026-04-24T00:00:00Z",
         ended_at="2026-04-24T00:00:05Z",
-        actions=tuple(actions),
+        actions=tuple(action_records),
     )
-    assert rec["hand_id"] == 0
-    assert rec["button_seat"] == 0
+    assert isinstance(rec, CanonicalPrivateHandRecord)
+    assert rec.hand_id == 0
+    assert rec.button_seat == 0
     # All 6 hole cards present regardless of showdown status.
-    assert set(rec["hole_cards"].keys()) == {"0", "1", "2", "3", "4", "5"}
-    assert len(rec["actions"]) == 6
+    assert set(rec.hole_cards.keys()) == {"0", "1", "2", "3", "4", "5"}
+    assert len(rec.actions) == 6
 
 
 def test_agent_view_snapshot_records_mock_agent_action() -> None:
@@ -1014,23 +1064,25 @@ def test_agent_view_snapshot_records_mock_agent_action() -> None:
         agent_provider="random", agent_model="uniform", agent_version="phase1",
         default_action_fallback=False,
     )
-    assert snap["hand_id"] == 0
-    assert snap["seat"] == 3
-    assert snap["turn_id"] == "0-preflop-0"
-    assert snap["final_action"] == {"type": "fold"}
-    # Mock agent has zero iterations.
-    assert snap["iterations"] == []
-    assert snap["agent"]["provider"] == "random"
+    assert isinstance(snap, AgentViewSnapshot)
+    assert snap.hand_id == 0
+    assert snap.seat == 3
+    assert snap.turn_id == "0-preflop-0"
+    assert snap.final_action == {"type": "fold"}
+    assert snap.iterations == ()  # mock agent → empty
+    assert snap.agent.provider == "random"
 
 
-def test_public_hand_started_serializes_symmetric_to_schema() -> None:
-    from llm_poker_arena.storage.schemas import PublicReplayEvent
-    cfg = _cfg()
+def test_public_hand_record_round_trip_via_json() -> None:
+    """End-to-end: builders → PublicHandRecord → JSON → back to PublicHandRecord."""
     s = _state(button=3)
-    e = build_public_hand_started_event(hand_id=9, state=s, sb=cfg.sb, bb=cfg.bb)
-    # Must round-trip through the schema's discriminated union.
-    wrapped = PublicReplayEvent.model_validate(e)
-    assert wrapped.type == "hand_started"
+    events = (
+        build_public_hand_started_event(hand_id=9, state=s, sb=50, bb=100),
+        build_public_hand_ended_event(hand_id=9, winnings={0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0}),
+    )
+    rec = build_public_hand_record(hand_id=9, events=events)
+    back = PublicHandRecord.model_validate_json(rec.model_dump_json())
+    assert back == rec
 ```
 
 - [ ] **Step 2: Run, expect ModuleNotFoundError**
@@ -1046,116 +1098,159 @@ Expected: ModuleNotFoundError.
 Create `/Users/zcheng256/llm-poker-arena/src/llm_poker_arena/storage/layer_builders.py`:
 
 ```python
-"""Pure builders from CanonicalState + turn metadata to layer dict records.
+"""Pure builders from CanonicalState + turn metadata to typed Pydantic records.
 
-Builders return `dict[str, Any]` ready for JSONL writing. Downstream writer
-serializes with `json.dumps(..., sort_keys=True)` (deterministic output).
+Each builder returns a concrete Pydantic model from `storage.schemas`. The
+Session calls `model.model_dump(mode="json")` at write time. This way schema
+validation fires at build time (close to where the data is shaped) and the
+writer is schema-agnostic.
 
-The schemas in `storage.schemas` are authoritative on what fields exist; the
-test `test_public_hand_started_serializes_symmetric_to_schema` enforces that
-this builder's dict dialect matches the Pydantic union.
+Spec §7.3 shape: `public_replay.jsonl` is ONE HAND PER LINE, with all events
+for that hand in `street_events`. Per-event builders (`build_public_*_event`)
+produce atomic events; `build_public_hand_record` wraps a tuple of events
+into the top-level `PublicHandRecord` that Session flushes at hand_end.
+
+Phase 2a note on blind-post records: spec §7.2 hand-example shows blind
+posts in `actions`, but PokerKit's BLIND_OR_STRADDLE_POSTING automation
+handles them without agent involvement, so the Session does not currently
+emit ActionRecordPrivate for them. Phase 2b can synthesize blind-post
+records from `state.operations` if VPIP/PFR SQL needs them; meanwhile
+VPIP-relevant filtering uses `is_forced_blind` on agent snapshots, which is
+always `False` (mock agents never post blinds).
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from llm_poker_arena.engine.legal_actions import Action
 from llm_poker_arena.engine.types import Street
 from llm_poker_arena.engine.views import PlayerView
+from llm_poker_arena.storage.schemas import (
+    ActionRecordPrivate,
+    AgentDescriptor,
+    AgentViewSnapshot,
+    CanonicalPrivateHandRecord,
+    HandResultPrivate,
+    PublicAction,
+    PublicEvent,
+    PublicFlop,
+    PublicHandEnded,
+    PublicHandRecord,
+    PublicHandStarted,
+    PublicHoleDealt,
+    PublicRiver,
+    PublicShowdown,
+    PublicTurn,
+    SidePotSummary,
+    WinnerInfo,
+)
 
 
 def build_public_hand_started_event(
     *, hand_id: int, state: Any, sb: int, bb: int,  # noqa: ANN401 — CanonicalState
-) -> dict[str, Any]:
-    return {
-        "type": "hand_started",
-        "hand_id": hand_id,
-        "button_seat": state.button_seat,
-        "blinds": {"sb": sb, "bb": bb},
-    }
+) -> PublicHandStarted:
+    return PublicHandStarted(
+        hand_id=hand_id,
+        button_seat=state.button_seat,
+        blinds={"sb": sb, "bb": bb},
+    )
 
 
-def build_public_hole_dealt_event(*, hand_id: int) -> dict[str, Any]:
-    return {"type": "hole_dealt", "hand_id": hand_id}
+def build_public_hole_dealt_event(*, hand_id: int) -> PublicHoleDealt:
+    return PublicHoleDealt(hand_id=hand_id)
 
 
 def build_public_action_event(
     *, hand_id: int, seat: int, street: Street, action: Action,
-) -> dict[str, Any]:
+) -> PublicAction:
     body: dict[str, Any] = {"type": action.tool_name}
     if action.tool_name in ("bet", "raise_to"):
         amt = action.args.get("amount") if isinstance(action.args, dict) else None
         if amt is not None:
             body["amount"] = int(amt)
-    return {
-        "type": "action", "hand_id": hand_id,
-        "seat": seat, "street": street.value,
-        "action": body,
-    }
+    return PublicAction(
+        hand_id=hand_id,
+        seat=seat,
+        street=cast(Any, street.value),  # Literal["preflop", ...] — enum value is the literal
+        action=body,
+    )
 
 
 def build_public_street_reveal_event(
     *, hand_id: int, state: Any, street: Street,  # noqa: ANN401
-) -> dict[str, Any]:
+) -> PublicFlop | PublicTurn | PublicRiver:
     community = state.community()  # list[str]
     if street == Street.FLOP:
-        return {"type": "flop", "hand_id": hand_id, "community": list(community[:3])}
+        cards = tuple(community[:3])
+        return PublicFlop(hand_id=hand_id, community=cast(Any, cards))
     if street == Street.TURN:
-        return {"type": "turn", "hand_id": hand_id, "card": community[3]}
+        return PublicTurn(hand_id=hand_id, card=community[3])
     if street == Street.RIVER:
-        return {"type": "river", "hand_id": hand_id, "card": community[4]}
+        return PublicRiver(hand_id=hand_id, card=community[4])
     raise ValueError(f"street {street!r} is not a board-reveal street")
 
 
 def build_public_showdown_event(
     *, hand_id: int, state: Any, showdown_seats: set[int],  # noqa: ANN401
-) -> dict[str, Any]:
+) -> PublicShowdown:
     holes = state.hole_cards()  # dict[int, tuple[str, str]]
     revealed = {
-        str(seat): list(holes[seat]) for seat in sorted(showdown_seats) if seat in holes
+        str(seat): holes[seat]
+        for seat in sorted(showdown_seats) if seat in holes
     }
-    return {"type": "showdown", "hand_id": hand_id, "revealed": revealed}
+    return PublicShowdown(hand_id=hand_id, revealed=revealed)
 
 
 def build_public_hand_ended_event(
     *, hand_id: int, winnings: dict[int, int],
-) -> dict[str, Any]:
-    return {
-        "type": "hand_ended", "hand_id": hand_id,
-        "winnings": {str(seat): int(amt) for seat, amt in winnings.items()},
-    }
+) -> PublicHandEnded:
+    return PublicHandEnded(
+        hand_id=hand_id,
+        winnings={str(seat): int(amt) for seat, amt in winnings.items()},
+    )
+
+
+def build_public_hand_record(
+    *, hand_id: int, events: tuple[PublicEvent, ...],
+) -> PublicHandRecord:
+    """Wrap a tuple of atomic public events into the spec-§7.3 hand-per-line shape."""
+    return PublicHandRecord(hand_id=hand_id, street_events=events)
 
 
 def build_canonical_private_hand(
     *, hand_id: int, state: Any,  # noqa: ANN401
     started_at: str, ended_at: str,
-    actions: tuple[dict[str, Any], ...],
-    winners: tuple[dict[str, Any], ...] = (),
-    side_pots: tuple[dict[str, Any], ...] = (),
+    actions: tuple[ActionRecordPrivate, ...],
+    winners: tuple[WinnerInfo, ...] = (),
+    side_pots: tuple[SidePotSummary, ...] = (),
     final_invested: dict[int, int] | None = None,
     net_pnl: dict[int, int] | None = None,
     showdown: bool = False,
-) -> dict[str, Any]:
+) -> CanonicalPrivateHandRecord:
+    """Phase 2a: `final_invested` defaults to `{}` — proper tracking deferred
+    to Phase 2b (needs per-action contribution accumulation from
+    `state.operations`). MVP 6 exit criterion does not depend on this field.
+    """
     holes = state.hole_cards()  # dict[int, tuple[str, str]]
     stacks_initial = dict(enumerate(state._ctx.initial_stacks))  # noqa: SLF001
-    return {
-        "hand_id": hand_id,
-        "started_at": started_at, "ended_at": ended_at,
-        "button_seat": state.button_seat,
-        "sb_seat": state.sb_seat, "bb_seat": state.bb_seat,
-        "deck_seed": state._ctx.deck_seed,  # noqa: SLF001
-        "starting_stacks": {str(s): int(v) for s, v in stacks_initial.items()},
-        "hole_cards": {str(s): list(cards) for s, cards in holes.items()},
-        "community": list(state.community()),
-        "actions": list(actions),
-        "result": {
-            "showdown": showdown,
-            "winners": list(winners),
-            "side_pots": list(side_pots),
-            "final_invested": {str(k): int(v) for k, v in (final_invested or {}).items()},
-            "net_pnl": {str(k): int(v) for k, v in (net_pnl or {}).items()},
-        },
-    }
+    return CanonicalPrivateHandRecord(
+        hand_id=hand_id,
+        started_at=started_at, ended_at=ended_at,
+        button_seat=state.button_seat,
+        sb_seat=state.sb_seat, bb_seat=state.bb_seat,
+        deck_seed=state._ctx.deck_seed,  # noqa: SLF001
+        starting_stacks={str(s): int(v) for s, v in stacks_initial.items()},
+        hole_cards={str(s): cards for s, cards in holes.items()},
+        community=tuple(state.community()),
+        actions=actions,
+        result=HandResultPrivate(
+            showdown=showdown,
+            winners=winners,
+            side_pots=side_pots,
+            final_invested={str(k): int(v) for k, v in (final_invested or {}).items()},
+            net_pnl={str(k): int(v) for k, v in (net_pnl or {}).items()},
+        ),
+    )
 
 
 def build_agent_view_snapshot(
@@ -1163,41 +1258,41 @@ def build_agent_view_snapshot(
     timestamp: str, view: PlayerView, action: Action, turn_index: int,
     agent_provider: str, agent_model: str, agent_version: str,
     default_action_fallback: bool,
-) -> dict[str, Any]:
+) -> AgentViewSnapshot:
     final_action: dict[str, Any] = {"type": action.tool_name}
     if action.tool_name in ("bet", "raise_to"):
         amt = action.args.get("amount") if isinstance(action.args, dict) else None
         if amt is not None:
             final_action["amount"] = int(amt)
-    return {
-        "hand_id": hand_id,
-        "turn_id": f"{hand_id}-{street.value}-{turn_index}",
-        "session_id": session_id,
-        "seat": seat,
-        "street": street.value,
-        "timestamp": timestamp,
-        "view_at_turn_start": view.model_dump(mode="json"),
-        "iterations": [],
-        "final_action": final_action,
-        "is_forced_blind": False,  # Phase-1 blinds are automation-posted; agent never chooses blind-post
-        "total_utility_calls": 0,
-        "api_retry_count": 0,
-        "illegal_action_retry_count": 0,
-        "no_tool_retry_count": 0,
-        "tool_usage_error_count": 0,
-        "default_action_fallback": default_action_fallback,
-        "api_error": None,
-        "turn_timeout_exceeded": False,
-        "total_tokens": {},
-        "wall_time_ms": 0,
-        "agent": {
-            "provider": agent_provider,
-            "model": agent_model,
-            "version": agent_version,
-            "temperature": None,
-            "seed": None,
-        },
-    }
+    return AgentViewSnapshot(
+        hand_id=hand_id,
+        turn_id=f"{hand_id}-{street.value}-{turn_index}",
+        session_id=session_id,
+        seat=seat,
+        street=cast(Any, street.value),
+        timestamp=timestamp,
+        view_at_turn_start=view.model_dump(mode="json"),
+        iterations=(),
+        final_action=final_action,
+        is_forced_blind=False,
+        total_utility_calls=0,
+        api_retry_count=0,
+        illegal_action_retry_count=0,
+        no_tool_retry_count=0,
+        tool_usage_error_count=0,
+        default_action_fallback=default_action_fallback,
+        api_error=None,
+        turn_timeout_exceeded=False,
+        total_tokens={},
+        wall_time_ms=0,
+        agent=AgentDescriptor(
+            provider=agent_provider,
+            model=agent_model,
+            version=agent_version,
+            temperature=None,
+            seed=None,
+        ),
+    )
 ```
 
 - [ ] **Step 4: Run tests**
@@ -1206,7 +1301,7 @@ Run:
 ```bash
 cd /Users/zcheng256/llm-poker-arena && source .venv/bin/activate && pytest tests/unit/test_layer_builders.py -v
 ```
-Expected: 8 passed.
+Expected: 9 passed (8 per-builder + 1 end-to-end round-trip).
 
 - [ ] **Step 5: Lint + type**
 
@@ -1220,7 +1315,7 @@ Expected: clean.
 
 Run:
 ```bash
-cd /Users/zcheng256/llm-poker-arena && git add src/llm_poker_arena/storage/layer_builders.py tests/unit/test_layer_builders.py && git commit -m "feat(storage): layer_builders build canonical_private/public/snapshot dicts from CanonicalState"
+cd /Users/zcheng256/llm-poker-arena && git add src/llm_poker_arena/storage/layer_builders.py tests/unit/test_layer_builders.py && git commit -m "feat(storage): layer_builders return typed Pydantic models for all three layers + PublicHandRecord wrapper"
 ```
 
 ---
@@ -1261,13 +1356,18 @@ def _write_jsonl(path: Path, records: list[dict]) -> None:
 
 
 def test_public_reader_works_without_private_files(tmp_path: Path) -> None:
+    # Spec §7.3: one line per hand (not one line per event).
     _write_jsonl(tmp_path / "public_replay.jsonl",
-                 [{"type": "hand_started", "hand_id": 0},
-                  {"type": "hand_ended", "hand_id": 0}])
+                 [{"hand_id": 0, "street_events": [
+                     {"type": "hand_started", "hand_id": 0, "button_seat": 0,
+                      "blinds": {"sb": 50, "bb": 100}},
+                     {"type": "hand_ended", "hand_id": 0, "winnings": {"0": 0}},
+                 ]}])
     r = PublicLogReader(tmp_path)
-    events = list(r.iter_events())
-    assert len(events) == 2
-    assert events[0]["type"] == "hand_started"
+    hands = list(r.iter_events())
+    assert len(hands) == 1
+    assert hands[0]["hand_id"] == 0
+    assert hands[0]["street_events"][0]["type"] == "hand_started"
 
 
 def test_public_reader_raises_when_public_missing(tmp_path: Path) -> None:
@@ -1276,7 +1376,8 @@ def test_public_reader_raises_when_public_missing(tmp_path: Path) -> None:
 
 
 def test_private_reader_requires_all_three_files(tmp_path: Path) -> None:
-    _write_jsonl(tmp_path / "public_replay.jsonl", [{"type": "hand_started", "hand_id": 0}])
+    _write_jsonl(tmp_path / "public_replay.jsonl",
+                 [{"hand_id": 0, "street_events": []}])
     with pytest.raises(FileNotFoundError, match="canonical_private.jsonl"):
         PrivateLogReader(tmp_path, access_token=PRIVATE_ACCESS_TOKEN)
 
@@ -1290,14 +1391,15 @@ def test_private_reader_rejects_wrong_token(tmp_path: Path) -> None:
 
 def test_private_reader_iterates_all_three_layers(tmp_path: Path) -> None:
     _write_jsonl(tmp_path / "canonical_private.jsonl", [{"hand_id": 0}])
-    _write_jsonl(tmp_path / "public_replay.jsonl", [{"type": "hand_started", "hand_id": 0}])
+    _write_jsonl(tmp_path / "public_replay.jsonl",
+                 [{"hand_id": 0, "street_events": []}])
     _write_jsonl(tmp_path / "agent_view_snapshots.jsonl", [{"hand_id": 0, "seat": 1}])
     r = PrivateLogReader(tmp_path, access_token=PRIVATE_ACCESS_TOKEN)
     assert list(r.iter_private_hands()) == [{"hand_id": 0}]
     assert list(r.iter_snapshots()) == [{"hand_id": 0, "seat": 1}]
     # public sub-reader still works
     pub = r.public_reader()
-    assert list(pub.iter_events()) == [{"hand_id": 0, "type": "hand_started"}]
+    assert list(pub.iter_events()) == [{"hand_id": 0, "street_events": []}]
 ```
 
 - [ ] **Step 2: Run, expect ModuleNotFoundError**
@@ -1356,6 +1458,13 @@ class PublicLogReader:
             )
 
     def iter_events(self) -> Iterator[dict[str, Any]]:
+        """Yield one record per line.
+
+        Spec §7.3 shape: each line is a HAND-level record
+        `{"hand_id": N, "street_events": [...]}`, NOT a single event. Method
+        name `iter_events` is kept to match spec §7.5 but the yielded unit is
+        a whole hand; iterate `record["street_events"]` for atomic events.
+        """
         with self._public_path.open() as f:
             for line in f:
                 line = line.strip()
@@ -1469,6 +1578,7 @@ def test_meta_carries_session_timing_and_hand_counts() -> None:
                          5: "Random_C", 0: "RuleBased_C"},
         initial_button_seat=0,
         chip_pnl={0: 150, 1: -200, 2: 75, 3: -50, 4: 100, 5: -75},
+        session_wall_time_sec=90,
     )
     assert m["session_id"] == "session_test_001"
     assert m["version"] == 2
@@ -1484,7 +1594,7 @@ def test_meta_phase2a_retry_fields_are_zeros_or_empty() -> None:
         session_id="sess_x", config=_cfg(),
         started_at="2026-04-24T00:00:00Z", ended_at="2026-04-24T00:00:01Z",
         total_hands_played=1, seat_assignment={}, initial_button_seat=0,
-        chip_pnl={},
+        chip_pnl={}, session_wall_time_sec=0,
     )
     # Phase-3 fields degenerate in Phase 2a.
     assert m["censored_hands_count"] == 0
@@ -1500,10 +1610,20 @@ def test_meta_includes_git_commit_or_empty_string() -> None:
         session_id="sess_x", config=_cfg(),
         started_at="t0", ended_at="t1",
         total_hands_played=1, seat_assignment={}, initial_button_seat=0,
-        chip_pnl={},
+        chip_pnl={}, session_wall_time_sec=0,
     )
     # git_commit should be a string (possibly empty if git unavailable).
     assert isinstance(m["git_commit"], str)
+
+
+def test_meta_session_wall_time_sec_is_passed_through() -> None:
+    m = build_session_meta(
+        session_id="sess_x", config=_cfg(),
+        started_at="t0", ended_at="t1",
+        total_hands_played=1, seat_assignment={}, initial_button_seat=0,
+        chip_pnl={}, session_wall_time_sec=134,
+    )
+    assert m["session_wall_time_sec"] == 134
 ```
 
 - [ ] **Step 2: Run, expect ModuleNotFoundError**
@@ -1556,6 +1676,7 @@ def build_session_meta(
     seat_assignment: dict[int, str],
     initial_button_seat: int,
     chip_pnl: dict[int, int],
+    session_wall_time_sec: int,
 ) -> dict[str, Any]:
     return {
         "session_id": session_id,
@@ -1575,7 +1696,7 @@ def build_session_meta(
         "censored_hand_ids": [],
         "total_tokens": {},
         "estimated_cost_breakdown": {},
-        "session_wall_time_sec": 0,  # Session can populate if desired
+        "session_wall_time_sec": int(session_wall_time_sec),
         "seat_assignment": {str(s): label for s, label in seat_assignment.items()},
         "initial_button_seat": initial_button_seat,
         "seat_permutation_id": "phase2a_default",
@@ -1588,7 +1709,7 @@ Run:
 ```bash
 cd /Users/zcheng256/llm-poker-arena && source .venv/bin/activate && pytest tests/unit/test_meta.py -v
 ```
-Expected: 3 passed.
+Expected: 4 passed.
 
 - [ ] **Step 5: Lint + type**
 
@@ -1744,7 +1865,12 @@ def test_medium_hand_calls_single_raise_from_utg() -> None:
     assert act.tool_name == "call"
 
 
-def test_postflop_top_pair_bets_when_checkable() -> None:
+def test_postflop_top_pair_bets_when_checkable_clamped_to_min() -> None:
+    """Top pair + checkable spot: agent bets pot/2, clamped to legal min.
+
+    pot=150, pot/2=75, but bet_min=bb=100 per NLHE — pot/2 is BELOW min, so
+    the agent clamps up to 100. Exercises the `_clamp(target, min, max)` path.
+    """
     agent = RuleBasedAgent()
     v = _view(
         hole=("As", "Kd"),  # AKo
@@ -1757,8 +1883,8 @@ def test_postflop_top_pair_bets_when_checkable() -> None:
     )
     act = agent.decide(v)
     assert act.tool_name == "bet"
-    # bet pot/2 = 75
-    assert act.args["amount"] == 75
+    # pot/2 = 75 but min = 100 → clamp up to 100
+    assert act.args["amount"] == 100
 
 
 def test_postflop_missed_folds_when_facing_bet() -> None:
@@ -1839,8 +1965,15 @@ Ruleset (documented inline below):
     MEDIUM  → call a single raise; fold to 3bet. From button, raise.
     Otherwise fold.
   Postflop (flop/turn/river):
-    Top/middle pair → bet pot/2 if checkable, else raise_to current_bet_to_match + pot/2.
+    Top/middle pair → bet pot/2 if checkable (clamped to legal min); call if
+                      facing a modest bet (to_call <= pot); fold if facing an
+                      overbet (to_call > pot).
     No pair          → check if possible, else fold.
+
+Simple TAG floor: this agent does not raise postflop. Raising is a deliberate
+Phase-3+ enhancement. The Phase 2a goal is a deterministic, heterogeneous
+lineup partner for the RandomAgent-driven integration test, not a competitive
+opponent.
 """
 from __future__ import annotations
 
@@ -2054,17 +2187,21 @@ cd /Users/zcheng256/llm-poker-arena && git add src/llm_poker_arena/agents/rule_b
 - Create: `tests/unit/test_session_orchestrator.py`
 
 `Session.run()` iterates `config.num_hands` hands. Per hand:
-1. Build `HandContext` with `button_seat = hand_id % num_players`, `initial_stacks = (config.starting_stack,) * num_players` (auto-rebuy), `deck_seed = derive_deck_seed(config.rng_seed, hand_id)`.
+1. Build `HandContext` with `button_seat = hand_id % num_players`, `initial_stacks = (config.starting_stack,) * num_players` (auto-rebuy per §3.5), `deck_seed = derive_deck_seed(config.rng_seed, hand_id)`.
 2. Construct `CanonicalState` — this auto-runs `audit_cards_invariant` (Phase-1 I-1).
-3. Write `hand_started` + `hole_dealt` events to public_replay.
-4. Drive the action loop (based on Phase-1 `run_single_hand` pattern): `while state.actor_index is not None` → agent.decide → apply_action → write public action + agent_view_snapshot → between-street advance. On street advance, write `flop`/`turn`/`river` event.
-5. When hand ends: determine showdown seats (seats whose `state._state.statuses[i] is True`), write `showdown` (if applicable) + `hand_ended` events; run `audit_invariants(POST_SETTLEMENT)`.
-6. Build + flush `canonical_private` record; flush all 3 writers for hand-end durability.
-7. Accumulate `chip_pnl[seat] += state._state.payoffs[seat]`.
+3. Open an empty per-hand `events: list[PublicEvent]` buffer; append `hand_started` + `hole_dealt` to it.
+4. Drive the action loop: `while state.actor_index is not None` → agent.decide → apply_action → append public action event → write agent_view_snapshot → between-street advance (may append `flop`/`turn`/`river` events). Accumulate `ActionRecordPrivate` for canonical_private.
+5. When hand ends: determine showdown seats (seats whose `state._state.statuses[i] is True`), append `showdown` (if len > 1) + `hand_ended` to the buffer; run `audit_invariants(POST_SETTLEMENT)`.
+6. Wrap the buffer via `build_public_hand_record(hand_id, events)` and write ONE line to public_replay (spec §7.3 one-hand-per-line shape).
+7. Build + write `canonical_private` record (`final_invested={}` in Phase 2a — proper tracking deferred to Phase 2b; see layer_builders docstring).
+8. Flush all 3 writers for hand-end durability (spec §8.1 checkpoint).
+9. Accumulate `chip_pnl[seat] += state._state.payoffs[seat]`.
 
-On exit: write `meta.json`, close all writers (drains buffers).
+On init: `Session.__init__` writes `config.json` (spec §7.1 expects `config.yaml`; Phase 2a uses `.json` to avoid adding a `pyyaml` dep; Phase 2b can rename).
 
-Phase 2a deliberately keeps this synchronous (matches Phase-1 Agent ABC). Phase 3 re-does it async.
+On exit: compute `session_wall_time_sec = monotonic_end - monotonic_start`; write `meta.json`; close all writers (drains buffers).
+
+Phase 2a deliberately keeps this synchronous (matches Phase-1 Agent ABC). Phase 3 re-does it async with `TurnDecisionResult`, four retry counters, `mark_hand_censored` on api_error / timeout, and proper seat permutation.
 
 - [ ] **Step 1: Write failing test (3-hand smoke)**
 
@@ -2115,14 +2252,32 @@ def test_session_canonical_private_has_num_hands_lines(tmp_path: Path) -> None:
     assert len(lines) == cfg.num_hands
 
 
-def test_session_public_replay_first_event_is_hand_started(tmp_path: Path) -> None:
+def test_session_public_replay_is_one_hand_per_line(tmp_path: Path) -> None:
+    """spec §7.3: `public_replay.jsonl` has one line per hand, events in array."""
     cfg = _cfg()
     agents = [RandomAgent() for _ in range(6)]
     sess = Session(config=cfg, agents=agents, output_dir=tmp_path, session_id="sess_p")
     sess.run()
     lines = (tmp_path / "public_replay.jsonl").read_text().strip().splitlines()
-    first = json.loads(lines[0])
-    assert first["type"] == "hand_started"
+    assert len(lines) == cfg.num_hands
+    first_hand = json.loads(lines[0])
+    assert "hand_id" in first_hand
+    assert "street_events" in first_hand
+    assert first_hand["street_events"][0]["type"] == "hand_started"
+    assert first_hand["street_events"][-1]["type"] == "hand_ended"
+
+
+def test_session_writes_config_json_on_init(tmp_path: Path) -> None:
+    """spec §7.1 dir structure includes config snapshot."""
+    cfg = _cfg()
+    agents = [RandomAgent() for _ in range(6)]
+    # Don't even call .run() — config.json should be written in __init__.
+    _ = Session(config=cfg, agents=agents, output_dir=tmp_path, session_id="sess_cfg")
+    p = tmp_path / "config.json"
+    assert p.exists()
+    written = json.loads(p.read_text())
+    assert written["num_players"] == 6
+    assert written["rng_seed"] == 42
 
 
 def test_session_agent_view_snapshot_is_at_least_one_per_hand(tmp_path: Path) -> None:
@@ -2146,6 +2301,9 @@ def test_session_meta_json_carries_total_hands_and_chip_pnl(tmp_path: Path) -> N
     assert meta["total_hands_played"] == cfg.num_hands
     # chip_pnl sums to 0 (zero-sum game)
     assert sum(meta["chip_pnl"].values()) == 0
+    # session_wall_time_sec is populated (non-negative int)
+    assert isinstance(meta["session_wall_time_sec"], int)
+    assert meta["session_wall_time_sec"] >= 0
 
 
 def test_session_rejects_agents_list_length_mismatch(tmp_path: Path) -> None:
@@ -2172,29 +2330,38 @@ Create `/Users/zcheng256/llm-poker-arena/src/llm_poker_arena/session/session.py`
 """Session orchestrator: multi-hand loop with audit + 3-layer event emission.
 
 Replaces Phase-1 `engine._internal.rebuy.run_single_hand` for end-to-end runs.
-Phase 2a: synchronous; each agent's `decide(view)` is called inline. Every
-hand commits a full canonical_private record, a stream of public_replay
-events, and per-turn agent_view_snapshots via BatchedJsonlWriter (H-10).
+Phase 2a: synchronous; each agent's `decide(view)` is called inline. Per hand:
 
-Phase 3 responsibilities not in Phase 2a:
+  - One `CanonicalPrivateHandRecord` line (canonical_private.jsonl)
+  - One `PublicHandRecord` line (public_replay.jsonl; spec §7.3 hand-per-line
+    shape; events are collected into a list during the hand then wrapped)
+  - N `AgentViewSnapshot` lines, one per agent turn (agent_view_snapshots.jsonl)
+
+Forward-compatibility: `AgentViewSnapshot` schema carries all Phase-3 fields
+(retry counters, api_error, turn_timeout_exceeded) but populates them with
+degenerate defaults for mock agents — no field added in Phase 3 that isn't
+writable today.
+
+Phase 3 responsibilities out of scope here:
   - Async ReAct loop with 4 retry counters
-  - `mark_hand_censored` for api_error / total_turn_timeout
-  - Seat permutation (this Phase uses simple button_seat = hand_id % n)
+  - `mark_hand_censored` for api_error / total_turn_timeout (spec BR2-01)
+  - Seat permutation (Phase 2a uses `button_seat = hand_id % n`)
 """
 from __future__ import annotations
 
 import hashlib
+import json
+import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from llm_poker_arena.agents.base import Agent
 from llm_poker_arena.engine._internal.audit import HandPhase, audit_invariants
 from llm_poker_arena.engine._internal.poker_state import CanonicalState
 from llm_poker_arena.engine._internal.rebuy import derive_deck_seed
 from llm_poker_arena.engine.config import HandContext, SessionConfig
-from llm_poker_arena.engine.legal_actions import Action, default_safe_action
+from llm_poker_arena.engine.legal_actions import default_safe_action
 from llm_poker_arena.engine.projections import build_player_view
 from llm_poker_arena.engine.transition import apply_action
 from llm_poker_arena.engine.types import Street
@@ -2204,12 +2371,18 @@ from llm_poker_arena.storage.layer_builders import (
     build_canonical_private_hand,
     build_public_action_event,
     build_public_hand_ended_event,
+    build_public_hand_record,
     build_public_hand_started_event,
     build_public_hole_dealt_event,
     build_public_showdown_event,
     build_public_street_reveal_event,
 )
 from llm_poker_arena.storage.meta import build_session_meta
+from llm_poker_arena.storage.schemas import (
+    ActionRecordPrivate,
+    PublicEvent,
+    WinnerInfo,
+)
 
 
 def _now_iso() -> str:
@@ -2221,6 +2394,14 @@ def _derive_turn_seed(deck_seed: int, actor: int, turn_counter: int) -> int:
     return int.from_bytes(hashlib.blake2b(payload, digest_size=8).digest(), "big") & (
         (1 << 63) - 1
     )
+
+
+def _split_provider_id(pid: str) -> tuple[str, str]:
+    """'random:uniform' → ('random', 'uniform'); 'random' → ('random', 'random')."""
+    parts = pid.split(":", 1)
+    provider = parts[0]
+    model = parts[1] if len(parts) > 1 else parts[0]
+    return provider, model
 
 
 class Session:
@@ -2240,6 +2421,13 @@ class Session:
         self._output_dir.mkdir(parents=True, exist_ok=True)
         self._session_id = session_id
 
+        # spec §7.1: snapshot the SessionConfig at session start so analysts
+        # can reproduce the exact run. Phase 2a uses config.json (no new dep);
+        # Phase 2b renames to config.yaml when pyyaml is added.
+        (self._output_dir / "config.json").write_text(
+            config.model_dump_json(indent=2)
+        )
+
         self._private_writer = BatchedJsonlWriter(self._output_dir / "canonical_private.jsonl")
         self._public_writer = BatchedJsonlWriter(self._output_dir / "public_replay.jsonl")
         self._snapshot_writer = BatchedJsonlWriter(self._output_dir / "agent_view_snapshots.jsonl")
@@ -2248,25 +2436,28 @@ class Session:
         self._total_hands_played = 0
 
     def run(self) -> None:
-        started_at = _now_iso()
+        started_at_iso = _now_iso()
+        started_at_monotonic = time.monotonic()
         initial_button_seat = 0
         try:
             for hand_id in range(self._config.num_hands):
                 self._run_one_hand(hand_id)
                 self._total_hands_played += 1
         finally:
-            ended_at = _now_iso()
+            ended_at_iso = _now_iso()
+            wall_time_sec = max(0, int(time.monotonic() - started_at_monotonic))
             meta = build_session_meta(
                 session_id=self._session_id, config=self._config,
-                started_at=started_at, ended_at=ended_at,
+                started_at=started_at_iso, ended_at=ended_at_iso,
                 total_hands_played=self._total_hands_played,
                 seat_assignment={i: self._agents[i].provider_id()
                                  for i in range(self._config.num_players)},
                 initial_button_seat=initial_button_seat,
                 chip_pnl=self._chip_pnl,
+                session_wall_time_sec=wall_time_sec,
             )
             (self._output_dir / "meta.json").write_text(
-                __import__("json").dumps(meta, sort_keys=True, indent=2)
+                json.dumps(meta, sort_keys=True, indent=2)
             )
             for w in (self._private_writer, self._public_writer, self._snapshot_writer):
                 w.close()
@@ -2285,14 +2476,16 @@ class Session:
         audit_invariants(state, cfg, HandPhase.PRE_SETTLEMENT)
 
         started_at = _now_iso()
-        self._public_writer.write(
-            build_public_hand_started_event(hand_id=hand_id, state=state, sb=cfg.sb, bb=cfg.bb)
-        )
-        self._public_writer.write(build_public_hole_dealt_event(hand_id=hand_id))
+        # Per spec §7.3: one public_replay line per hand. Collect events
+        # into a local buffer and flush via PublicHandRecord at hand-end.
+        events: list[PublicEvent] = []
+        events.append(build_public_hand_started_event(
+            hand_id=hand_id, state=state, sb=cfg.sb, bb=cfg.bb,
+        ))
+        events.append(build_public_hole_dealt_event(hand_id=hand_id))
 
-        actions: list[dict[str, Any]] = []
+        action_records: list[ActionRecordPrivate] = []
         turn_counter = 0
-        prev_board_len = 0
 
         while state._state.actor_index is not None:  # noqa: SLF001
             actor = int(state._state.actor_index)  # noqa: SLF001
@@ -2312,73 +2505,81 @@ class Session:
                         f"reason={result2.reason}"
                     )
 
-            self._public_writer.write(
-                build_public_action_event(
-                    hand_id=hand_id, seat=actor, street=street, action=chosen,
-                )
+            events.append(build_public_action_event(
+                hand_id=hand_id, seat=actor, street=street, action=chosen,
+            ))
+
+            provider, model = _split_provider_id(self._agents[actor].provider_id())
+            snapshot = build_agent_view_snapshot(
+                hand_id=hand_id, session_id=self._session_id, seat=actor,
+                street=street, timestamp=_now_iso(), view=view,
+                action=chosen, turn_index=turn_counter,
+                agent_provider=provider, agent_model=model,
+                agent_version="phase2a",
+                default_action_fallback=fallback,
             )
-            self._snapshot_writer.write(
-                build_agent_view_snapshot(
-                    hand_id=hand_id, session_id=self._session_id, seat=actor,
-                    street=street, timestamp=_now_iso(), view=view,
-                    action=chosen, turn_index=turn_counter,
-                    agent_provider=self._agents[actor].provider_id().split(":", 1)[0],
-                    agent_model=self._agents[actor].provider_id().split(":", 1)[-1],
-                    agent_version="phase2a",
-                    default_action_fallback=fallback,
-                )
-            )
-            actions.append({
-                "seat": actor, "street": street.value,
-                "action_type": chosen.tool_name,
-                "amount": chosen.args.get("amount")
-                          if isinstance(chosen.args, dict) else None,
-                "is_forced_blind": False, "turn_index": turn_counter,
-            })
+            self._snapshot_writer.write(snapshot.model_dump(mode="json"))
+
+            action_records.append(ActionRecordPrivate(
+                seat=actor, street=street.value,  # type: ignore[arg-type]
+                action_type=chosen.tool_name,  # type: ignore[arg-type]
+                amount=(
+                    int(chosen.args["amount"])
+                    if isinstance(chosen.args, dict) and "amount" in chosen.args
+                    else None
+                ),
+                is_forced_blind=False,
+                turn_index=turn_counter,
+            ))
             turn_counter += 1
 
-            prev_board_len = self._maybe_advance_between_streets(
-                state, hand_id, prev_board_len,
-            )
+            self._maybe_advance_between_streets(state, hand_id, events)
 
         # Hand is over. Emit showdown (if anyone saw it) + hand_ended.
         statuses = list(state._state.statuses)  # noqa: SLF001
         showdown_seats = {i for i, alive in enumerate(statuses) if bool(alive)}
         showdown = len(showdown_seats) > 1
         if showdown:
-            self._public_writer.write(
-                build_public_showdown_event(
-                    hand_id=hand_id, state=state, showdown_seats=showdown_seats,
-                )
-            )
+            events.append(build_public_showdown_event(
+                hand_id=hand_id, state=state, showdown_seats=showdown_seats,
+            ))
 
         payoffs = list(state._state.payoffs)  # noqa: SLF001
         winnings = {i: int(payoffs[i]) for i in range(cfg.num_players)}
-        self._public_writer.write(
-            build_public_hand_ended_event(hand_id=hand_id, winnings=winnings)
-        )
+        events.append(build_public_hand_ended_event(
+            hand_id=hand_id, winnings=winnings,
+        ))
 
         audit_invariants(state, cfg, HandPhase.POST_SETTLEMENT)
 
-        # Canonical private hand record.
-        ended_at = _now_iso()
-        final_invested = {i: cfg.starting_stack - int(state._state.stacks[i]) - max(0, int(payoffs[i]))  # noqa: SLF001
-                          for i in range(cfg.num_players)}
-        self._private_writer.write(
-            build_canonical_private_hand(
-                hand_id=hand_id, state=state,
-                started_at=started_at, ended_at=ended_at,
-                actions=tuple(actions),
-                winners=tuple({"seat": i, "winnings": int(payoffs[i]), "best_hand_desc": ""}
-                              for i in range(cfg.num_players) if int(payoffs[i]) > 0),
-                side_pots=(),
-                final_invested=final_invested,
-                net_pnl=winnings,
-                showdown=showdown,
-            )
+        # Flush public_replay: ONE line per hand (spec §7.3 shape).
+        public_record = build_public_hand_record(
+            hand_id=hand_id, events=tuple(events),
         )
+        self._public_writer.write(public_record.model_dump(mode="json"))
 
-        # Hand-end durability checkpoint (H-10).
+        # Canonical private hand record.
+        # Phase 2a: final_invested left empty — proper tracking (per-seat
+        # cumulative contribution including blinds) requires walking
+        # `state.operations` or tracking bets inline. Deferred to Phase 2b;
+        # MVP 6 exit criterion does not depend on this field.
+        ended_at = _now_iso()
+        private_record = build_canonical_private_hand(
+            hand_id=hand_id, state=state,
+            started_at=started_at, ended_at=ended_at,
+            actions=tuple(action_records),
+            winners=tuple(
+                WinnerInfo(seat=i, winnings=int(payoffs[i]), best_hand_desc="")
+                for i in range(cfg.num_players) if int(payoffs[i]) > 0
+            ),
+            side_pots=(),
+            final_invested={},
+            net_pnl=winnings,
+            showdown=showdown,
+        )
+        self._private_writer.write(private_record.model_dump(mode="json"))
+
+        # Hand-end durability checkpoint (spec §8.1: flush at hand_ended).
         for w in (self._public_writer, self._snapshot_writer, self._private_writer):
             w.flush()
 
@@ -2389,53 +2590,62 @@ class Session:
     # ------------------------------------------------- between-street advance
 
     def _maybe_advance_between_streets(
-        self, state: CanonicalState, hand_id: int, prev_board_len: int,
-    ) -> int:
-        """Emit street_reveal events if burn+deal happened since last check.
+        self, state: CanonicalState, hand_id: int, events: list[PublicEvent],
+    ) -> None:
+        """Drain pokerkit's show_or_muck + burn+deal queue between streets.
 
-        Mirrors rebuy.py::_maybe_advance_between_streets logic but returns the
-        new board length so the caller tracks whether a reveal has been
-        emitted for this hand.
+        Appends public street-reveal events directly into the `events` buffer
+        (spec §7.3 one-hand-per-line shape). Mirrors the Phase-1 pattern in
+        `engine/_internal/rebuy.py::_maybe_advance_between_streets`.
+
+        Raises `RuntimeError` if the iteration cap is reached without the
+        state machine converging — matches Phase-1 discipline. Silent return
+        on cap exhaustion would hide infinite-loop bugs in pokerkit's
+        between-streets logic.
         """
         raw = state._state  # noqa: SLF001
         for _ in range(32):
             if raw.actor_index is not None:
-                break
+                return
             if raw.can_show_or_muck_hole_cards():
                 raw.show_or_muck_hole_cards()
                 continue
             if raw.can_burn_card():
                 board_len = sum(len(slot) for slot in (raw.board_cards or []))
-                # Decide next street based on current board length.
                 if board_len == 0:
                     state.deal_community(Street.FLOP)
-                    self._public_writer.write(
-                        build_public_street_reveal_event(
-                            hand_id=hand_id, state=state, street=Street.FLOP,
-                        )
-                    )
+                    events.append(build_public_street_reveal_event(
+                        hand_id=hand_id, state=state, street=Street.FLOP,
+                    ))
                 elif board_len == 3:
                     state.deal_community(Street.TURN)
-                    self._public_writer.write(
-                        build_public_street_reveal_event(
-                            hand_id=hand_id, state=state, street=Street.TURN,
-                        )
-                    )
+                    events.append(build_public_street_reveal_event(
+                        hand_id=hand_id, state=state, street=Street.TURN,
+                    ))
                 elif board_len == 4:
                     state.deal_community(Street.RIVER)
-                    self._public_writer.write(
-                        build_public_street_reveal_event(
-                            hand_id=hand_id, state=state, street=Street.RIVER,
-                        )
-                    )
+                    events.append(build_public_street_reveal_event(
+                        hand_id=hand_id, state=state, street=Street.RIVER,
+                    ))
                 else:
                     raise RuntimeError(
                         f"unexpected board length {board_len} requesting burn"
                     )
                 continue
-            break
-        return sum(len(slot) for slot in (raw.board_cards or []))
+            # Neither actor-required nor pending show/burn — hand has
+            # reached a stable terminal state. Return to outer loop.
+            return
+        raise RuntimeError(
+            "_maybe_advance_between_streets exceeded 32 iterations; pokerkit "
+            "between-streets state machine is not converging (hand_id="
+            f"{hand_id})"
+        )
 ```
+
+Also note: builders return Pydantic models; writer receives a `dict` via
+`model.model_dump(mode="json")`. `BatchedJsonlWriter.write` expects a dict, so
+the conversion happens at the Session layer right before each write call.
+That keeps the writer schema-agnostic and the validation at build time.
 
 - [ ] **Step 4: Run tests**
 
@@ -2443,7 +2653,7 @@ Run:
 ```bash
 cd /Users/zcheng256/llm-poker-arena && source .venv/bin/activate && pytest tests/unit/test_session_orchestrator.py -v
 ```
-Expected: 6 passed.
+Expected: 7 passed (6 original + 1 config.json init test; also test_session_public_replay renamed to _is_one_hand_per_line).
 
 - [ ] **Step 5: Full suite + lint + type**
 
@@ -2509,27 +2719,30 @@ def test_public_replay_has_no_non_showdown_hole_leak(
             session_id="leaktest").run()
 
     # For each hand in canonical_private, compare its hole_cards against the
-    # cards revealed (or absent) in public_replay.
+    # cards revealed (or absent) in public_replay. Both files are one hand
+    # per line (spec §7.2 / §7.3 shape).
     private = [json.loads(line) for line in
                (Path(out_dir) / "canonical_private.jsonl").read_text().splitlines() if line.strip()]
-    public = [json.loads(line) for line in
-              (Path(out_dir) / "public_replay.jsonl").read_text().splitlines() if line.strip()]
-    public_by_hand: dict[int, list[dict]] = {}
-    for ev in public:
-        public_by_hand.setdefault(ev["hand_id"], []).append(ev)
+    public_by_hand: dict[int, dict] = {
+        rec["hand_id"]: rec
+        for rec in (json.loads(line) for line in
+                    (Path(out_dir) / "public_replay.jsonl").read_text().splitlines() if line.strip())
+    }
 
     for hand in private:
         hid = hand["hand_id"]
         holes = hand["hole_cards"]  # dict[str, list[str, str]]
+        public_rec = public_by_hand[hid]
+        street_events = public_rec["street_events"]
+
         # Find showdown event (may be absent if hand ended by fold-to-one).
-        showdown_evs = [e for e in public_by_hand[hid] if e["type"] == "showdown"]
+        showdown_evs = [e for e in street_events if e["type"] == "showdown"]
         revealed_seats: set[str] = set()
         if showdown_evs:
             revealed_seats = set(showdown_evs[0]["revealed"].keys())
 
-        public_blob = "\n".join(
-            json.dumps(e, sort_keys=True) for e in public_by_hand[hid]
-        )
+        # Serialize the whole hand record to one string and substring-search.
+        public_blob = json.dumps(public_rec, sort_keys=True)
         for seat_str, cards in holes.items():
             if seat_str in revealed_seats:
                 continue  # showdown reveal allowed
@@ -2587,7 +2800,11 @@ from llm_poker_arena.storage.jsonl_writer import BatchedJsonlWriter
 @pytest.mark.skipif(sys.platform == "win32", reason="fork-based test; Unix only")
 def test_sigkill_loses_at_most_batch_size_entries(tmp_path: Path) -> None:
     out = tmp_path / "durability.jsonl"
-    total = 50  # write 50 entries then SIGKILL self
+    # Intentionally NOT a multiple of BATCH_SIZE: if we used 50 (=5*BATCH_SIZE)
+    # the last flush triggers exactly at i=49 and the SIGKILL hits an empty
+    # buffer — the test would pass trivially without exercising partial loss.
+    # 47 guarantees 7 entries are in buffer at SIGKILL time.
+    total = 47
     pid = os.fork()
     if pid == 0:
         # Child
@@ -2618,8 +2835,15 @@ def test_sigkill_loses_at_most_batch_size_entries(tmp_path: Path) -> None:
         json.loads(line)
 
 
-def test_sigterm_drains_buffer(tmp_path: Path) -> None:
-    """SIGTERM (not SIGKILL) must drain the buffer — writer has a handler."""
+def test_sigterm_drains_buffer_and_terminates(tmp_path: Path) -> None:
+    """SIGTERM drains the buffer AND re-raises default termination.
+
+    Prior plan drafts used `os._exit(0)` after the self-signal, which would
+    mask a handler that swallowed SIGTERM without re-raising. This test
+    asserts the child actually terminates BY signal (WIFSIGNALED) — that
+    catches the "SIGTERM silently swallowed" regression the writer's handler
+    is specifically designed to avoid.
+    """
     out = tmp_path / "sigterm.jsonl"
     pid = os.fork()
     if pid == 0:
@@ -2627,15 +2851,22 @@ def test_sigterm_drains_buffer(tmp_path: Path) -> None:
         w = BatchedJsonlWriter(out)
         for i in range(3):
             w.write({"i": i})
-        # 3 entries < BATCH_SIZE, so none are flushed yet. Signal ourselves.
+        # 3 entries < BATCH_SIZE; buffer not yet flushed. Signal ourselves.
         os.kill(os.getpid(), signal.SIGTERM)
-        # If the handler ran, the buffer is drained; let process terminate.
-        os._exit(0)
+        # Should never reach here — handler drains and re-raises default.
+        # If we do reach here, the handler swallowed the signal (regression).
+        os._exit(99)
     else:
-        os.waitpid(pid, 0)
+        (_, status) = os.waitpid(pid, 0)
+
+    assert os.WIFSIGNALED(status), (
+        f"child did not terminate by signal; SIGTERM handler likely swallowed the "
+        f"signal without re-raising. status={status!r}"
+    )
+    assert os.WTERMSIG(status) == signal.SIGTERM
 
     lines = out.read_text().splitlines() if out.exists() else []
-    # All 3 buffered entries should be present (SIGTERM drains).
+    # All 3 buffered entries should be present — drain ran BEFORE termination.
     assert len(lines) == 3
 ```
 
@@ -2663,7 +2894,7 @@ cd /Users/zcheng256/llm-poker-arena && git add tests/unit/test_batch_flush_durab
 **Files:**
 - Create: `tests/unit/test_mvp6_integration.py`
 
-Spec MVP 6 exit criterion: "mock decisions 下跑 1,000 手；public_replay 无 private 信息泄漏；crash at arbitrary point 最多丢最后 10 条". This test satisfies the 1000-hand + no-leak component; Task 10 already covers crash durability.
+Spec MVP 6 exit criterion: "mock decisions 下跑 1,000 手；public_replay 无 private 信息泄漏；crash at arbitrary point 最多丢最后 10 条". This test satisfies the 1000-hand component (writer/reader round-trip + structural assertions); Task 9 covers the no-leak property invariant; Task 10 covers crash durability.
 
 - [ ] **Step 1: Write test**
 
@@ -2700,29 +2931,40 @@ def test_mvp6_thousand_hands_heterogeneous_lineup(tmp_path: Path) -> None:
     sess = Session(config=cfg, agents=agents, output_dir=tmp_path, session_id="mvp6")
     sess.run()
 
-    # Three layer files + meta exist.
+    # Three layer files + meta + config.json exist.
     for fname in ("canonical_private.jsonl", "public_replay.jsonl",
-                  "agent_view_snapshots.jsonl", "meta.json"):
-        assert (tmp_path / fname).exists()
+                  "agent_view_snapshots.jsonl", "meta.json", "config.json"):
+        assert (tmp_path / fname).exists(), fname
 
-    # 1002 hand records.
+    # 1002 hand records in both canonical_private AND public_replay
+    # (spec §7.3: public_replay is ONE LINE PER HAND, not per event).
     private_lines = (tmp_path / "canonical_private.jsonl").read_text().splitlines()
     assert len(private_lines) == 1_002
+    public_lines = (tmp_path / "public_replay.jsonl").read_text().splitlines()
+    assert len(public_lines) == 1_002
 
     # Round-trip readers work.
     pub = PublicLogReader(tmp_path)
-    pub_events = list(pub.iter_events())
-    assert len(pub_events) > 1_002  # at minimum 1 event per hand + hand_started/ended
+    pub_hands = list(pub.iter_events())  # each entry = one hand record
+    assert len(pub_hands) == 1_002
+    # Spot-check first few: each hand has street_events bookended by
+    # hand_started ... hand_ended.
+    for rec in pub_hands[:5]:
+        assert "street_events" in rec
+        event_types = [e["type"] for e in rec["street_events"]]
+        assert event_types[0] == "hand_started"
+        assert event_types[-1] == "hand_ended"
 
     priv = PrivateLogReader(tmp_path, access_token=PRIVATE_ACCESS_TOKEN)
     hands = list(priv.iter_private_hands())
     assert len(hands) == 1_002
     snapshots = list(priv.iter_snapshots())
-    assert len(snapshots) >= 1_002
+    assert len(snapshots) >= 1_002  # ≥ 1 agent turn per hand
 
     # Chip conservation sanity (zero-sum across all hands).
     meta = json.loads((tmp_path / "meta.json").read_text())
     assert sum(meta["chip_pnl"].values()) == 0
+    assert meta["total_hands_played"] == 1_002
 ```
 
 - [ ] **Step 2: Run**
@@ -2759,7 +3001,7 @@ After completing Tasks 1-11:
 **Spec coverage** (re-skim each relevant spec section):
 - §7.1 directory structure → Task 8 (Session lays out session_dir with all 3 files + meta.json). Missing: `prompts/` and `crash.json` dirs; both are Phase 3+ (prompts for LLM providers, crash.json for uncaught exception snapshot). Acceptable gap.
 - §7.2 canonical_private schema → Task 3 `CanonicalPrivateHandRecord`. ✓
-- §7.3 public_replay events → Task 3 `PublicReplayEvent` union + Task 4 builders. ✓
+- §7.3 public_replay events → Task 3 `PublicHandRecord` (one-hand-per-line with `street_events` discriminated union) + Task 4 builders, with `build_public_hand_record` wrapping the per-hand event tuple. ✓
 - §7.4 agent_view_snapshots → Task 3 + Task 4. Phase 2a degenerate (iterations empty) — forward-compat ✓
 - §7.5 access control → Task 5. ✓
 - §7.6 meta.json → Task 6. Phase 2a degenerate fields acceptable ✓
