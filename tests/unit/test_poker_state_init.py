@@ -144,3 +144,77 @@ def test_same_seed_yields_same_community_cards() -> None:
     b.deal_community(Street.FLOP)
 
     assert a.community() == b.community()
+
+
+# --------------------------- card-invariant audit wiring (I-1) ---------------------------
+
+def test_canonical_state_init_runs_card_invariant_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure CanonicalState.__init__ audits the card invariant (I-1 from final review)."""
+    from llm_poker_arena.engine._internal import audit as audit_module
+    from llm_poker_arena.engine._internal import poker_state as ps_module
+
+    calls: list[object] = []
+    original = audit_module.audit_cards_invariant
+
+    def spy(state: object) -> None:
+        calls.append(state)
+        return original(state)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(ps_module, "audit_cards_invariant", spy)
+
+    cfg = SessionConfig(
+        num_players=6, starting_stack=10_000, sb=50, bb=100,
+        num_hands=60, max_utility_calls=5,
+        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
+        opponent_stats_min_samples=30, rng_seed=42,
+    )
+    ctx = HandContext(
+        hand_id=0, deck_seed=42_000, button_seat=0,
+        initial_stacks=(10_000,) * 6,
+    )
+    _ = CanonicalState(cfg, ctx)
+    assert len(calls) >= 1, "audit_cards_invariant not called during __init__"
+
+
+def test_canonical_state_deal_community_runs_card_invariant_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure deal_community also audits the card invariant."""
+    from llm_poker_arena.engine._internal import audit as audit_module
+    from llm_poker_arena.engine._internal import poker_state as ps_module
+    from llm_poker_arena.engine.legal_actions import Action
+    from llm_poker_arena.engine.transition import apply_action
+
+    # Construct state (__init__ audit happens here — we install spy only for deal_community).
+    cfg = SessionConfig(
+        num_players=6, starting_stack=10_000, sb=50, bb=100,
+        num_hands=60, max_utility_calls=5,
+        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
+        opponent_stats_min_samples=30, rng_seed=42,
+    )
+    ctx = HandContext(
+        hand_id=0, deck_seed=42_000, button_seat=0,
+        initial_stacks=(10_000,) * 6,
+    )
+    s = CanonicalState(cfg, ctx)
+
+    # Preflop action through check: UTG(3) HJ(4) CO(5) BTN(0) SB(1) call, BB(2) check.
+    for actor in (3, 4, 5, 0, 1):
+        r = apply_action(s, actor, Action(tool_name="call", args={}))
+        assert r.is_valid
+    r = apply_action(s, 2, Action(tool_name="check", args={}))
+    assert r.is_valid
+
+    # Now spy.
+    calls: list[object] = []
+    original = audit_module.audit_cards_invariant
+
+    def spy(state: object) -> None:
+        calls.append(state)
+        return original(state)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(ps_module, "audit_cards_invariant", spy)
+    s.deal_community(Street.FLOP)
+    assert len(calls) >= 1, "audit_cards_invariant not called during deal_community"

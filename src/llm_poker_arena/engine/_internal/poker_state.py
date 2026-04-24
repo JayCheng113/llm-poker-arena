@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from pokerkit import Automation, NoLimitTexasHoldem
 
+from llm_poker_arena.engine._internal.audit import audit_cards_invariant
 from llm_poker_arena.engine._internal.deck import build_deterministic_deck, card_to_str
 from llm_poker_arena.engine.config import HandContext, SessionConfig
 from llm_poker_arena.engine.types import Street
@@ -71,6 +72,9 @@ class CanonicalState:
         # PP-01/§3.1: manual deterministic deal because HOLE_DEALING automation is OFF.
         self._deal_hole_cards_deterministic()
 
+        # I-1 (final review): every engine mutation must leave card invariant intact.
+        audit_cards_invariant(self)
+
     # ---------- read-only accessors ----------
     @property
     def num_players(self) -> int:
@@ -125,6 +129,9 @@ class CanonicalState:
         self._state.burn_card(self._next_card())
         cards = tuple(self._next_card() for _ in range(count))
         self._state.deal_board(cards)
+
+        # I-1 (final review): every engine mutation must leave card invariant intact.
+        audit_cards_invariant(self)
 
     def community(self) -> list[str]:
         """Current community cards as 2-char string tokens (flat, ordered)."""
