@@ -20,14 +20,30 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class Action:
-    """A concrete action proposal. `args` carries tool-specific params (e.g. amount)."""
+    """A concrete action proposal.
+
+    `args` carries tool-specific params (e.g. `{"amount": 300}` for bet/raise_to).
+    Note: frozen=True prevents attribute reassignment but `args` dict is
+    structurally mutable — do not mutate after construction. Actions are
+    short-lived (built → apply → discarded within one turn) so this does not
+    cross a persistence boundary, but treat them as immutable by convention.
+    """
 
     tool_name: str
     args: dict[str, Any]
 
 
 def default_safe_action(view: PlayerView) -> Action:
-    """BR2-03 / PP-04: always-legal fallback action."""
+    """BR2-03 / PP-04 always-legal fallback.
+
+    Returns `check` if `current_bet_to_match - my_invested_this_round <= 0`,
+    else `fold`. This guarantee is conditional on the caller's PlayerView
+    being faithful to the canonical state: if the view's bet fields disagree
+    with pokerkit's `state.bets`, `check` may fire against an open bet and
+    PokerKit will reject it with ValueError. The T13 projection layer is
+    responsible for keeping those fields consistent with
+    `_to_call_amount(raw, my_seat)`.
+    """
     to_call = view.current_bet_to_match - view.my_invested_this_round
     if to_call <= 0:
         return Action(tool_name="check", args={})
@@ -35,7 +51,17 @@ def default_safe_action(view: PlayerView) -> Action:
 
 
 def compute_legal_tool_set(state: CanonicalState, actor: int) -> LegalActionSet:
-    """Build the LegalActionSet for `actor` by querying PokerKit capability predicates."""
+    """Build the LegalActionSet for `actor` by querying PokerKit capability predicates.
+
+    `all_in` dispatch contract (T12 `apply_action` must honor):
+      - If PokerKit accepts `complete_bet_or_raise_to(max_cbor)`, dispatch that.
+      - If actor faces a bet larger than their stack, dispatch `check_or_call()`
+        (call-for-less; shoves the remaining stack into the pot).
+      - If actor has chips but no raise is legal (stack < min_bet pre-bet, or
+        all-in-to-call already exceeds pot), dispatch `check_or_call()`.
+    The contract is written down here so that widening the set in this file
+    requires updating the dispatch in `engine/transition.py` in the same commit.
+    """
     raw = state._state  # noqa: SLF001
 
     tools: list[ActionToolSpec] = []

@@ -35,3 +35,34 @@ def test_legal_tool_set_is_never_empty_for_required_actor() -> None:
     actor = int(getattr(s._state, "actor_index", None) or getattr(s._state, "actor", 0) or 0)
     legal = compute_legal_tool_set(s, actor)
     assert len(legal.tools) > 0
+
+
+def test_to_call_amount_empty_bets_returns_zero() -> None:
+    """Empty bets list (pre-dealing / edge) -> no call required."""
+    from llm_poker_arena.engine.legal_actions import _to_call_amount
+
+    class _Stub:
+        bets: list[int] = []
+
+    assert _to_call_amount(_Stub(), actor=0) == 0
+
+
+def test_to_call_amount_out_of_range_actor_treated_as_zero_bet() -> None:
+    """Actor index beyond `bets` length -> treat actor's bet as 0 (not crash)."""
+    from llm_poker_arena.engine.legal_actions import _to_call_amount
+
+    class _Stub:
+        bets: list[int] = [0, 50, 100]
+
+    # actor=5 doesn't exist; to_call should be max(bets)=100 (treating their bet as 0).
+    assert _to_call_amount(_Stub(), actor=5) == 100
+
+
+def test_to_call_amount_actor_has_matched_high_bet() -> None:
+    """Actor already matches the max bet -> no further call needed."""
+    from llm_poker_arena.engine.legal_actions import _to_call_amount
+
+    class _Stub:
+        bets: list[int] = [0, 100, 100]
+
+    assert _to_call_amount(_Stub(), actor=1) == 0
