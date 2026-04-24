@@ -1855,6 +1855,15 @@ cd /Users/zcheng256/llm-poker-arena && git add src/llm_poker_arena/engine/_inter
 
 ## Task 10: Audit Functions (`engine/_internal/audit.py`)
 
+> **Plan correction (post-MVP 4 final review)**: original plan code for
+> `audit_pre_settlement` double-counted in-flight bets (pokerkit 0.7.3's
+> `total_pot_amount` already includes them) and `audit_cards_invariant` did
+> not flatten the multi-runout `board_cards: list[list[Card]]` structure.
+> Both fixed in commits `98d2538` + `7bd5f37`. See
+> `docs/superpowers/notes/pokerkit-0.7.3-api.md` §D lines 190-202 for the
+> total_pot_amount semantics and §D lines 181-188 for the board_cards
+> shape. This section below now shows the corrected code.
+
 **Files:**
 - Create: `src/llm_poker_arena/engine/_internal/audit.py`
 - Create: `tests/unit/test_audit.py`
@@ -1997,8 +2006,15 @@ def audit_cards_invariant(state: "CanonicalState") -> None:
     raw = state._state  # noqa: SLF001 — internal module allowed
     deck_remaining = list(state._deck_order[state._deck_cursor :])  # noqa: SLF001
     burn_cards = list(getattr(raw, "burn_cards", []) or [])
-    community = getattr(raw, "board_cards", None) or getattr(raw, "community_cards", []) or []
-    community = list(community)
+    # board_cards is list[list[Card]] (outer=slot, inner=runout). Flatten.
+    # pokerkit 0.7.3 does NOT expose a `community_cards` attribute — the plan's
+    # fallback was a dead branch that would also crash at card_to_str() if it
+    # ever fired (list-of-lists fed to a scalar helper).
+    board_nested = getattr(raw, "board_cards", None) or []
+    community: list[Card] = []
+    for slot in board_nested:
+        if slot:
+            community.extend(slot)
     hole_all: list = []
     for seat_cards in (getattr(raw, "hole_cards", []) or []):
         if not seat_cards:
@@ -2034,14 +2050,18 @@ def audit_pre_settlement(state: "CanonicalState", config: "SessionConfig") -> No
     raw = state._state  # noqa: SLF001
     starting_total = config.starting_stack * config.num_players
     total_stacks = sum(getattr(raw, "stacks", ()) or ())
-    pot_collected = int(getattr(raw, "total_pot_amount", 0) or 0)
-    bets_in_flight = sum(getattr(raw, "bets", ()) or ())
-
-    conserved = total_stacks + pot_collected + bets_in_flight
+    # total_pot_amount == collected pots + in-flight bets (per pokerkit 0.7.3 API
+    # reference at docs/superpowers/notes/pokerkit-0.7.3-api.md §Stacks / bets /
+    # pot). Adding `sum(bets)` again would double-count in-flight chips.
+    total_pot = int(getattr(raw, "total_pot_amount", 0) or 0)
+    conserved = total_stacks + total_pot
     if conserved != starting_total:
+        in_flight = sum(getattr(raw, "bets", ()) or ())
+        collected = total_pot - in_flight
         raise AuditFailure(
             f"pre-settlement chip conservation: {conserved} "
-            f"(stacks={total_stacks} + pot={pot_collected} + in_flight={bets_in_flight}) "
+            f"(stacks={total_stacks} + total_pot={total_pot} "
+            f"[collected={collected} + in_flight={in_flight}]) "
             f"!= starting_total {starting_total}"
         )
 
@@ -2383,6 +2403,18 @@ cd /Users/zcheng256/llm-poker-arena && git add src/llm_poker_arena/engine/legal_
 
 ## Task 12: Transition (`engine/transition.py`)
 
+> **Plan correction (post-MVP 4 final review)**: original plan gave
+> `apply_action` an optional `config: SessionConfig | None = None` keyword
+> and ran `audit_invariants` only when `config is not None`, making the
+> audit opt-in. The as-built signature drops the parameter entirely and
+> audits unconditionally using `state._config` (stored at
+> `CanonicalState.__init__`). This aligns with the spec's BR2-03 contract
+> that every transition must pass pre-settlement audit. Fixed in commit
+> `fda362b`. Also tightened the pokerkit version comment (`>=0.5` →
+> `>=0.7,<0.8` to match the pinned dependency), and updated the `_setup()`
+> helper idiom for mypy compatibility. This section below now shows the
+> corrected code.
+
 **Files:**
 - Create: `src/llm_poker_arena/engine/transition.py`
 - Create: `tests/unit/test_transition.py`
@@ -2415,8 +2447,8 @@ def _setup() -> tuple[CanonicalState, int]:
     ctx = HandContext(hand_id=0, deck_seed=42_000, button_seat=0,
                       initial_stacks=(10_000,) * 6)
     s = CanonicalState(cfg, ctx)
-    actor = getattr(s._state, "actor_index", None) or getattr(s._state, "actor", 0)
-    return s, int(actor)
+    actor = int(getattr(s._state, "actor_index", None) or getattr(s._state, "actor", 0) or 0)
+    return s, actor
 
 
 def test_fold_valid_at_preflop_utg() -> None:
@@ -2493,8 +2525,6 @@ def apply_action(
     state: "CanonicalState",
     actor: int,
     action: Action,
-    *,
-    config: "SessionConfig | None" = None,
 ) -> TransitionResult:
     legal = compute_legal_tool_set(state, actor)
     legal_names = [t.name for t in legal.tools]
@@ -2516,7 +2546,7 @@ def apply_action(
 
     raw = state._state  # noqa: SLF001
 
-    # Dispatch to PokerKit. Method names reflect pokerkit>=0.5.
+    # Dispatch to PokerKit. Method names reflect pokerkit>=0.7,<0.8 (pinned).
     try:
         if action.tool_name == "fold":
             raw.fold()
@@ -2540,8 +2570,11 @@ def apply_action(
     except Exception as e:  # noqa: BLE001 — PokerKit-specific exceptions vary
         return TransitionResult(False, f"PokerKit rejected {action.tool_name}: {e}")
 
-    if config is not None:
-        audit_invariants(state, config, HandPhase.PRE_SETTLEMENT)
+    # audit is unconditional: state.__init__ stores SessionConfig, so we don't
+    # take it as a param — callers can't accidentally skip invariants. If
+    # PokerKit dispatch raised, we returned early above — no state mutation to
+    # audit.
+    audit_invariants(state, state._config, HandPhase.PRE_SETTLEMENT)  # noqa: SLF001
     return TransitionResult(True, None)
 ```
 
@@ -2571,6 +2604,22 @@ cd /Users/zcheng256/llm-poker-arena && git add src/llm_poker_arena/engine/transi
 ---
 
 ## Task 13: Projections (`engine/projections.py`) + Isolation Test
+
+> **Plan correction (post-MVP 4 final review)**: two bugs corrected in the
+> as-built code.
+> (1) `_seats_public` position formula: plan wrote
+> `(i - button_seat - 1) % n` which maps the button seat to BB (off by 2
+> relative to spec §3.1 PP-02 which requires `button_seat → BTN`,
+> `(button+1)%n → SB`, `(button+2)%n → BB`). Correct offset is
+> `(i - button_seat + 3) % n` (BTN is index 3 in `_POSITIONS_6MAX`).
+> (2) `_normalize_status` fold detection: plan did `str(raw_status).lower()`
+> then checked `"fold" in s`, but pokerkit 0.7.3's `statuses[i]` is a bare
+> `bool` (`False` = folded), so `str(False).lower() == "false"` never
+> contains "fold" and every folded seat silently reported `in_hand`. Fixed
+> to branch on `raw_status is False` first, then fall through to string
+> heuristics. Return type tightened to `SeatStatus` Literal (added to
+> `views` import block). Both fixed in commit `7bd5f37`. This section
+> below now shows the corrected code.
 
 **Files:**
 - Create: `src/llm_poker_arena/engine/projections.py`
@@ -2673,6 +2722,7 @@ from llm_poker_arena.engine.views import (
     PlayerView,
     PublicView,
     SeatPublicInfo,
+    SeatStatus,
     SessionParamsView,
 )
 
@@ -2713,7 +2763,11 @@ def _seats_public(state: "CanonicalState") -> tuple[SeatPublicInfo, ...]:
     n = state.num_players
     out: list[SeatPublicInfo] = []
     for i in range(n):
-        position_idx = (i - state.button_seat - 1) % n  # BTN-relative
+        # Spec §3.1 (PP-02): `button_seat → BTN`, `(button+1)%n → SB`,
+        # `(button+2)%n → BB`, etc. The original `-1` offset mapped the button
+        # seat to BB, off by 2. BTN is index 3 in _POSITIONS_6MAX, so the
+        # offset relative to button_seat must be +3.
+        position_idx = (i - state.button_seat + 3) % n  # button -> BTN (index 3 in _POSITIONS_6MAX)
         short, full = _POSITIONS_6MAX[position_idx] if n == 6 else (f"P{i}", f"Position {i}")
         status = _normalize_status(statuses[i] if i < len(statuses) else "in_hand")
         out.append(
@@ -2731,12 +2785,21 @@ def _seats_public(state: "CanonicalState") -> tuple[SeatPublicInfo, ...]:
     return tuple(out)
 
 
-def _normalize_status(raw_status: object) -> str:
-    s = str(raw_status).lower()
-    if "fold" in s:
+def _normalize_status(raw_status: object) -> SeatStatus:
+    """Normalize pokerkit's per-seat status into our SeatStatus Literal.
+
+    pokerkit 0.7.3: `raw.statuses[i]` is `bool` — False means folded.
+    `all_in` detection additionally requires `stack == 0` with status True; that
+    refinement is a Phase 2 concern. Phase 1 treats all-in as in_hand.
+    """
+    if raw_status is False:
         return "folded"
-    if "all" in s:
-        return "all_in"
+    if isinstance(raw_status, str):
+        s = raw_status.lower()
+        if "fold" in s:
+            return "folded"
+        if "all" in s:
+            return "all_in"
     return "in_hand"
 
 
