@@ -60,11 +60,21 @@ def _session_params_view(state: CanonicalState) -> SessionParamsView:
 
 
 def _normalize_status(raw_status: object) -> SeatStatus:
-    s = str(raw_status).lower()
-    if "fold" in s:
+    """Normalize pokerkit's per-seat status into our SeatStatus Literal.
+
+    pokerkit 0.7.3: `raw.statuses[i]` is `bool` — False means folded.
+    `all_in` detection additionally requires `stack == 0` with status True; that
+    refinement is plumbed into `_seats_public` via a helper parameter in Phase 2
+    (see TODO tag in `_seats_public`). Phase 1 treats all-in as in_hand.
+    """
+    if raw_status is False:
         return "folded"
-    if "all" in s:
-        return "all_in"
+    if isinstance(raw_status, str):
+        s = raw_status.lower()
+        if "fold" in s:
+            return "folded"
+        if "all" in s:
+            return "all_in"
     return "in_hand"
 
 
@@ -76,7 +86,7 @@ def _seats_public(state: CanonicalState) -> tuple[SeatPublicInfo, ...]:
     n = state.num_players
     out: list[SeatPublicInfo] = []
     for i in range(n):
-        position_idx = (i - state.button_seat - 1) % n  # BTN-relative
+        position_idx = (i - state.button_seat + 3) % n  # button -> BTN (index 3 in _POSITIONS_6MAX)
         short, full = _POSITIONS_6MAX[position_idx] if n == 6 else (f"P{i}", f"Position {i}")
         status = _normalize_status(statuses[i] if i < len(statuses) else "in_hand")
         out.append(
@@ -86,7 +96,7 @@ def _seats_public(state: CanonicalState) -> tuple[SeatPublicInfo, ...]:
                 position_short=short,
                 position_full=full,
                 stack=int(stacks[i]) if i < len(stacks) else 0,
-                invested_this_hand=0,  # Task 14+ will plumb real values
+                invested_this_hand=0,  # TODO(phase2): plumb cumulative across streets; Phase 1 has no street history
                 invested_this_round=int(bets[i]) if i < len(bets) else 0,
                 status=status,
             )
@@ -138,18 +148,18 @@ def build_player_view(
         my_hole_cards=my_hole,
         community=tuple(state.community()),
         pot=int(getattr(raw, "total_pot_amount", 0) or 0),
-        sidepots=(),
+        sidepots=(),  # TODO(phase2): derive side pots from state.pots after BET_COLLECTION
         my_stack=my_stack,
-        my_invested_this_hand=my_invested_round,  # Phase 2: refine when street history lands
+        my_invested_this_hand=my_invested_round,  # TODO(phase2): plumb cumulative across streets; currently equals this_round
         my_invested_this_round=my_invested_round,
         current_bet_to_match=max_bet,
         seats_public=seats,
         opponent_seats_in_hand=tuple(opp_in_hand),
-        action_order_this_street=tuple(range(state.num_players)),  # placeholder
-        already_acted_this_street=(),
-        hand_history=(),
+        action_order_this_street=tuple(range(state.num_players)),  # TODO(phase2): derive from state.actor_indices; preflop first-to-act is UTG, not seat 0
+        already_acted_this_street=(),  # TODO(phase2): thread street-history plumbing
+        hand_history=(),  # TODO(phase2): thread street-history plumbing
         legal_actions=compute_legal_tool_set(state, actor),
-        opponent_stats={},
+        opponent_stats={},  # TODO(phase2): thread HUD stats from DuckDB
         hand_id=state._ctx.hand_id,  # noqa: SLF001
         street=_infer_street(state),
         button_seat=state.button_seat,
