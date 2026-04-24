@@ -49,20 +49,23 @@ def test_audit_invariants_dispatches_on_phase() -> None:
         audit_invariants(s, _cfg(), HandPhase.POST_SETTLEMENT)
 
 
-def test_cards_invariant_raises_on_tampered_state(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cards_invariant_raises_on_duplicate_card() -> None:
+    """Force a deck-logic regression by injecting a duplicate card after dealing.
+
+    After `__init__`, 12 hole cards have been dealt so `_deck_cursor == 12`.
+    `_deck_order[0..11]` are in pokerkit's `raw.hole_cards`; `_deck_order[12..51]`
+    are the remaining undealt deck. If we overwrite one remaining slot with a
+    copy of an already-dealt card, the total count stays 52 but one card appears
+    in both deck_remaining AND a hole-cards slot — the exact regression
+    `audit_cards_invariant` must catch.
+    """
     s = _state()
-    # Tamper: inject a duplicate card. We monkeypatch the accessor used inside
-    # the audit helper. This uses internal wiring (allowed in _internal tests).
-    _ = s.hole_cards()
-    # Force two seats to have identical hole cards by mutating the underlying
-    # state's hole_cards structure if accessible; otherwise skip with a clear
-    # reason so downstream stress tests still catch real divergences.
-    raw = getattr(s, "_state", None)
-    if raw is None or not hasattr(raw, "hole_cards"):
-        pytest.skip("cannot introspect pokerkit hole_cards accessor")
-    # We do not actually need to mutate pokerkit internals for this smoke
-    # assertion — we just call the audit against a state we know is valid.
-    audit_cards_invariant(s)
+    # Sanity: dealing happened.
+    assert s._deck_cursor == 12  # noqa: SLF001
+    # Inject a duplicate: make the first undealt slot equal to the first dealt card.
+    s._deck_order[s._deck_cursor] = s._deck_order[0]  # noqa: SLF001
+    with pytest.raises(AuditFailure, match="duplicate cards detected"):
+        audit_cards_invariant(s)
 
 
 def test_audit_failure_message_is_informative() -> None:

@@ -12,7 +12,7 @@ orchestrator is expected to dump crash artifacts before re-raising.
 """
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum
 from itertools import combinations
 from typing import TYPE_CHECKING
 
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from llm_poker_arena.engine.config import SessionConfig
 
 
-class HandPhase(StrEnum):
+class HandPhase(str, Enum):  # noqa: UP042  # match Street enum style in types.py
     PRE_SETTLEMENT = "pre_settlement"
     POST_SETTLEMENT = "post_settlement"
 
