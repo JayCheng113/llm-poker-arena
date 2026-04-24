@@ -22,3 +22,13 @@ pytest
 ruff check .
 mypy
 ```
+
+## Testing notes
+
+- Always activate the project venv before running pytest:
+  `source .venv/bin/activate && pytest`.
+- `uv run pytest` has been observed to segfault on some macOS setups during
+  pytest's capture init (`import readline` crash). Until that is root-caused,
+  prefer the direct `.venv/bin/pytest` path over `uv run`.
+- `UV_CACHE_DIR=/tmp/uv-cache ruff check .` / `mypy` have worked cleanly on
+  the same machines that segfault under `uv run pytest`.

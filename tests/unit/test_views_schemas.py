@@ -64,18 +64,18 @@ def _seats() -> tuple[SeatPublicInfo, ...]:
 def _player_view() -> PlayerView:
     return PlayerView(
         my_seat=3,
-        my_hole_cards=["As", "Kd"],
-        community=[],
+        my_hole_cards=("As", "Kd"),
+        community=(),
         pot=150,
-        sidepots=[],
+        sidepots=(),
         my_stack=10_000,
         my_invested_this_hand=0,
         my_invested_this_round=0,
         current_bet_to_match=100,
-        opponent_seats_in_hand=[0, 1, 2, 4, 5],
-        action_order_this_street=[2, 3, 4, 5, 0, 1],
-        already_acted_this_street=[],
-        hand_history=[],
+        opponent_seats_in_hand=(0, 1, 2, 4, 5),
+        action_order_this_street=(2, 3, 4, 5, 0, 1),
+        already_acted_this_street=(),
+        hand_history=(),
         legal_actions=_legal_fold_call(),
         opponent_stats={},
         hand_id=1,
@@ -146,6 +146,42 @@ def test_player_view_forbids_extra() -> None:
         PlayerView.model_validate(d)
 
 
+def test_player_view_sequence_fields_are_tuples() -> None:
+    """Deep-immutability guard: every sequence field must be a tuple, not a list.
+
+    Pydantic 2 `frozen=True` blocks attribute reassignment but NOT nested
+    mutation of list-valued fields. Using tuple types closes that hole
+    structurally for the anti-cheat boundary.
+    """
+    v = _player_view()
+    for field_name in (
+        "my_hole_cards",
+        "community",
+        "sidepots",
+        "opponent_seats_in_hand",
+        "action_order_this_street",
+        "already_acted_this_street",
+        "hand_history",
+    ):
+        value = getattr(v, field_name)
+        assert isinstance(value, tuple), (
+            f"PlayerView.{field_name} must be tuple (frozen=True is shallow); "
+            f"got {type(value).__name__}"
+        )
+
+
+def test_player_view_nested_mutation_attempts_fail() -> None:
+    """Actively try to mutate boundary sequences — every attempt must raise."""
+    v = _player_view()
+    # tuples have no append/extend/__setitem__/__delitem__/clear
+    with pytest.raises(AttributeError):
+        v.community.append("7c")  # type: ignore[attr-defined]
+    with pytest.raises(AttributeError):
+        v.opponent_seats_in_hand.append(999)  # type: ignore[attr-defined]
+    with pytest.raises(TypeError):
+        v.opponent_seats_in_hand[0] = 999  # type: ignore[index]
+
+
 # ---------- PublicView ----------
 
 def test_public_view_has_no_hole_card_field() -> None:
@@ -159,14 +195,26 @@ def test_public_view_round_trip() -> None:
         hand_id=1,
         street=Street.FLOP,
         pot=500,
-        sidepots=[],
-        community=["7c", "2d", "5s"],
+        sidepots=(),
+        community=("7c", "2d", "5s"),
         seats_public=_seats(),
         button_seat=0,
     )
     blob = pv.model_dump_json()
     restored = PublicView.model_validate(json.loads(blob))
     assert restored == pv
+
+
+def test_public_view_sequences_are_tuples() -> None:
+    pv = PublicView(
+        hand_id=1, street=Street.FLOP, pot=500,
+        sidepots=(), community=("7c", "2d", "5s"),
+        seats_public=_seats(), button_seat=0,
+    )
+    assert isinstance(pv.sidepots, tuple)
+    assert isinstance(pv.community, tuple)
+    with pytest.raises(AttributeError):
+        pv.community.append("Xx")  # type: ignore[attr-defined]
 
 
 # ---------- OpponentStatsOrInsufficient ----------

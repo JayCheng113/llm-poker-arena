@@ -3,9 +3,21 @@
 Every model in this file:
   - is frozen (immutable after construction);
   - forbids extra fields (explicit whitelist);
+  - uses ``tuple[X, ...]`` (not ``list[X]``) for every sequence field so the
+    immutability is deep, not shallow. Pydantic 2's ``frozen=True`` blocks
+    attribute reassignment only; a ``list`` field would still allow
+    ``view.community.append("Xx")`` and silently corrupt the boundary. Tuples
+    close that hole structurally.
   - carries only data derivable from a PokerKit canonical state projection.
 
 Callers see these DTOs (or serialized dicts); they never see CanonicalState.
+
+Known immutability gap (tracked for Phase 2+): ``PlayerView.opponent_stats``
+is ``dict[SeatId, OpponentStatsOrInsufficient]``. The dict itself is mutable;
+this is acceptable in Phase 1 because stats are produced server-side from the
+canonical action log (§P4) and the attack surface would require an agent
+substituting into the dict after the view is built, which our ReAct loop does
+not expose. Revisit when the HUD tool lands.
 """
 from __future__ import annotations
 
@@ -143,19 +155,19 @@ class PlayerView(BaseModel):
     model_config = _frozen()
 
     my_seat: SeatId
-    my_hole_cards: list[CardStr] = Field(min_length=2, max_length=2)
-    community: list[CardStr] = Field(default_factory=list, max_length=5)
+    my_hole_cards: tuple[CardStr, CardStr]
+    community: tuple[CardStr, ...] = Field(default_factory=tuple, max_length=5)
     pot: Chips
-    sidepots: list[SidePotInfo]
+    sidepots: tuple[SidePotInfo, ...]
     my_stack: Chips
     my_invested_this_hand: Chips
     my_invested_this_round: Chips
     current_bet_to_match: Chips
     seats_public: tuple[SeatPublicInfo, ...]
-    opponent_seats_in_hand: list[SeatId]
-    action_order_this_street: list[SeatId]
-    already_acted_this_street: list[ActionRecord]
-    hand_history: list[StreetHistory]
+    opponent_seats_in_hand: tuple[SeatId, ...]
+    action_order_this_street: tuple[SeatId, ...]
+    already_acted_this_street: tuple[ActionRecord, ...]
+    hand_history: tuple[StreetHistory, ...]
     legal_actions: LegalActionSet
     opponent_stats: dict[SeatId, OpponentStatsOrInsufficient]
     hand_id: int
@@ -178,8 +190,8 @@ class PublicView(BaseModel):
     hand_id: int
     street: Street
     pot: Chips
-    sidepots: list[SidePotInfo]
-    community: list[CardStr]
+    sidepots: tuple[SidePotInfo, ...]
+    community: tuple[CardStr, ...]
     seats_public: tuple[SeatPublicInfo, ...]
     button_seat: SeatId
 
