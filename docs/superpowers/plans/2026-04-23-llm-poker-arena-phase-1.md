@@ -3119,6 +3119,13 @@ cd /Users/zcheng256/llm-poker-arena && git add src/llm_poker_arena/agents/random
 
 ## Task 16: `derive_deck_seed` + Hand Driver (`engine/_internal/rebuy.py`)
 
+> **Plan correction (post-Phase-1 audit)**: original plan code at Step 3 used
+> the pre-MVP-4 `apply_action(..., config=config)` signature (T12 dropped the
+> kwarg). As-built code at `src/llm_poker_arena/engine/_internal/rebuy.py`
+> calls `apply_action(state, actor, action)` without the `config` kwarg; the
+> audit runs unconditionally via `state._config` inside `apply_action`. This
+> section's code has been updated to match.
+
 **Files:**
 - Create: `src/llm_poker_arena/engine/_internal/rebuy.py`
 - Create: `tests/unit/test_rebuy.py`
@@ -3273,11 +3280,11 @@ def run_single_hand(
         except Exception:
             action = default_safe_action(view)
 
-        result = apply_action(state, actor, action, config=config)
+        result = apply_action(state, actor, action)
         if not result.is_valid:
             # Agent produced an illegal action; fall back and keep going.
             safe = default_safe_action(view)
-            apply_action(state, actor, safe, config=config)
+            apply_action(state, actor, safe)
             trace.append((actor, safe.tool_name, safe.args.get("amount") if isinstance(safe.args, dict) else None))
         else:
             trace.append((actor, action.tool_name, action.args.get("amount") if isinstance(action.args, dict) else None))
@@ -3763,6 +3770,10 @@ cd /Users/zcheng256/llm-poker-arena && source .venv/bin/activate && pytest tests
 
 ## Task 22: Property — Min-Raise Reopen
 
+> **Plan correction (post-Phase-1 audit)**: the `apply_action(..., config=cfg)`
+> call was updated to the as-built `apply_action(state, actor, action)`
+> signature (T12 dropped the `config` kwarg).
+
 **Files:**
 - Create: `tests/property/test_min_raise_reopen.py`
 
@@ -3816,7 +3827,7 @@ def test_short_all_in_does_not_reopen_for_already_acted(rng_seed: int, hand_id: 
     # Raise to a "not-full-raise" amount: exactly min allowed (not a short all-in per se,
     # but property we want: after a legal min-raise, can_complete_bet_or_raise_to remains true).
     amt = int(raise_spec.args["amount"]["min"])
-    apply_action(state, int(actor), Action(tool_name="raise_to", args={"amount": amt}), config=cfg)
+    apply_action(state, int(actor), Action(tool_name="raise_to", args={"amount": amt}))
     # After a legal full raise, opponents still to act keep full action rights — that's expected.
     # True short all-in scenarios require stack <= pot setup; we encode the contract but leave
     # deeper PokerKit-specific scenarios to differential tests in Task 23.
