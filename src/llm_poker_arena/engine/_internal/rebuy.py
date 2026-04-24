@@ -13,6 +13,7 @@ Audit coverage (spec P7 / BR2-03):
     propagates (never wrap in try/except): chip-conservation violations are
     hard bugs, not soft agent mistakes.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -72,7 +73,14 @@ def run_single_hand(
     `random_agent.py:17-19, 24-26`), so we deliberately let any surprising
     exception propagate — silent fallbacks would mask real bugs.
     """
+    if len(agents) != config.num_players:
+        raise ValueError(
+            f"agents length ({len(agents)}) != config.num_players ({config.num_players})"
+        )
     state = CanonicalState(config, ctx)
+    # Redundant with CanonicalState.__init__'s internal audit (poker_state.py:76);
+    # retained as an explicit precondition at the driver's entry point so hand-
+    # driver breakage can't mask an __init__ regression.
     audit_cards_invariant(state)
     audit_invariants(state, config, HandPhase.PRE_SETTLEMENT)
 
@@ -93,7 +101,13 @@ def run_single_hand(
             # the legal-set helper didn't catch); fall back to the always-safe
             # action and keep going.
             safe = default_safe_action(view)
-            apply_action(state, actor, safe)
+            safe_result = apply_action(state, actor, safe)
+            if not safe_result.is_valid:
+                raise RuntimeError(
+                    f"default_safe_action rejected by pokerkit at seat {actor} "
+                    f"(tool={safe.tool_name}): view disagrees with canonical state "
+                    f"(reason={safe_result.reason})"
+                )
             amt = safe.args.get("amount") if isinstance(safe.args, dict) else None
             trace.append((actor, safe.tool_name, amt))
         else:
@@ -132,9 +146,7 @@ def _current_actor(state: CanonicalState) -> int:
     """
     idx = state._state.actor_index  # noqa: SLF001
     if idx is None:
-        raise RuntimeError(
-            "no actor required; caller should have checked _actor_required first"
-        )
+        raise RuntimeError("no actor required; caller should have checked _actor_required first")
     return int(idx)
 
 
@@ -192,9 +204,7 @@ def _maybe_advance_between_streets(state: CanonicalState) -> None:
                 state.deal_community(Street.RIVER)
             else:
                 # Defensive: board in unexpected shape; surface loudly.
-                raise RuntimeError(
-                    f"unexpected board_len={board_len} with can_burn=True"
-                )
+                raise RuntimeError(f"unexpected board_len={board_len} with can_burn=True")
             continue
         # No pending transition and no actor required: hand is resolved.
         return
@@ -209,6 +219,4 @@ def _derive_turn_seed(deck_seed: int, actor: int, turn_counter: int) -> int:
     this is what the reproducibility test leans on.
     """
     payload = f"{deck_seed}:{actor}:{turn_counter}".encode()
-    return int.from_bytes(hashlib.blake2b(payload, digest_size=8).digest(), "big") & (
-        (1 << 63) - 1
-    )
+    return int.from_bytes(hashlib.blake2b(payload, digest_size=8).digest(), "big") & ((1 << 63) - 1)
