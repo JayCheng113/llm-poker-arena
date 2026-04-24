@@ -47,3 +47,36 @@ def test_apply_action_runs_pre_settlement_audit() -> None:
     # A valid fold should preserve chip conservation.
     apply_action(s, actor, Action(tool_name="fold", args={}))
     # If audit had failed, apply_action would have raised AuditFailure.
+
+
+def test_call_valid_when_facing_bet() -> None:
+    """Covers raw.check_or_call() dispatch on the 'call' arm (UTG facing BB)."""
+    s, actor = _setup()
+    # UTG preflop faces the BB; 'call' is legal.
+    result = apply_action(s, actor, Action(tool_name="call", args={}))
+    assert result.is_valid is True
+    assert result.reason is None
+
+
+def test_raise_to_valid_in_bounds() -> None:
+    """Covers raw.complete_bet_or_raise_to() dispatch success (not just rejection)."""
+    s, actor = _setup()
+    # Preflop min raise is 200 (2 * BB). Pick 300 — well within bounds.
+    result = apply_action(s, actor, Action(tool_name="raise_to", args={"amount": 300}))
+    assert result.is_valid is True
+    assert result.reason is None
+
+
+def test_all_in_translates_to_max_completion() -> None:
+    """Covers the all_in -> complete_bet_or_raise_to(max) translation path.
+
+    After all-in, actor's stack should be 0 (they shoved everything into the pot)
+    AND invariants still hold (audit runs at end of apply_action).
+    """
+    s, actor = _setup()
+    stack_before = s._state.stacks[actor]  # noqa: SLF001
+    assert stack_before > 0
+    result = apply_action(s, actor, Action(tool_name="all_in", args={}))
+    assert result.is_valid is True
+    # After all-in, actor's remaining stack is 0 (they shoved to max_cbor).
+    assert s._state.stacks[actor] == 0  # noqa: SLF001

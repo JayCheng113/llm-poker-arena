@@ -24,6 +24,19 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class TransitionResult:
+    """Outcome of `apply_action`.
+
+    - `is_valid=True` → state successfully mutated AND pre-settlement
+      invariants hold. `reason` is None.
+    - `is_valid=False` → state unchanged. `reason` explains why (agent may
+      retry with a corrected action).
+
+    Note: `AuditFailure` raised by `audit_invariants` PROPAGATES rather than
+    surfacing here — those are programming / library errors, not agent
+    mistakes. Session orchestrator is expected to dump crash artifacts on
+    AuditFailure.
+    """
+
     is_valid: bool
     reason: str | None = None
 
@@ -48,6 +61,8 @@ def apply_action(
     legal_names = [t.name for t in legal.tools]
 
     if action.tool_name not in legal_names:
+        # "not in legal set" is a stable error prefix — tests and Session retry
+        # dispatch key on this substring to categorize rejections.
         return TransitionResult(
             False, f"Action '{action.tool_name}' not in legal set {legal_names}"
         )
@@ -92,6 +107,10 @@ def apply_action(
         else:
             return TransitionResult(False, f"Unhandled action tool '{action.tool_name}'")
     except Exception as e:  # noqa: BLE001 — PokerKit-specific exceptions vary
+        # Scope: only PokerKit dispatch rejections (ValueError and subclasses).
+        # Do NOT move `audit_invariants(...)` below into this try block —
+        # AuditFailure must propagate as a hard error, not be converted to a
+        # soft TransitionResult.
         return TransitionResult(False, f"PokerKit rejected {action.tool_name}: {e}")
 
     audit_invariants(state, state._config, HandPhase.PRE_SETTLEMENT)  # noqa: SLF001
