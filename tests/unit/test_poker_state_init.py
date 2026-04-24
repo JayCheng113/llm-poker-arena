@@ -66,3 +66,37 @@ def test_button_seat_out_of_range_rejected() -> None:
             hand_id=1, deck_seed=42_001, button_seat=6,
             initial_stacks=(10_000,) * 6,
         )
+
+
+# --------------------------- hole card deal ---------------------------
+
+def test_hole_cards_are_dealt_after_construction() -> None:
+    s = CanonicalState(_cfg(), _ctx(0))
+    hole = s.hole_cards()
+    assert set(hole.keys()) == set(range(6))
+    assert all(len(pair) == 2 for pair in hole.values())
+
+
+def test_hole_cards_reproducible_for_same_seed() -> None:
+    a = CanonicalState(_cfg(), _ctx(0)).hole_cards()
+    b = CanonicalState(_cfg(), _ctx(0)).hole_cards()
+    assert a == b
+
+
+def test_hole_cards_differ_across_button_seats() -> None:
+    # Same deck seed, different button -> different SB => different deal order.
+    a = CanonicalState(_cfg(), _ctx(0)).hole_cards()
+    b = CanonicalState(_cfg(), _ctx(3)).hole_cards()
+    # Same deck means the 12 cards used are the same, but their seat assignment shifts.
+    cards_a = {c for pair in a.values() for c in pair}
+    cards_b = {c for pair in b.values() for c in pair}
+    assert cards_a == cards_b
+    # Yet the per-seat mapping should differ (except in the unlikely case of a
+    # palindrome shift — with a fixed seed 42_001 this holds):
+    assert a != b
+
+
+def test_hole_cards_are_unique_across_seats() -> None:
+    hole = CanonicalState(_cfg(), _ctx(0)).hole_cards()
+    flat = [c for pair in hole.values() for c in pair]
+    assert len(flat) == len(set(flat)) == 12

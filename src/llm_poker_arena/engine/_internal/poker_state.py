@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from pokerkit import Automation, NoLimitTexasHoldem
 
-from llm_poker_arena.engine._internal.deck import build_deterministic_deck
+from llm_poker_arena.engine._internal.deck import build_deterministic_deck, card_to_str
 from llm_poker_arena.engine.config import HandContext, SessionConfig
 
 if TYPE_CHECKING:
@@ -67,6 +67,9 @@ class CanonicalState:
             player_count=config.num_players,
         )
 
+        # PP-01/§3.1: manual deterministic deal because HOLE_DEALING automation is OFF.
+        self._deal_hole_cards_deterministic()
+
     # ---------- read-only accessors ----------
     @property
     def num_players(self) -> int:
@@ -83,3 +86,28 @@ class CanonicalState:
     @property
     def bb_seat(self) -> int:
         return self._bb_seat
+
+    # ---------- card movement (deterministic) ----------
+    def _next_card(self) -> Card:
+        card = self._deck_order[self._deck_cursor]
+        self._deck_cursor += 1
+        return card
+
+    def _deal_hole_cards_deterministic(self) -> None:
+        n = self._config.num_players
+        for _round in range(2):
+            for offset in range(n):
+                seat = (self._sb_seat + offset) % n
+                # PokerKit's hole_dealee_index always starts at 0; pass player_index
+                # explicitly so cards rotate from SB clockwise per spec §3.1.
+                self._state.deal_hole((self._next_card(),), player_index=seat)
+
+    def hole_cards(self) -> dict[int, tuple[str, str]]:
+        """Return current hole cards as {seat: (card0_str, card1_str)} in deal order."""
+        out: dict[int, tuple[str, str]] = {}
+        for seat, cards in enumerate(self._state.hole_cards):
+            if cards is None or len(cards) == 0:
+                continue
+            assert len(cards) == 2, f"seat {seat} has {len(cards)} hole cards"
+            out[seat] = (card_to_str(cards[0]), card_to_str(cards[1]))
+        return out
