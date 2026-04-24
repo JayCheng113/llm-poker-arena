@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Build / dist
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Env / secrets
+.env
+.env.local
+
+# Run artifacts (Phase 2+)
+runs/
+!runs/.gitkeep
+
+# Node (Phase 6+)
+node_modules/
+dist/
+.vite/
