@@ -88,3 +88,36 @@ def test_write_after_close_raises(tmp_path: Path) -> None:
     w.close()
     with pytest.raises(RuntimeError, match="closed"):
         w.write({"i": 0})
+
+
+def test_close_propagates_flush_errors_and_still_closes_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit close() must propagate IO errors instead of silently swallowing.
+
+    Phase-2a-audit finding: prior implementation called `_drain_silent()` which
+    swallowed all exceptions — a failing fsync would leave the caller believing
+    data was durably written. `close()` now calls `_flush()` directly and uses
+    try/finally to still close the file descriptor on error.
+    """
+    p = tmp_path / "out.jsonl"
+    w = BatchedJsonlWriter(p)
+    w.write({"i": 0})  # buffered, not yet flushed
+
+    class _FakeIOError(OSError):
+        pass
+
+    def _boom(_data: str) -> int:
+        raise _FakeIOError("simulated disk-full")
+
+    monkeypatch.setattr(w._f, "write", _boom)  # noqa: SLF001 — test reach-through
+
+    with pytest.raises(_FakeIOError, match="simulated disk-full"):
+        w.close()
+
+    # File descriptor was still closed + writer marked closed (fd cleanup ran
+    # via the finally branch).
+    assert w._closed is True  # noqa: SLF001
+    # Subsequent writes raise RuntimeError, not the original IOError.
+    with pytest.raises(RuntimeError, match="closed"):
+        w.write({"i": 1})

@@ -67,11 +67,22 @@ class BatchedJsonlWriter:
         self._flush()
 
     def close(self) -> None:
+        """Drain buffer and close the underlying file.
+
+        IO errors from `_flush()` PROPAGATE — an explicit `close()` is the
+        caller's signal that they want to know whether data made it to disk.
+        The file is still closed in a `finally` block so the file descriptor
+        is cleaned up even on error.
+        `_drain_silent()` is reserved for atexit + signal handlers where
+        raising would be actively harmful.
+        """
         if self._closed:
             return
-        self._drain_silent()
-        self._f.close()
-        self._closed = True
+        try:
+            self._flush()
+        finally:
+            self._f.close()
+            self._closed = True
 
     # ----- internals -----
 
