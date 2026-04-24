@@ -1,0 +1,195 @@
+"""Pure builders from CanonicalState + turn metadata to typed Pydantic records.
+
+Each builder returns a concrete Pydantic model from `storage.schemas`. The
+Session calls `model.model_dump(mode="json")` at write time. This way schema
+validation fires at build time (close to where the data is shaped) and the
+writer is schema-agnostic.
+
+Spec §7.3 shape: `public_replay.jsonl` is ONE HAND PER LINE, with all events
+for that hand in `street_events`. Per-event builders (`build_public_*_event`)
+produce atomic events; `build_public_hand_record` wraps a tuple of events
+into the top-level `PublicHandRecord` that Session flushes at hand_end.
+
+Phase 2a note on blind-post records: spec §7.2 hand-example shows blind
+posts in `actions`, but PokerKit's BLIND_OR_STRADDLE_POSTING automation
+handles them without agent involvement, so the Session does not currently
+emit ActionRecordPrivate for them. Phase 2b can synthesize blind-post
+records from `state.operations` if VPIP/PFR SQL needs them; meanwhile
+VPIP-relevant filtering uses `is_forced_blind` on agent snapshots, which is
+always `False` (mock agents never post blinds).
+"""
+from __future__ import annotations
+
+from typing import Any, cast
+
+from llm_poker_arena.engine.legal_actions import Action
+from llm_poker_arena.engine.types import Street
+from llm_poker_arena.engine.views import PlayerView
+from llm_poker_arena.storage.schemas import (
+    ActionRecordPrivate,
+    AgentDescriptor,
+    AgentViewSnapshot,
+    CanonicalPrivateHandRecord,
+    HandResultPrivate,
+    PublicAction,
+    PublicEvent,
+    PublicFlop,
+    PublicHandEnded,
+    PublicHandRecord,
+    PublicHandStarted,
+    PublicHoleDealt,
+    PublicRiver,
+    PublicShowdown,
+    PublicTurn,
+    SidePotSummary,
+    WinnerInfo,
+)
+
+
+def build_public_hand_started_event(
+    *, hand_id: int, state: Any, sb: int, bb: int,  # noqa: ANN401 — CanonicalState
+) -> PublicHandStarted:
+    return PublicHandStarted(
+        hand_id=hand_id,
+        button_seat=state.button_seat,
+        blinds={"sb": sb, "bb": bb},
+    )
+
+
+def build_public_hole_dealt_event(*, hand_id: int) -> PublicHoleDealt:
+    return PublicHoleDealt(hand_id=hand_id)
+
+
+def build_public_action_event(
+    *, hand_id: int, seat: int, street: Street, action: Action,
+) -> PublicAction:
+    body: dict[str, Any] = {"type": action.tool_name}
+    if action.tool_name in ("bet", "raise_to"):
+        amt = action.args.get("amount") if isinstance(action.args, dict) else None
+        if amt is not None:
+            body["amount"] = int(amt)
+    return PublicAction(
+        hand_id=hand_id,
+        seat=seat,
+        street=cast(Any, street.value),  # Literal["preflop", ...] — enum value is the literal
+        action=body,
+    )
+
+
+def build_public_street_reveal_event(
+    *, hand_id: int, state: Any, street: Street,  # noqa: ANN401
+) -> PublicFlop | PublicTurn | PublicRiver:
+    community = state.community()  # list[str]
+    if street == Street.FLOP:
+        cards = tuple(community[:3])
+        return PublicFlop(hand_id=hand_id, community=cast(Any, cards))
+    if street == Street.TURN:
+        return PublicTurn(hand_id=hand_id, card=community[3])
+    if street == Street.RIVER:
+        return PublicRiver(hand_id=hand_id, card=community[4])
+    raise ValueError(f"street {street!r} is not a board-reveal street")
+
+
+def build_public_showdown_event(
+    *, hand_id: int, state: Any, showdown_seats: set[int],  # noqa: ANN401
+) -> PublicShowdown:
+    holes = state.hole_cards()  # dict[int, tuple[str, str]]
+    revealed = {
+        str(seat): holes[seat]
+        for seat in sorted(showdown_seats) if seat in holes
+    }
+    return PublicShowdown(hand_id=hand_id, revealed=revealed)
+
+
+def build_public_hand_ended_event(
+    *, hand_id: int, winnings: dict[int, int],
+) -> PublicHandEnded:
+    return PublicHandEnded(
+        hand_id=hand_id,
+        winnings={str(seat): int(amt) for seat, amt in winnings.items()},
+    )
+
+
+def build_public_hand_record(
+    *, hand_id: int, events: tuple[PublicEvent, ...],
+) -> PublicHandRecord:
+    """Wrap a tuple of atomic public events into the spec-§7.3 hand-per-line shape."""
+    return PublicHandRecord(hand_id=hand_id, street_events=events)
+
+
+def build_canonical_private_hand(
+    *, hand_id: int, state: Any,  # noqa: ANN401
+    started_at: str, ended_at: str,
+    actions: tuple[ActionRecordPrivate, ...],
+    winners: tuple[WinnerInfo, ...] = (),
+    side_pots: tuple[SidePotSummary, ...] = (),
+    final_invested: dict[int, int] | None = None,
+    net_pnl: dict[int, int] | None = None,
+    showdown: bool = False,
+) -> CanonicalPrivateHandRecord:
+    """Phase 2a: `final_invested` defaults to `{}` — proper tracking deferred
+    to Phase 2b (needs per-action contribution accumulation from
+    `state.operations`). MVP 6 exit criterion does not depend on this field.
+    """
+    holes = state.hole_cards()  # dict[int, tuple[str, str]]
+    stacks_initial = dict(enumerate(state._ctx.initial_stacks))  # noqa: SLF001
+    return CanonicalPrivateHandRecord(
+        hand_id=hand_id,
+        started_at=started_at, ended_at=ended_at,
+        button_seat=state.button_seat,
+        sb_seat=state.sb_seat, bb_seat=state.bb_seat,
+        deck_seed=state._ctx.deck_seed,  # noqa: SLF001
+        starting_stacks={str(s): int(v) for s, v in stacks_initial.items()},
+        hole_cards={str(s): cards for s, cards in holes.items()},
+        community=tuple(state.community()),
+        actions=actions,
+        result=HandResultPrivate(
+            showdown=showdown,
+            winners=winners,
+            side_pots=side_pots,
+            final_invested={str(k): int(v) for k, v in (final_invested or {}).items()},
+            net_pnl={str(k): int(v) for k, v in (net_pnl or {}).items()},
+        ),
+    )
+
+
+def build_agent_view_snapshot(
+    *, hand_id: int, session_id: str, seat: int, street: Street,
+    timestamp: str, view: PlayerView, action: Action, turn_index: int,
+    agent_provider: str, agent_model: str, agent_version: str,
+    default_action_fallback: bool,
+) -> AgentViewSnapshot:
+    final_action: dict[str, Any] = {"type": action.tool_name}
+    if action.tool_name in ("bet", "raise_to"):
+        amt = action.args.get("amount") if isinstance(action.args, dict) else None
+        if amt is not None:
+            final_action["amount"] = int(amt)
+    return AgentViewSnapshot(
+        hand_id=hand_id,
+        turn_id=f"{hand_id}-{street.value}-{turn_index}",
+        session_id=session_id,
+        seat=seat,
+        street=cast(Any, street.value),
+        timestamp=timestamp,
+        view_at_turn_start=view.model_dump(mode="json"),
+        iterations=(),
+        final_action=final_action,
+        is_forced_blind=False,
+        total_utility_calls=0,
+        api_retry_count=0,
+        illegal_action_retry_count=0,
+        no_tool_retry_count=0,
+        tool_usage_error_count=0,
+        default_action_fallback=default_action_fallback,
+        api_error=None,
+        turn_timeout_exceeded=False,
+        total_tokens={},
+        wall_time_ms=0,
+        agent=AgentDescriptor(
+            provider=agent_provider,
+            model=agent_model,
+            version=agent_version,
+            temperature=None,
+            seed=None,
+        ),
+    )
