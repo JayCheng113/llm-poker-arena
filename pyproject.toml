@@ -51,3 +51,6 @@ minversion = "7.4"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-ra --strict-markers"
+markers = [
+    "slow: marks tests as slow (deselect with -m 'not slow')",
+]
