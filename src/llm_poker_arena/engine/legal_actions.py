@@ -33,6 +33,14 @@ class Action:
     args: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class ValidationResult:
+    """Result of a dry-run action legality check (no engine state mutation)."""
+
+    is_valid: bool
+    reason: str | None = None
+
+
 def default_safe_action(view: PlayerView) -> Action:
     """BR2-03 / PP-04 always-legal fallback.
 
@@ -122,3 +130,65 @@ def _to_call_amount(raw: Any, actor: int) -> int:
     my_bet = int(bets[actor]) if 0 <= actor < len(bets) else 0
     max_bet = max(int(b) for b in bets) if bets else 0
     return max(0, max_bet - my_bet)
+
+
+def validate_action(view: PlayerView, action: Action) -> ValidationResult:
+    """Check whether `action` is legal for `view` without touching engine state.
+
+    Mirrors the legality criteria PokerKit will apply in `apply_action`,
+    derived from `view.legal_actions`. Used by LLMAgent to short-circuit
+    illegal-action retries without wasting an engine round-trip.
+
+    Phase 3a contract:
+      - tool_name must appear in view.legal_actions.tools
+      - bet/raise_to actions must include `args["amount"]` and that integer
+        must be in the inclusive range advertised by the tool spec.
+      - fold/check/call/all_in actions must have `args == {}`.
+    """
+    legal_specs = {t.name: t for t in view.legal_actions.tools}
+    spec = legal_specs.get(action.tool_name)
+    if spec is None:
+        return ValidationResult(
+            is_valid=False,
+            reason=(
+                f"action {action.tool_name!r} not in legal set for this turn "
+                f"(legal: {sorted(legal_specs.keys())})"
+            ),
+        )
+
+    if action.tool_name in ("bet", "raise_to"):
+        amount_obj = action.args.get("amount") if isinstance(action.args, dict) else None
+        if amount_obj is None:
+            return ValidationResult(
+                is_valid=False,
+                reason=f"{action.tool_name} requires args['amount'] (got {action.args!r})",
+            )
+        try:
+            amount = int(amount_obj)
+        except (TypeError, ValueError):
+            return ValidationResult(
+                is_valid=False,
+                reason=f"{action.tool_name} amount must be int, got {amount_obj!r}",
+            )
+        bounds = spec.args.get("amount") if isinstance(spec.args, dict) else None
+        if isinstance(bounds, dict) and "min" in bounds and "max" in bounds:
+            mn, mx = int(bounds["min"]), int(bounds["max"])
+            if amount < mn:
+                return ValidationResult(
+                    is_valid=False,
+                    reason=f"{action.tool_name} amount {amount} < min {mn}",
+                )
+            if amount > mx:
+                return ValidationResult(
+                    is_valid=False,
+                    reason=f"{action.tool_name} amount {amount} > max {mx}",
+                )
+        return ValidationResult(is_valid=True)
+
+    # fold / check / call / all_in: must have empty args
+    if action.args:
+        return ValidationResult(
+            is_valid=False,
+            reason=f"{action.tool_name} takes no args (got {action.args!r})",
+        )
+    return ValidationResult(is_valid=True)
