@@ -499,3 +499,153 @@ def test_multi_tool_retry_replies_to_all_tool_use_ids_not_just_first() -> None:
         f"every tool_use_id from the prior assistant turn must have a "
         f"tool_result; got tool_result_ids={tool_result_ids}"
     )
+
+
+def test_iteration_record_carries_reasoning_artifacts_from_provider() -> None:
+    """When the provider returns reasoning artifacts, LLMAgent attaches them
+    to the corresponding IterationRecord."""
+    from llm_poker_arena.agents.llm.providers.anthropic_provider import (
+        AnthropicProvider,
+    )
+    from llm_poker_arena.agents.llm.types import (
+        AssistantTurn,
+        ReasoningArtifactKind,
+        TokenCounts,
+    )
+
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
+    # Build a response that has a thinking block + tool_use, as if from
+    # AnthropicProvider with extended thinking on.
+    resp = LLMResponse(
+        provider="anthropic", model="claude-opus-4-7",
+        stop_reason="tool_use",
+        tool_calls=(ToolCall(name="fold", args={}, tool_use_id="t1"),),
+        text_content="My answer.",
+        tokens=TokenCounts(input_tokens=10, output_tokens=5,
+                           cache_read_input_tokens=0,
+                           cache_creation_input_tokens=0),
+        raw_assistant_turn=AssistantTurn(
+            provider="anthropic",
+            blocks=(
+                {"type": "thinking", "thinking": "Pot odds say fold.",
+                 "signature": "sig=="},
+                {"type": "text", "text": "My answer."},
+                {"type": "tool_use", "id": "t1", "name": "fold", "input": {}},
+            ),
+        ),
+    )
+    provider = AnthropicProvider(model="claude-opus-4-7", api_key="sk-test")
+
+    async def _fake_complete(**_: Any) -> LLMResponse:
+        return resp
+    provider.complete = _fake_complete  # type: ignore[method-assign]
+
+    agent = LLMAgent(provider=provider, model="claude-opus-4-7",
+                     temperature=0.7)
+    result = asyncio.run(agent.decide(_view(legal)))
+    assert len(result.iterations) == 1
+    arts = result.iterations[0].reasoning_artifacts
+    assert len(arts) == 1
+    assert arts[0].kind == ReasoningArtifactKind.THINKING_BLOCK
+    assert arts[0].content == "Pot odds say fold."
+
+
+def test_rationale_required_satisfied_by_non_empty_reasoning_artifact() -> None:
+    """When rationale_required=True and text_content is empty BUT the
+    response carries a non-empty reasoning artifact (e.g. DeepSeek-R1's
+    reasoning_content), LLMAgent treats the rationale as satisfied."""
+    from llm_poker_arena.agents.llm.providers.anthropic_provider import (
+        AnthropicProvider,
+    )
+    from llm_poker_arena.agents.llm.types import AssistantTurn, TokenCounts
+
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
+    resp = LLMResponse(
+        provider="anthropic", model="claude-opus-4-7",
+        stop_reason="tool_use",
+        tool_calls=(ToolCall(name="fold", args={}, tool_use_id="t1"),),
+        text_content="",  # empty surface text
+        tokens=TokenCounts(input_tokens=10, output_tokens=5,
+                           cache_read_input_tokens=0,
+                           cache_creation_input_tokens=0),
+        raw_assistant_turn=AssistantTurn(
+            provider="anthropic",
+            blocks=(
+                {"type": "thinking",
+                 "thinking": "Hidden but non-empty rationale.",
+                 "signature": "sig=="},
+                {"type": "tool_use", "id": "t1", "name": "fold", "input": {}},
+            ),
+        ),
+    )
+    provider = AnthropicProvider(model="claude-opus-4-7", api_key="sk-test")
+
+    async def _fake_complete(**_: Any) -> LLMResponse:
+        return resp
+    provider.complete = _fake_complete  # type: ignore[method-assign]
+
+    agent = LLMAgent(provider=provider, model="claude-opus-4-7",
+                     temperature=0.7)
+    result = asyncio.run(agent.decide(_view(legal)))
+    assert result.no_tool_retry_count == 0  # no rationale-empty retry
+    assert result.final_action == Action(tool_name="fold", args={})
+
+
+def test_rationale_required_NOT_satisfied_by_encrypted_or_redacted() -> None:
+    """BLOCKER fix: opaque ENCRYPTED / REDACTED artifacts must NOT count as
+    satisfying rationale_required, otherwise a model could bypass the
+    requirement by emitting only encrypted/redacted blocks. Plain spec
+    §4.6 says only RAW / SUMMARY / THINKING_BLOCK carry plaintext rationale.
+    """
+    from llm_poker_arena.agents.llm.providers.anthropic_provider import (
+        AnthropicProvider,
+    )
+    from llm_poker_arena.agents.llm.types import AssistantTurn, TokenCounts
+
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
+    # Response with empty text + tool_use + ONLY encrypted/redacted blocks.
+    bad_resp = LLMResponse(
+        provider="anthropic", model="claude-opus-4-7",
+        stop_reason="tool_use",
+        tool_calls=(ToolCall(name="fold", args={}, tool_use_id="t1"),),
+        text_content="",  # empty surface text
+        tokens=TokenCounts(input_tokens=10, output_tokens=5,
+                           cache_read_input_tokens=0,
+                           cache_creation_input_tokens=0),
+        raw_assistant_turn=AssistantTurn(
+            provider="anthropic",
+            blocks=(
+                {"type": "encrypted_thinking", "data": "opaque_payload=="},
+                {"type": "redacted_thinking", "data": "more_opaque=="},
+                {"type": "tool_use", "id": "t1", "name": "fold", "input": {}},
+            ),
+        ),
+    )
+    # Recovery response with proper rationale.
+    recovery = LLMResponse(
+        provider="anthropic", model="claude-opus-4-7",
+        stop_reason="tool_use",
+        tool_calls=(ToolCall(name="fold", args={}, tool_use_id="t2"),),
+        text_content="On reflection, fold is correct.",
+        tokens=TokenCounts(input_tokens=12, output_tokens=8,
+                           cache_read_input_tokens=0,
+                           cache_creation_input_tokens=0),
+        raw_assistant_turn=AssistantTurn(
+            provider="anthropic", blocks=(),
+        ),
+    )
+
+    provider = AnthropicProvider(model="claude-opus-4-7", api_key="sk-test")
+    call_count = {"n": 0}
+
+    async def _fake_complete(**_: Any) -> LLMResponse:
+        call_count["n"] += 1
+        return bad_resp if call_count["n"] == 1 else recovery
+    provider.complete = _fake_complete  # type: ignore[method-assign]
+
+    agent = LLMAgent(provider=provider, model="claude-opus-4-7",
+                     temperature=0.7)
+    result = asyncio.run(agent.decide(_view(legal)))
+    # The first response had only opaque artifacts → no rationale → retry.
+    assert result.no_tool_retry_count == 1
+    assert result.final_action == Action(tool_name="fold", args={})

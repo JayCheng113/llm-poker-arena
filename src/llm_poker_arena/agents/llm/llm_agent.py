@@ -36,6 +36,8 @@ if TYPE_CHECKING:
 from llm_poker_arena.agents.llm.types import (
     ApiErrorInfo,
     IterationRecord,
+    ReasoningArtifact,
+    ReasoningArtifactKind,
     TokenCounts,
     TurnDecisionResult,
 )
@@ -176,6 +178,7 @@ class LLMAgent(Agent):
 
             iter_ms = int((time.monotonic() - iter_start) * 1000)
             total_tokens = total_tokens + response.tokens
+            artifacts = self._provider.extract_reasoning_artifact(response)
 
             if not response.tool_calls:
                 iter_record = IterationRecord(
@@ -186,6 +189,7 @@ class LLMAgent(Agent):
                     text_content=redact_secret(response.text_content),
                     tokens=response.tokens,
                     wall_time_ms=iter_ms,
+                    reasoning_artifacts=artifacts,
                 )
                 iterations.append(iter_record)
                 if no_tool_retry < MAX_NO_TOOL_RETRY:
@@ -216,6 +220,7 @@ class LLMAgent(Agent):
                     text_content=redact_secret(response.text_content),
                     tokens=response.tokens,
                     wall_time_ms=iter_ms,
+                    reasoning_artifacts=artifacts,
                 )
                 iterations.append(iter_record)
                 if tool_usage_retry < MAX_TOOL_USAGE_RETRY:
@@ -248,8 +253,13 @@ class LLMAgent(Agent):
             # When the profile demands reasoning, an empty text_content with
             # a tool_use block is treated as "no rationale" — same family of
             # error as no_tool, consume the no_tool_retry budget.
+            # Phase 3b (codex BLOCKER fix): reasoning artifacts can also
+            # carry the rationale (e.g. DeepSeek-R1's reasoning_content,
+            # Anthropic thinking blocks); accept those too. But ENCRYPTED /
+            # REDACTED artifacts are opaque and MUST NOT count.
             if (self._prompt_profile.rationale_required
-                    and not response.text_content.strip()):
+                    and not response.text_content.strip()
+                    and not _has_text_rationale_artifact(artifacts)):
                 tc = response.tool_calls[0]
                 iter_record = IterationRecord(
                     step=step + 1,
@@ -259,6 +269,7 @@ class LLMAgent(Agent):
                     text_content="",
                     tokens=response.tokens,
                     wall_time_ms=iter_ms,
+                    reasoning_artifacts=artifacts,
                 )
                 iterations.append(iter_record)
                 if no_tool_retry < MAX_NO_TOOL_RETRY:
@@ -292,6 +303,7 @@ class LLMAgent(Agent):
                 text_content=redact_secret(response.text_content),
                 tokens=response.tokens,
                 wall_time_ms=iter_ms,
+                reasoning_artifacts=artifacts,
             )
             iterations.append(iter_record)
             if v.is_valid:
@@ -418,6 +430,31 @@ class LLMAgent(Agent):
 
 
 # ---------- helpers ----------
+
+def _has_text_rationale_artifact(
+    artifacts: tuple[ReasoningArtifact, ...],
+) -> bool:
+    """True iff at least one artifact carries human-readable rationale text.
+    Used by rationale_required strict mode.
+
+    spec §4.6 contract: only RAW (DeepSeek-Reasoner reasoning_content),
+    SUMMARY (OpenAI o-series summary), and THINKING_BLOCK (Anthropic
+    extended thinking plaintext) carry plaintext rationale. ENCRYPTED
+    payloads are opaque base64 — accepting them as rationale would
+    silently let the model bypass the rationale requirement by emitting
+    encrypted blocks alone. REDACTED has content=None by construction.
+    UNAVAILABLE means the provider didn't surface any reasoning at all.
+    """
+    rationale_kinds = {
+        ReasoningArtifactKind.RAW,
+        ReasoningArtifactKind.SUMMARY,
+        ReasoningArtifactKind.THINKING_BLOCK,
+    }
+    return any(
+        a.kind in rationale_kinds and a.content and a.content.strip()
+        for a in artifacts
+    )
+
 
 def _digest_messages(messages: list[dict[str, Any]]) -> str:
     """Stable hash for IterationRecord traceability."""
