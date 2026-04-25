@@ -20,6 +20,8 @@ from llm_poker_arena.agents.llm.provider_base import (
 from llm_poker_arena.agents.llm.types import (
     AssistantTurn,
     LLMResponse,
+    ReasoningArtifact,
+    ReasoningArtifactKind,
     TokenCounts,
     ToolCall,
 )
@@ -159,6 +161,53 @@ class AnthropicProvider(LLMProvider):
 
     def build_user_text_message(self, text: str) -> dict[str, Any]:
         return {"role": "user", "content": text}
+
+    def extract_reasoning_artifact(
+        self, response: LLMResponse,
+    ) -> tuple[ReasoningArtifact, ...]:
+        """spec §4.6: walk raw blocks, return thinking/encrypted/redacted as
+        ReasoningArtifact tuple. Empty tuple if extended thinking is OFF
+        (the typical Phase 3b case). The `provider_raw_index` ties each
+        artifact back to its position in the raw block list so analysts can
+        reconstruct ordering relative to text + tool_use blocks.
+
+        spec §4.6 contract: REDACTED has no plaintext content (`content=None`);
+        ENCRYPTED carries an opaque payload (we surface it as a base64-ish
+        string so the data is recoverable for forensic inspection, but
+        downstream code MUST NOT treat ENCRYPTED.content as human-readable
+        rationale). THINKING_BLOCK is the only kind whose `content` is
+        plaintext rationale.
+        """
+        out: list[ReasoningArtifact] = []
+        for idx, block in enumerate(response.raw_assistant_turn.blocks):
+            btype = block.get("type")
+            if btype == "thinking":
+                out.append(ReasoningArtifact(
+                    kind=ReasoningArtifactKind.THINKING_BLOCK,
+                    content=str(block.get("thinking") or ""),
+                    provider_raw_index=idx,
+                ))
+            elif btype == "redacted_thinking":
+                # Spec §4.6: REDACTED has no plaintext; content is None.
+                # The opaque `data` field is preserved in the raw blocks
+                # via build_assistant_message_for_replay; analysts who
+                # need it can read raw_assistant_turn.blocks directly.
+                out.append(ReasoningArtifact(
+                    kind=ReasoningArtifactKind.REDACTED,
+                    content=None,
+                    provider_raw_index=idx,
+                ))
+            elif btype == "encrypted_thinking":
+                # Spec §4.6: ENCRYPTED carries opaque base64 payload. We
+                # store it for forensic recovery but downstream rationale
+                # checks must reject it (see _has_text_rationale_artifact
+                # in LLMAgent).
+                out.append(ReasoningArtifact(
+                    kind=ReasoningArtifactKind.ENCRYPTED,
+                    content=str(block.get("data") or ""),
+                    provider_raw_index=idx,
+                ))
+        return tuple(out)
 
 
 __all__ = ["AnthropicProvider"]

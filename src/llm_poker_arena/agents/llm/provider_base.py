@@ -10,6 +10,7 @@ from typing import Any
 from llm_poker_arena.agents.llm.types import (
     AssistantTurn,
     LLMResponse,
+    ReasoningArtifact,
     ToolCall,
 )
 
@@ -101,9 +102,14 @@ class LLMProvider(ABC):
         """
         return response.raw_assistant_turn
 
-    def extract_reasoning_artifact(self, response: LLMResponse) -> Any:  # noqa: ANN401
-        """spec §4.4: provider-specific reasoning extraction. 3a stub."""
-        raise NotImplementedError("Phase 3b feature — reasoning artifact extraction")
+    @abstractmethod
+    def extract_reasoning_artifact(
+        self, response: LLMResponse,
+    ) -> tuple[ReasoningArtifact, ...]:
+        """spec §4.6: extract provider-specific reasoning artifacts (Anthropic
+        thinking blocks, DeepSeek `reasoning_content`, OpenAI summary). Return
+        empty tuple if the response carries no reasoning artifact. Each
+        artifact carries `provider_raw_index` for forensic traceability."""
 
     async def probe(self) -> Any:  # noqa: ANN401
         """spec §4.4 HR2-03: live capability probe. 3a stub."""

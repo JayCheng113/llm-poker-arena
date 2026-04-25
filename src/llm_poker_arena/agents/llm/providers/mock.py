@@ -12,7 +12,11 @@ from llm_poker_arena.agents.llm.provider_base import (
     LLMProvider,
     ProviderTransientError,
 )
-from llm_poker_arena.agents.llm.types import LLMResponse, ToolCall
+from llm_poker_arena.agents.llm.types import (
+    LLMResponse,
+    ReasoningArtifact,
+    ToolCall,
+)
 
 
 @dataclass(frozen=True)
@@ -111,6 +115,13 @@ class MockLLMProvider(LLMProvider):
 
     def build_user_text_message(self, text: str) -> dict[str, Any]:
         return {"role": "user", "content": text}
+
+    def extract_reasoning_artifact(
+        self, response: LLMResponse,
+    ) -> tuple[ReasoningArtifact, ...]:
+        """Mock has no reasoning artifacts unless the test explicitly puts
+        them into raw_assistant_turn.blocks (which mock tests don't)."""
+        return ()
 
 
 __all__ = ["MockLLMProvider", "MockResponseScript", "ProviderTransientError"]
