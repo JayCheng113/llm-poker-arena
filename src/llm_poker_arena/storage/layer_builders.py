@@ -32,6 +32,7 @@ from llm_poker_arena.storage.schemas import (
     AgentDescriptor,
     AgentViewSnapshot,
     CanonicalPrivateHandRecord,
+    CensoredHandRecord,
     HandResultPrivate,
     PublicAction,
     PublicEvent,
@@ -231,4 +232,30 @@ def build_agent_view_snapshot(
             temperature=None,
             seed=None,
         ),
+    )
+
+
+def build_censored_hand_record(
+    *, hand_id: int, seat: int, session_id: str,
+    api_error: object,
+    timestamp: str,
+) -> CensoredHandRecord:
+    """spec §4.1 BR2-01: build the censored_hands.jsonl record for a hand
+    abandoned due to api_error or null final_action."""
+    err_dict: dict[str, str]
+    if api_error is None:
+        err_dict = {
+            "type": "NullFinalAction",
+            "detail": "agent returned final_action=None without api_error",
+        }
+    elif hasattr(api_error, "model_dump"):
+        err_dict = {
+            "type": str(getattr(api_error, "type", "Unknown")),
+            "detail": str(getattr(api_error, "detail", "")),
+        }
+    else:
+        err_dict = {"type": "Unknown", "detail": str(api_error)}
+    return CensoredHandRecord(
+        hand_id=hand_id, seat=seat, session_id=session_id,
+        api_error=err_dict, timestamp=timestamp,
     )

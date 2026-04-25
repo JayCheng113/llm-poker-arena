@@ -30,7 +30,6 @@ from pathlib import Path
 from typing import Any, cast
 
 from llm_poker_arena.agents.base import Agent
-from llm_poker_arena.agents.llm.types import ApiErrorInfo
 from llm_poker_arena.engine._internal.audit import HandPhase, audit_invariants
 from llm_poker_arena.engine._internal.poker_state import CanonicalState
 from llm_poker_arena.engine._internal.rebuy import derive_deck_seed
@@ -42,6 +41,7 @@ from llm_poker_arena.storage.jsonl_writer import BatchedJsonlWriter
 from llm_poker_arena.storage.layer_builders import (
     build_agent_view_snapshot,
     build_canonical_private_hand,
+    build_censored_hand_record,
     build_public_action_event,
     build_public_hand_ended_event,
     build_public_hand_record,
@@ -104,6 +104,7 @@ class Session:
         self._private_writer = BatchedJsonlWriter(self._output_dir / "canonical_private.jsonl")
         self._public_writer = BatchedJsonlWriter(self._output_dir / "public_replay.jsonl")
         self._snapshot_writer = BatchedJsonlWriter(self._output_dir / "agent_view_snapshots.jsonl")
+        self._censor_writer = BatchedJsonlWriter(self._output_dir / "censored_hands.jsonl")
 
         self._chip_pnl: dict[int, int] = {i: 0 for i in range(config.num_players)}
         self._total_hands_played = 0
@@ -132,7 +133,8 @@ class Session:
             (self._output_dir / "meta.json").write_text(
                 json.dumps(meta, sort_keys=True, indent=2)
             )
-            for w in (self._private_writer, self._public_writer, self._snapshot_writer):
+            for w in (self._private_writer, self._public_writer,
+                      self._snapshot_writer, self._censor_writer):
                 w.close()
 
     # ------------------------------------------------- per-hand
@@ -166,6 +168,10 @@ class Session:
         events.append(build_public_hole_dealt_event(hand_id=hand_id))
 
         action_records: list[ActionRecordPrivate] = []
+        # Phase 3d: stage per-turn snapshots so a mid-hand censor (or a
+        # RuntimeError) discards them atomically rather than leaving partial
+        # state in agent_view_snapshots.jsonl. spec §4.1 BR2-01 "censor 整手".
+        staged_snapshots: list[dict[str, Any]] = []
         turn_counter = 0
 
         while state._state.actor_index is not None:  # noqa: SLF001
@@ -175,10 +181,16 @@ class Session:
             street = view.street
             decision = await self._agents[actor].decide(view)
             if decision.api_error is not None or decision.final_action is None:
-                # spec §4.1 BR2-01: censor hand on api_error.
-                self._record_censored_hand(
-                    hand_id=hand_id, seat=actor, error=decision.api_error,
+                # spec §4.1 BR2-01: censor full hand. Discard staged
+                # per-hand artifacts (staged_snapshots is a local var, dropped
+                # on return) and emit one censor record.
+                censor_rec = build_censored_hand_record(
+                    hand_id=hand_id, seat=actor,
+                    session_id=self._session_id,
+                    api_error=decision.api_error,
+                    timestamp=_now_iso(),
                 )
+                self._censor_writer.write(censor_rec.model_dump(mode="json"))
                 return
             chosen = decision.final_action
             fallback = decision.default_action_fallback
@@ -210,7 +222,7 @@ class Session:
                 no_tool_retry_count=decision.no_tool_retry_count,
                 tool_usage_error_count=decision.tool_usage_error_count,
             )
-            self._snapshot_writer.write(snapshot.model_dump(mode="json"))
+            staged_snapshots.append(snapshot.model_dump(mode="json"))
 
             action_records.append(ActionRecordPrivate(
                 seat=actor,
@@ -227,6 +239,12 @@ class Session:
             turn_counter += 1
 
             self._maybe_advance_between_streets(state, hand_id, events)
+
+        # Hand completed cleanly (no censor). Commit staged per-turn
+        # snapshots now (spec §4.1 BR2-01: only flush after we know the
+        # hand wasn't censored).
+        for snap in staged_snapshots:
+            self._snapshot_writer.write(snap)
 
         # Hand is over. Emit showdown (if anyone saw it) + hand_ended.
         statuses = list(state._state.statuses)  # noqa: SLF001
@@ -337,20 +355,3 @@ class Session:
             f"{hand_id})"
         )
 
-    # ------------------------------------------------- censor
-
-    def _record_censored_hand(
-        self, *, hand_id: int, seat: int, error: ApiErrorInfo | None,
-    ) -> None:
-        """Phase 3a stub for spec BR2-01 hand censoring.
-
-        On api_error / null final_action, abandon the current hand without
-        applying any action. Phase 3d adds proper censor record into
-        public_replay; for now we just log to stderr-like stdout.
-        """
-        print(
-            f"[SESSION] hand {hand_id} censored: agent at seat {seat} "
-            f"returned api_error or null final_action ({error!r}). "
-            f"No action applied; hand abandoned.",
-            flush=True,
-        )

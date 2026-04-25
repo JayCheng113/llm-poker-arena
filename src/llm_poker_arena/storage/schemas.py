@@ -233,3 +233,19 @@ class AgentViewSnapshot(BaseModel):
     total_tokens: dict[str, int] = Field(default_factory=dict)
     wall_time_ms: int = 0
     agent: AgentDescriptor
+
+
+# ----------------------------------------------------------- censored_hands
+
+class CensoredHandRecord(BaseModel):
+    """spec §4.1 BR2-01: one line per hand abandoned due to api_error or
+    null final_action. Hand records (canonical_private + public_replay) are
+    NOT written for censored hands; this is the analyst's only signal."""
+
+    model_config = _frozen()
+
+    hand_id: int
+    seat: int  # the seat whose decide() returned api_error
+    api_error: dict[str, str]  # {"type": ..., "detail": ...}
+    timestamp: str
+    session_id: str
