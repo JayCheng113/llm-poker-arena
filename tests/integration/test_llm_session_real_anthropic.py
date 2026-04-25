@@ -88,3 +88,11 @@ def test_real_anthropic_probe_returns_observed_capability() -> None:
     assert cap.provider == "anthropic"
     assert cap.seed_accepted is False
     assert cap.probed_at.endswith("Z")
+    # Codex acceptance NIT: assert HR2-03 honest-reporting fields too —
+    # without these, a regression that silently flips probe semantics
+    # would slip through the gated smoke.
+    from llm_poker_arena.agents.llm.types import ReasoningArtifactKind
+    assert cap.reasoning_kinds == (ReasoningArtifactKind.UNAVAILABLE,)
+    assert cap.tool_use_with_thinking_ok is False
+    assert cap.extra_flags["tool_use_with_thinking_probed"] is False
+    assert cap.extra_flags["extended_thinking_enabled"] is False

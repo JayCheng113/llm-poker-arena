@@ -251,6 +251,24 @@ def test_openai_400_seed_unsupported_retries_without_seed(
     assert first_kwargs.get("seed") == 42
     assert "seed" not in second_kwargs
 
+    # Codex acceptance NIT: verify the latch persists across a SEPARATE
+    # later complete() call, not just the immediate retry. Make a third call
+    # with a fresh successful response and assert seed is still skipped.
+    msg2 = _FakeMessage(content="ok2", tool_calls=None)
+    success2 = _FakeChatResp(_FakeChoice(msg2, finish_reason="stop"),
+                              model="gpt-4o-mini")
+    p._client.chat.completions.create = AsyncMock(return_value=success2)
+    out2 = asyncio.run(p.complete(
+        system=None, messages=[{"role": "user", "content": "hi"}],
+        tools=[], temperature=0.5, seed=42,
+    ))
+    assert out2.text_content == "ok2"
+    third_kwargs = p._client.chat.completions.create.await_args_list[0].kwargs
+    assert "seed" not in third_kwargs, (
+        "_seed_known_unsupported latch should persist; subsequent calls "
+        "must drop seed without round-tripping the rejection again"
+    )
+
 
 def test_openai_400_non_seed_bad_request_raises_permanent(
     monkeypatch: pytest.MonkeyPatch,
