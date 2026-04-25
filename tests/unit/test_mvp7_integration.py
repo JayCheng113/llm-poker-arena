@@ -87,6 +87,12 @@ def test_mvp7_b2_rule_based_end_to_end(
         vpip = compute_vpip(con)
         pfr = compute_pfr(con)
         ad = compute_action_distribution(con)
+        # Authoritative denominator from `hands` view — Risk-14 regression
+        # guard (Codex Phase-2b audit Part A T9 minor: B1 had this check,
+        # B2 previously did not).
+        expected_row = con.sql("SELECT COUNT(*) FROM hands").fetchone()
+        assert expected_row is not None
+        expected_n = int(expected_row[0])
     assert len(vpip) == 6
     assert len(pfr) == 6
     assert len(ad) > 0
@@ -95,6 +101,9 @@ def test_mvp7_b2_rule_based_end_to_end(
     for seat in range(6):
         sv = next(r for r in vpip if r["seat"] == seat)
         sp = next(r for r in pfr if r["seat"] == seat)
+        # Risk-14: denominator uses hands view so walks don't undercount.
+        assert sv["n_hands"] == expected_n
+        assert sp["n_hands"] == expected_n
         assert sp["pfr_rate"] <= sv["vpip_rate"] + 1e-9
 
     plot_chip_pnl(sess)
