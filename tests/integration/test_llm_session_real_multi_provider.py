@@ -14,6 +14,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -87,7 +88,7 @@ def test_real_multi_provider_six_hand_session(tmp_path: Path) -> None:
 
     # Inspect one snapshot per LLM provider.
     snaps = (tmp_path / "agent_view_snapshots.jsonl").read_text().strip().splitlines()
-    by_provider: dict[str, list[dict[str, object]]] = {}
+    by_provider: dict[str, list[Any]] = {}
     for line in snaps:
         rec = json.loads(line)
         prov = rec["agent"]["provider"]
@@ -98,7 +99,7 @@ def test_real_multi_provider_six_hand_session(tmp_path: Path) -> None:
     # thinking enabled in 3b) OR populated; either is acceptable.
     # DeepSeek-Chat snapshots: reasoning_artifacts MUST be empty (V3 has no CoT).
     for rec in by_provider["deepseek"]:
-        for it in rec["iterations"]:  # type: ignore[index]
+        for it in rec["iterations"]:
             assert it.get("reasoning_artifacts", []) == [], (
                 "deepseek-chat should not emit reasoning artifacts"
             )
