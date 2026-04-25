@@ -43,3 +43,4 @@ runs/
 node_modules/
 dist/
 .vite/
+uv.lock

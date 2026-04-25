@@ -21,9 +21,7 @@ import hashlib
 import json
 import random
 import time
-from typing import Any
-
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from llm_poker_arena.agents.base import Agent
 from llm_poker_arena.agents.llm.provider_base import (
@@ -49,6 +47,7 @@ from llm_poker_arena.engine.legal_actions import (
 )
 from llm_poker_arena.engine.views import PlayerView
 
+
 class LLMAgent(Agent):
     def __init__(
         self,
@@ -60,7 +59,7 @@ class LLMAgent(Agent):
         per_iteration_timeout_sec: float = 60.0,
         total_turn_timeout_sec: float = 180.0,
         version: str = "phase3d",
-        prompt_profile: "PromptProfile | None" = None,
+        prompt_profile: PromptProfile | None = None,
     ) -> None:
         self._provider = provider
         self._model = model

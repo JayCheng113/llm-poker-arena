@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import pytest
 
@@ -212,7 +213,7 @@ def test_total_turn_timeout_returns_api_error() -> None:
     legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
 
     class SlowMock(MockLLMProvider):
-        async def complete(self, **_kw: object) -> LLMResponse:  # type: ignore[override]
+        async def complete(self, **_kw: object) -> LLMResponse:
             await asyncio.sleep(2.0)
             raise RuntimeError("unreachable")
 
@@ -406,7 +407,7 @@ def test_llm_agent_renders_my_position_short_in_user_prompt() -> None:
     captured_systems: list[str | None] = []
 
     class Capturing(MockLLMProvider):
-        async def complete(self, **kw: Any) -> LLMResponse:  # type: ignore[override]
+        async def complete(self, **kw: Any) -> LLMResponse:
             captured.append(list(kw["messages"]))
             captured_systems.append(kw.get("system"))
             return await super().complete(**kw)
@@ -468,7 +469,7 @@ def test_multi_tool_retry_replies_to_all_tool_use_ids_not_just_first() -> None:
     script = MockResponseScript(responses=(multi_tool_response, single_recovery))
 
     class CapturingMock(MockLLMProvider):
-        async def complete(self, **kw):  # type: ignore[override, no-untyped-def]
+        async def complete(self, **kw: Any) -> LLMResponse:
             captured_messages.append(list(kw["messages"]))
             return await super().complete(**kw)
 

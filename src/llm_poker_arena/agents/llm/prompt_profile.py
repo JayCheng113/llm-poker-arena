@@ -32,7 +32,7 @@ class PromptProfile:
     _env: Environment
 
     @classmethod
-    def from_toml(cls, path: Path) -> "PromptProfile":
+    def from_toml(cls, path: Path) -> PromptProfile:
         with path.open("rb") as f:
             data = tomllib.load(f)
         templates = data.get("templates", {})
