@@ -31,6 +31,7 @@ from llm_poker_arena.agents.llm.provider_base import (
     ProviderPermanentError,
     ProviderTransientError,
 )
+from llm_poker_arena.agents.llm.redaction import redact_secret
 
 if TYPE_CHECKING:
     from llm_poker_arena.agents.llm.prompt_profile import PromptProfile
@@ -142,7 +143,7 @@ class LLMAgent(Agent):
                     request_messages_digest=digest,
                     provider_response_kind="error",
                     tool_call=None,
-                    text_content=str(e),
+                    text_content=redact_secret(str(e)),
                     tokens=TokenCounts.zero(),
                     wall_time_ms=int((time.monotonic() - iter_start) * 1000),
                 )
@@ -163,7 +164,7 @@ class LLMAgent(Agent):
                     request_messages_digest=digest,
                     provider_response_kind="error",
                     tool_call=None,
-                    text_content=str(e),
+                    text_content=redact_secret(str(e)),
                     tokens=TokenCounts.zero(),
                     wall_time_ms=int((time.monotonic() - iter_start) * 1000),
                 )
@@ -184,7 +185,7 @@ class LLMAgent(Agent):
                     request_messages_digest=digest,
                     provider_response_kind="no_tool",
                     tool_call=None,
-                    text_content=response.text_content,
+                    text_content=redact_secret(response.text_content),
                     tokens=response.tokens,
                     wall_time_ms=iter_ms,
                 )
@@ -212,7 +213,7 @@ class LLMAgent(Agent):
                     request_messages_digest=digest,
                     provider_response_kind="tool_use",
                     tool_call=first_tc,
-                    text_content=response.text_content,
+                    text_content=redact_secret(response.text_content),
                     tokens=response.tokens,
                     wall_time_ms=iter_ms,
                 )
@@ -284,7 +285,7 @@ class LLMAgent(Agent):
                 request_messages_digest=digest,
                 provider_response_kind="tool_use",
                 tool_call=tc,
-                text_content=response.text_content,
+                text_content=redact_secret(response.text_content),
                 tokens=response.tokens,
                 wall_time_ms=iter_ms,
             )
@@ -382,7 +383,7 @@ class LLMAgent(Agent):
             no_tool_retry_count=no_tool_retry,
             tool_usage_error_count=tool_usage_error_count,
             default_action_fallback=False,
-            api_error=ApiErrorInfo(type=err_type, detail=detail),
+            api_error=ApiErrorInfo(type=err_type, detail=redact_secret(detail)),
             turn_timeout_exceeded=False,
         )
 

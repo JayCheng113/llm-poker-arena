@@ -258,6 +258,25 @@ def test_multi_tool_call_response_increments_tool_usage_error_count() -> None:
     assert result.default_action_fallback is False
 
 
+def test_api_error_detail_is_redacted_when_provider_msg_contains_key() -> None:
+    """Codex B9: provider exceptions may carry API key fragments. The
+    persisted ApiErrorInfo.detail MUST be redacted before reaching the
+    AgentViewSnapshot."""
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
+    fake_key = "sk-ant-api03-fake-leaked-key-aaaaaa"
+    err = ProviderPermanentError(f"401 unauthorized: bad key {fake_key}")
+    script = MockResponseScript(
+        responses=(),
+        errors_at_step={0: err},
+    )
+    provider = MockLLMProvider(script=script)
+    agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
+    result = asyncio.run(agent.decide(_view(legal)))
+    assert result.api_error is not None
+    assert fake_key not in result.api_error.detail
+    assert "<REDACTED_API_KEY>" in result.api_error.detail
+
+
 def test_action_tool_specs_fails_fast_on_missing_bounds() -> None:
     """No silent default bounds. raise_to without amount range → ValueError."""
     from llm_poker_arena.agents.llm.llm_agent import _action_tool_specs
