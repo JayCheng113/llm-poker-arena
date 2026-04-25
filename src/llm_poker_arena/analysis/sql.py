@@ -88,3 +88,39 @@ LEFT JOIN preflop_raises p ON s.seat = p.seat
 GROUP BY s.seat, t.n_hands
 ORDER BY s.seat;
 """
+
+
+ACTION_DISTRIBUTION_SQL: str = """
+-- Per-(seat, street) action-type frequency. `rate_within_street` is the
+-- within-(seat, street) normalised probability — useful for comparing
+-- preflop vs flop aggression without stack-depth noise.
+
+WITH per_row AS (
+    SELECT
+        seat,
+        street,
+        final_action.type AS action_type
+    FROM actions
+    WHERE is_forced_blind = false
+),
+per_cell AS (
+    SELECT seat, street, action_type, COUNT(*) AS cnt
+    FROM per_row
+    GROUP BY seat, street, action_type
+),
+per_street_totals AS (
+    SELECT seat, street, COUNT(*) AS street_total
+    FROM per_row
+    GROUP BY seat, street
+)
+SELECT
+    c.seat,
+    c.street,
+    c.action_type,
+    c.cnt AS count,
+    c.cnt * 1.0 / t.street_total AS rate_within_street
+FROM per_cell c
+JOIN per_street_totals t
+  ON c.seat = t.seat AND c.street = t.street
+ORDER BY c.seat, c.street, c.action_type;
+"""

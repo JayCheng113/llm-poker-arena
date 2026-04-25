@@ -10,7 +10,7 @@ from typing import Any
 
 import duckdb
 
-from llm_poker_arena.analysis.sql import PFR_SQL, VPIP_SQL
+from llm_poker_arena.analysis.sql import ACTION_DISTRIBUTION_SQL, PFR_SQL, VPIP_SQL
 
 
 def compute_vpip(con: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
@@ -33,5 +33,26 @@ def compute_pfr(con: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
     rows = con.sql(PFR_SQL).fetchall()
     return [
         {"seat": int(r[0]), "n_hands": int(r[1]), "pfr_rate": float(r[2])}
+        for r in rows
+    ]
+
+
+def compute_action_distribution(
+    con: duckdb.DuckDBPyConnection,
+) -> list[dict[str, Any]]:
+    """Return per-(seat, street, action_type) frequencies.
+
+    Each row: `{seat, street, action_type, count, rate_within_street}`.
+    Multiple rows per (seat, street) — one per action_type observed.
+    """
+    rows = con.sql(ACTION_DISTRIBUTION_SQL).fetchall()
+    return [
+        {
+            "seat": int(r[0]),
+            "street": str(r[1]),
+            "action_type": str(r[2]),
+            "count": int(r[3]),
+            "rate_within_street": float(r[4]),
+        }
         for r in rows
     ]
