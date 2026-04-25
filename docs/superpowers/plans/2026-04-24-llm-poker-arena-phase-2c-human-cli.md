@@ -103,6 +103,7 @@ Create `/Users/zcheng256/llm-poker-arena/tests/unit/test_human_cli_agent.py`:
 from __future__ import annotations
 
 import io
+from typing import Literal
 
 import pytest
 
@@ -139,8 +140,11 @@ def _seats() -> tuple[SeatPublicInfo, ...]:
     )
 
 
-def _view(*, legal_names: tuple[str, ...], raise_min_max: tuple[int, int] = (200, 10_000)) -> PlayerView:
-    tools = []
+_ToolName = Literal["fold", "check", "call", "bet", "raise_to", "all_in"]
+
+
+def _view(*, legal_names: tuple[_ToolName, ...], raise_min_max: tuple[int, int] = (200, 10_000)) -> PlayerView:
+    tools: list[ActionToolSpec] = []
     for name in legal_names:
         if name in ("bet", "raise_to"):
             tools.append(ActionToolSpec(
@@ -204,16 +208,27 @@ def test_bet_prompts_for_amount_on_separate_line() -> None:
     assert act.args == {"amount": 500}
 
 
-def test_illegal_tool_name_reprompts() -> None:
-    """User types 'teleport' → agent complains; then types valid action."""
+def test_unknown_action_name_reprompts() -> None:
+    """User types 'teleport' (not a valid action name) → agent complains; then types valid action."""
     stdin = io.StringIO("teleport\nfold\n")
     stdout = io.StringIO()
     agent = HumanCLIAgent(input_stream=stdin, output_stream=stdout)
     view = _view(legal_names=("fold", "call"))
     act = agent.decide(view)
     assert act.tool_name == "fold"
-    # Output includes an error for the first attempt.
-    assert "not in legal" in stdout.getvalue().lower()
+    # Output includes the "not a known action" error for 'teleport'.
+    assert "not a known action" in stdout.getvalue().lower()
+
+
+def test_known_action_outside_legal_set_reprompts() -> None:
+    """User types 'bet' (known action) but legal set only has fold/call → reprompt."""
+    stdin = io.StringIO("bet\nfold\n")
+    stdout = io.StringIO()
+    agent = HumanCLIAgent(input_stream=stdin, output_stream=stdout)
+    view = _view(legal_names=("fold", "call"))
+    act = agent.decide(view)
+    assert act.tool_name == "fold"
+    assert "not in legal set" in stdout.getvalue().lower()
 
 
 def test_raise_below_min_reprompts() -> None:
@@ -417,7 +432,7 @@ class HumanCLIAgent(Agent):
 ```bash
 cd /Users/zcheng256/llm-poker-arena && source .venv/bin/activate && pytest tests/unit/test_human_cli_agent.py -v
 ```
-Expected: 10 passed.
+Expected: 11 passed.
 
 - [ ] **Step 5: Lint + type**
 
@@ -442,7 +457,7 @@ cd /Users/zcheng256/llm-poker-arena && git add src/llm_poker_arena/agents/human_
 - Modify: `pyproject.toml` (add `[project.scripts]`)
 - Create: `tests/unit/test_cli_play_smoke.py`
 
-The CLI takes `--num-hands` (default 6), `--my-seat` (default 3), `--rng-seed` (default 42). Builds a 6-seat agent list with `HumanCLIAgent` at `my_seat` and an alternating mix of Random / RuleBased at the other 5 seats. Runs a `Session` into a tmp-timestamped dir under `runs/`, prints a per-hand summary.
+The CLI takes `--num-hands` (default 6), `--my-seat` (default 3), `--rng-seed` (default 42). Builds a 6-seat agent list with `HumanCLIAgent` at `my_seat` and an alternating mix of Random / RuleBased at the other 5 seats. Runs a `Session` into a tmp-timestamped dir under `runs/`, then prints a **session-level summary** (total hands, per-seat net P&L, session duration, artifact path). Per-hand detail is visible in-stream via HumanCLIAgent's `_render_view` calls during play; the final summary is session-aggregate, not per-hand.
 
 - [ ] **Step 1: Write failing test**
 
@@ -491,11 +506,20 @@ def test_build_agents_rejects_out_of_range_seat() -> None:
 def test_run_cli_exits_cleanly_when_human_folds_every_hand(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """End-to-end: run 2 hands, human always folds, session lands all artifacts."""
+    """End-to-end: run a short session where the human always folds.
+
+    `num_hands=2` is rounded UP to 6 by run_cli's `num_hands % 6` guard
+    (SessionConfig requires `num_hands % num_players == 0`). The test
+    accepts that rounding — it only asserts session-level artifacts, not
+    an exact hand count.
+
+    Note on 'fold every prompt': seat 3 sits UTG at button=0 pre-flop and
+    rotates elsewhere across button turns. Fold is legal in every
+    preflop-UTG-style spot RandomAgent/RuleBasedAgent create here; if a
+    future refactor breaks that invariant, add a cyclic fallback.
+    """
     from llm_poker_arena.cli.play import run_cli
-    # Every prompt gets "fold" — CLI's legal filter will validate. Preflop
-    # UTG/HJ/CO/BTN all have fold in legal. Human seat 3 is UTG for button=0.
-    folds = "fold\n" * 20  # enough for multiple actions across 2 hands
+    folds = "fold\n" * 50  # generous — 6 hands × up to several prompts each
 
     rc = run_cli(
         num_hands=2, my_seat=3, rng_seed=42, output_root=tmp_path,
@@ -594,7 +618,10 @@ def build_agents(
 
 
 def _session_dir_name(rng_seed: int) -> str:
-    ts = datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S")
+    # Microseconds included so repeated runs within the same second don't
+    # collide on the same directory (BatchedJsonlWriter opens "a" mode and
+    # would otherwise append to stale artifacts).
+    ts = datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S-%f")
     return f"session_{ts}_seed{rng_seed}"
 
 
@@ -648,6 +675,11 @@ def run_cli(
     )
 
     session_dir = output_root / _session_dir_name(rng_seed=rng_seed)
+    if session_dir.exists():
+        out_stream.write(
+            f"[poker-play] session directory {session_dir} already exists; aborting to avoid appending to stale artifacts\n"
+        )
+        return 1
     Session(
         config=cfg, agents=agents, output_dir=session_dir,
         session_id=session_dir.name,
@@ -722,12 +754,21 @@ cd /Users/zcheng256/llm-poker-arena && git add src/llm_poker_arena/cli/__init__.
 
 ---
 
-## Task 3: Integration test — scripted human plays 1 full hand to showdown
+## Task 3: Integration test — scripted human plays a full 6-hand session
 
 **Files:**
 - Create: `tests/unit/test_human_cli_integration.py`
 
-Run a single-hand session with a scripted input sequence that reaches showdown (human calls every decision). Assert the hand settles correctly, chip conservation holds, and agent_view_snapshots for the human seat are correctly tagged.
+Run a 6-hand session with a scripted input sequence cycling common action
+responses (`call / check / fold / all_in`) so the human's input never runs
+dry regardless of which legal set comes up. Assert the hands settle
+cleanly, chip conservation holds, and `agent_view_snapshots` rows for the
+human seat are correctly tagged.
+
+Note: the old plan draft claimed "1 full hand to showdown" — in practice
+the Phase-2a Session runs `config.num_hands` hands in one `.run()` call,
+and stopping at a specific hand would require reaching into internals.
+Test asserts session-level invariants instead of per-hand showdown.
 
 - [ ] **Step 1: Write failing test**
 
@@ -742,15 +783,16 @@ import json
 from pathlib import Path
 
 
-def test_human_cli_call_only_session_finishes_cleanly(tmp_path: Path) -> None:
+def test_human_cli_cyclic_input_session_finishes_cleanly(tmp_path: Path) -> None:
     from llm_poker_arena.cli.play import run_cli
 
-    # Feed enough 'call' / 'check' responses for the human to get through
-    # up to ~30 decisions (6 hands × ~5 turns per hand max). Any of these
-    # actions must be in legal set when it's the human's turn; we mix both
-    # to cover the "no bet to call" case (check) and "facing bet" case (call).
-    actions = ("call\n" + "check\n") * 50
-    input_stream = io.StringIO(actions)
+    # Cycle through the 4 most-common action names so at least one is legal
+    # for every prompt the human hits. Pure 'call\n' * N would exhaust on
+    # a turn where call isn't legal (e.g. agent facing no bet → check/bet
+    # offered but not call): HumanCLIAgent reprompts on each illegal input
+    # and would EOF before finding a valid action.
+    cyclic = "call\ncheck\nfold\nall_in\n" * 50
+    input_stream = io.StringIO(cyclic)
     output_stream = io.StringIO()
 
     rc = run_cli(
@@ -782,13 +824,19 @@ def test_human_cli_call_only_session_finishes_cleanly(tmp_path: Path) -> None:
 
 
 def test_human_cli_session_meta_marks_human_seat(tmp_path: Path) -> None:
-    """meta.json.seat_assignment labels the human seat with 'human:cli_v1'."""
+    """meta.json.seat_assignment labels the human seat with 'human:cli_v1'.
+
+    Uses a cycling input so whichever legal set comes up at each human turn
+    (varies by button rotation and random-bot actions), at least one valid
+    response is available within the next few prompts.
+    """
     from llm_poker_arena.cli.play import run_cli
 
+    cyclic = "call\ncheck\nfold\nall_in\n" * 50
     rc = run_cli(
         num_hands=6, my_seat=2, rng_seed=3,
         output_root=tmp_path,
-        human_input=io.StringIO("call\n" * 50),
+        human_input=io.StringIO(cyclic),
         human_output=io.StringIO(),
     )
     assert rc == 0
@@ -815,7 +863,7 @@ Expected: 2 passed.
 ```bash
 cd /Users/zcheng256/llm-poker-arena && source .venv/bin/activate && pytest -m 'not slow' -q && ruff check . && mypy
 ```
-Expected: 195 + 10 + 3 + 2 = 210 passing. Clean. (Actual baseline may differ by ±1 per Phase-2b numbering; the delta +15 from Phase 2c is the fixed addition.)
+Expected: 197 Phase-2b-post-audit baseline + 11 (T1) + 3 (T2) + 2 (T3) = 213 passing. Clean. (Baseline after Phase-2b post-audit fixes `e6284fe`+`1d8b77b` was 197 non-slow; Phase 2c delta +16.)
 
 - [ ] **Step 4: Commit**
 
