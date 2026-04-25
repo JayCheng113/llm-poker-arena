@@ -89,7 +89,9 @@ def test_public_street_reveal_flop_contains_3_cards() -> None:
 def test_public_showdown_event_only_reveals_showdown_seats() -> None:
     s = _state(button=0)
     all_holes = s.hole_cards()  # dict[int, tuple[str, str]]
-    e = build_public_showdown_event(hand_id=0, state=s, showdown_seats={1, 3, 5})
+    e = build_public_showdown_event(
+        hand_id=0, showdown_seats={1, 3, 5}, hole_cards=all_holes,
+    )
     assert isinstance(e, PublicShowdown)
     # Only the 3 revealed seats appear in the map.
     assert set(e.revealed.keys()) == {"1", "3", "5"}
@@ -97,6 +99,28 @@ def test_public_showdown_event_only_reveals_showdown_seats() -> None:
         assert absent not in e.revealed
     for seat in (1, 3, 5):
         assert e.revealed[str(seat)] == all_holes[seat]
+
+
+def test_public_showdown_event_reveals_losers_too_not_just_winners() -> None:
+    """Regression: loser hole_cards must be present in showdown reveal.
+
+    Previously `build_public_showdown_event` re-read `state.hole_cards()`
+    which omits losers (mucked by HAND_KILLING). Now callers pass the
+    pre-settlement snapshot so all showdown participants reveal.
+    """
+    s = _state(button=0)
+    pre_settlement_holes = s.hole_cards()  # all 6 seats
+    # Simulate HAND_KILLING by passing a "snapshot" that already had seat 4
+    # mucked (to prove the builder uses the passed dict, not re-reads state).
+    snapshot_with_all = dict(pre_settlement_holes)
+    e = build_public_showdown_event(
+        hand_id=0, showdown_seats={2, 4}, hole_cards=snapshot_with_all,
+    )
+    # Both seats revealed, even though "in a real hand-end state" seat 4 might
+    # be a loser whose cards were mucked.
+    assert set(e.revealed.keys()) == {"2", "4"}
+    assert e.revealed["2"] == pre_settlement_holes[2]
+    assert e.revealed["4"] == pre_settlement_holes[4]
 
 
 def test_public_hand_ended_event_has_per_seat_winnings() -> None:
@@ -141,10 +165,13 @@ def test_canonical_private_hand_has_full_hole_cards_and_actions() -> None:
         amount=None, is_forced_blind=False, turn_index=5,
     ))
 
+    # Snapshot hole_cards BEFORE any fold (here: no folds, so either works).
+    pre_settlement_holes = s.hole_cards()
     rec = build_canonical_private_hand(
         hand_id=0, state=s, started_at="2026-04-24T00:00:00Z",
         ended_at="2026-04-24T00:00:05Z",
         actions=tuple(action_records),
+        hole_cards=pre_settlement_holes,
     )
     assert isinstance(rec, CanonicalPrivateHandRecord)
     assert rec.hand_id == 0

@@ -102,3 +102,86 @@ def test_session_rejects_agents_list_length_mismatch(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="agents"):
         Session(config=cfg, agents=[RandomAgent()] * 3,  # only 3 agents for 6 seats
                 output_dir=tmp_path, session_id="sess_bad")
+
+
+def test_session_canonical_private_preserves_hole_cards_of_folded_seats(
+    tmp_path: Path,
+) -> None:
+    """Regression: canonical_private must record all 6 seats' hole cards
+    per spec §7.2, even for seats that folded (and had their cards mucked
+    by PokerKit's HAND_KILLING automation).
+
+    Prior to the pre-settlement-snapshot fix, `build_canonical_private_hand`
+    re-read `state.hole_cards()` at hand-end, which only returned the
+    winner. Any fold-heavy hand produced a `hole_cards` map with < 6 keys.
+    """
+    cfg = _cfg()  # 6 hands, rng_seed=42 — produces natural folds
+    agents = [RandomAgent() for _ in range(6)]
+    Session(
+        config=cfg, agents=agents, output_dir=tmp_path, session_id="sess_holes",
+    ).run()
+
+    lines = (tmp_path / "canonical_private.jsonl").read_text().strip().splitlines()
+    assert len(lines) == cfg.num_hands
+    for line in lines:
+        rec = json.loads(line)
+        holes = rec["hole_cards"]
+        assert set(holes.keys()) == {"0", "1", "2", "3", "4", "5"}, (
+            f"hand {rec['hand_id']}: expected all 6 seats' hole_cards, "
+            f"got keys {sorted(holes.keys())}"
+        )
+        # Each seat's hole is exactly 2 card strings.
+        for seat_str, cards in holes.items():
+            assert len(cards) == 2, (seat_str, cards)
+
+
+def test_session_public_showdown_event_reveals_all_participants_not_just_winner(
+    tmp_path: Path,
+) -> None:
+    """Regression: public_replay showdown event must include every seat
+    that reached showdown, not just the winner.
+
+    Prior to the fix, `build_public_showdown_event` re-read
+    `state.hole_cards()` and missed losers whose cards were mucked by
+    HAND_KILLING. Verify by finding a hand with a showdown event and
+    asserting its `revealed` has ≥ 2 seats when the hand reached showdown
+    (showdown_seats size ≥ 2).
+    """
+    # Use more hands so at least one naturally reaches showdown.
+    cfg = SessionConfig(
+        num_players=6, starting_stack=10_000, sb=50, bb=100,
+        num_hands=12, max_utility_calls=5,
+        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
+        opponent_stats_min_samples=30, rng_seed=99,
+    )
+    agents = [RandomAgent() for _ in range(6)]
+    Session(
+        config=cfg, agents=agents, output_dir=tmp_path, session_id="sess_showdown",
+    ).run()
+
+    hands_with_showdown: list[dict[str, object]] = []
+    for line in (tmp_path / "public_replay.jsonl").read_text().splitlines():
+        if not line.strip():
+            continue
+        hand = json.loads(line)
+        for ev in hand["street_events"]:
+            if ev["type"] == "showdown":
+                hands_with_showdown.append(ev)
+                break
+
+    # At least one hand in 12 with random-aggressive play should reach
+    # showdown. If this ever fails, the test seed needs adjustment —
+    # but the invariant we care about is the assertion below, not zero-
+    # showdowns.
+    assert hands_with_showdown, (
+        "no hand reached showdown in 12-hand seed=99 session; "
+        "try a different seed or more hands"
+    )
+    for ev in hands_with_showdown:
+        revealed = ev["revealed"]
+        assert isinstance(revealed, dict)
+        assert len(revealed) >= 2, (
+            f"showdown hand {ev['hand_id']}: only {len(revealed)} seats "
+            f"revealed, expected >= 2 (winner + at least one loser); "
+            f"got {revealed}"
+        )

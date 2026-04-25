@@ -91,12 +91,21 @@ def build_public_street_reveal_event(
 
 
 def build_public_showdown_event(
-    *, hand_id: int, state: Any, showdown_seats: set[int],  # noqa: ANN401
+    *, hand_id: int,
+    showdown_seats: set[int],
+    hole_cards: dict[int, tuple[str, str]],
 ) -> PublicShowdown:
-    holes = state.hole_cards()  # dict[int, tuple[str, str]]
+    """Reveal hole cards for seats that reached showdown.
+
+    Caller MUST pass `hole_cards` captured BEFORE `HAND_KILLING` automation
+    mucks the loser's cards — typically a snapshot taken right after
+    `CanonicalState` construction. Reading `state.hole_cards()` at hand-end
+    would only see the winner (mucked losers have empty cards) and
+    systematically under-reveal the showdown per spec §7.3.
+    """
     revealed = {
-        str(seat): holes[seat]
-        for seat in sorted(showdown_seats) if seat in holes
+        str(seat): hole_cards[seat]
+        for seat in sorted(showdown_seats) if seat in hole_cards
     }
     return PublicShowdown(hand_id=hand_id, revealed=revealed)
 
@@ -121,17 +130,25 @@ def build_canonical_private_hand(
     *, hand_id: int, state: Any,  # noqa: ANN401
     started_at: str, ended_at: str,
     actions: tuple[ActionRecordPrivate, ...],
+    hole_cards: dict[int, tuple[str, str]],
     winners: tuple[WinnerInfo, ...] = (),
     side_pots: tuple[SidePotSummary, ...] = (),
     final_invested: dict[int, int] | None = None,
     net_pnl: dict[int, int] | None = None,
     showdown: bool = False,
 ) -> CanonicalPrivateHandRecord:
-    """Phase 2a: `final_invested` defaults to `{}` — proper tracking deferred
+    """Build the canonical_private.jsonl hand record.
+
+    Phase 2a: `final_invested` defaults to `{}` — proper tracking deferred
     to Phase 2b (needs per-action contribution accumulation from
     `state.operations`). MVP 6 exit criterion does not depend on this field.
+
+    `hole_cards` MUST be a pre-settlement snapshot (typically captured right
+    after `CanonicalState` construction). PokerKit's `HAND_KILLING`
+    automation moves folded/losing seats' cards to `mucked_cards`
+    immediately; reading `state.hole_cards()` at hand-end would miss them
+    and violate spec §7.2 ("all hole cards").
     """
-    holes = state.hole_cards()  # dict[int, tuple[str, str]]
     stacks_initial = dict(enumerate(state._ctx.initial_stacks))  # noqa: SLF001
     return CanonicalPrivateHandRecord(
         hand_id=hand_id,
@@ -140,7 +157,7 @@ def build_canonical_private_hand(
         sb_seat=state.sb_seat, bb_seat=state.bb_seat,
         deck_seed=state._ctx.deck_seed,  # noqa: SLF001
         starting_stacks={str(s): int(v) for s, v in stacks_initial.items()},
-        hole_cards={str(s): cards for s, cards in holes.items()},
+        hole_cards={str(s): cards for s, cards in hole_cards.items()},
         community=tuple(state.community()),
         actions=actions,
         result=HandResultPrivate(

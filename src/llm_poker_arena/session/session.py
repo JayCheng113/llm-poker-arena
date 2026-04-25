@@ -147,6 +147,14 @@ class Session:
         state = CanonicalState(cfg, ctx)
         audit_invariants(state, cfg, HandPhase.PRE_SETTLEMENT)
 
+        # Snapshot ALL 6 seats' hole cards BEFORE any fold happens. PokerKit's
+        # HAND_KILLING automation moves folded/losing seats' cards to
+        # `mucked_cards` immediately on fold, so reading `state.hole_cards()`
+        # at hand-end only sees the winner. We need the complete snapshot for
+        # spec §7.2 canonical_private ("all hole cards") and §7.3 public
+        # showdown (reveal every seat that reached showdown, not just winner).
+        initial_hole_cards = state.hole_cards()
+
         started_at = _now_iso()
         # Per spec §7.3: one public_replay line per hand. Collect events
         # into a local buffer and flush via PublicHandRecord at hand-end.
@@ -214,7 +222,9 @@ class Session:
         showdown = len(showdown_seats) > 1
         if showdown:
             events.append(build_public_showdown_event(
-                hand_id=hand_id, state=state, showdown_seats=showdown_seats,
+                hand_id=hand_id,
+                showdown_seats=showdown_seats,
+                hole_cards=initial_hole_cards,
             ))
 
         payoffs = list(state._state.payoffs)  # noqa: SLF001
@@ -241,6 +251,7 @@ class Session:
             hand_id=hand_id, state=state,
             started_at=started_at, ended_at=ended_at,
             actions=tuple(action_records),
+            hole_cards=initial_hole_cards,
             winners=tuple(
                 WinnerInfo(seat=i, winnings=int(payoffs[i]), best_hand_desc="")
                 for i in range(cfg.num_players) if int(payoffs[i]) > 0
