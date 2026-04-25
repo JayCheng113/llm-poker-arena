@@ -36,6 +36,7 @@ def build_session_meta(
     initial_button_seat: int,
     chip_pnl: dict[int, int],
     session_wall_time_sec: int,
+    provider_capabilities: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         "session_id": session_id,
@@ -47,7 +48,7 @@ def build_session_meta(
         "planned_hands": config.num_hands,
         "git_commit": _git_commit(),
         "prompt_profile_version": "default-v2",
-        "provider_capabilities": {},
+        "provider_capabilities": (provider_capabilities or {}),
         "chip_pnl": {str(s): int(v) for s, v in chip_pnl.items()},
         "retry_summary_per_seat": {},
         "tool_usage_summary": {},

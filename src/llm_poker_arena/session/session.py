@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from llm_poker_arena.agents.base import Agent
+from llm_poker_arena.agents.llm.types import ObservedCapability
 from llm_poker_arena.engine._internal.audit import HandPhase, audit_invariants
 from llm_poker_arena.engine._internal.poker_state import CanonicalState
 from llm_poker_arena.engine._internal.rebuy import derive_deck_seed
@@ -77,6 +78,21 @@ def _split_provider_id(pid: str) -> tuple[str, str]:
     return provider, model
 
 
+def _capability_to_meta_json(cap: ObservedCapability) -> dict[str, Any]:
+    """Map in-process ObservedCapability (§4.4 names) to spec §7.6
+    persisted JSON schema names. Keeps the Pydantic type clean while
+    honoring the meta.json contract analysts depend on.
+    """
+    return {
+        "provider": cap.provider,
+        "probed_at": cap.probed_at,
+        "reasoning_kinds_observed": [k.value for k in cap.reasoning_kinds],
+        "seed_supported": cap.seed_accepted,
+        "tool_use_with_thinking_ok": cap.tool_use_with_thinking_ok,
+        "extra_flags": dict(cap.extra_flags),
+    }
+
+
 class Session:
     """Phase 2a synchronous session driver."""
 
@@ -113,7 +129,13 @@ class Session:
         started_at_iso = _now_iso()
         started_at_monotonic = time.monotonic()
         initial_button_seat = 0
+        # Initialize capabilities BEFORE the try so that even probe failure
+        # reaches the finally cleanup (writers close, partial meta.json
+        # still written). spec §4.4 HR2-03: probe each unique LLMProvider
+        # once; non-LLM agents (Random, RuleBased, HumanCLI) skip probe.
+        provider_capabilities: dict[str, dict[str, Any]] = {}
         try:
+            provider_capabilities = await self._probe_providers()
             for hand_id in range(self._config.num_hands):
                 await self._run_one_hand(hand_id)
                 self._total_hands_played += 1
@@ -129,6 +151,7 @@ class Session:
                 initial_button_seat=initial_button_seat,
                 chip_pnl=self._chip_pnl,
                 session_wall_time_sec=wall_time_sec,
+                provider_capabilities=provider_capabilities,
             )
             (self._output_dir / "meta.json").write_text(
                 json.dumps(meta, sort_keys=True, indent=2)
@@ -136,6 +159,31 @@ class Session:
             for w in (self._private_writer, self._public_writer,
                       self._snapshot_writer, self._censor_writer):
                 w.close()
+
+    async def _probe_providers(self) -> dict[str, dict[str, Any]]:
+        """For each LLMAgent in the seat list, call provider.probe() once
+        and store the §7.6-named JSON dict under the seat's string key.
+        Probes per provider instance are deduped (id-based) so two agents
+        sharing one provider only probe once and reuse the result.
+
+        The internal Pydantic `ObservedCapability` type uses §4.4 names
+        (reasoning_kinds, seed_accepted); we map to §7.6 persisted-schema
+        names (reasoning_kinds_observed, seed_supported) at this boundary
+        so analysts reading meta.json get the schema spec promises.
+        """
+        from llm_poker_arena.agents.llm.llm_agent import LLMAgent
+        results: dict[str, dict[str, Any]] = {}
+        cache: dict[int, dict[str, Any]] = {}
+        for seat, agent in enumerate(self._agents):
+            if not isinstance(agent, LLMAgent):
+                continue
+            provider = agent._provider  # noqa: SLF001
+            pid = id(provider)
+            if pid not in cache:
+                cap: ObservedCapability = await provider.probe()
+                cache[pid] = _capability_to_meta_json(cap)
+            results[str(seat)] = cache[pid]
+        return results
 
     # ------------------------------------------------- per-hand
 
