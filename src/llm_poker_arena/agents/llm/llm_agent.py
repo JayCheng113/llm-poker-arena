@@ -43,7 +43,6 @@ from llm_poker_arena.engine.legal_actions import (
 )
 from llm_poker_arena.engine.views import PlayerView
 
-
 _SYSTEM_PROMPT = """You are a player in a No-Limit Texas Hold'em 6-max cash game simulation.
 
 YOUR ROLE
@@ -88,7 +87,7 @@ class LLMAgent(Agent):
                 self._decide_inner(view),
                 timeout=self._total_turn_timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return TurnDecisionResult(
                 iterations=(),
                 final_action=None,
@@ -132,7 +131,7 @@ class LLMAgent(Agent):
                     ),
                     timeout=self._per_iter_timeout,
                 )
-            except (asyncio.TimeoutError, ProviderTransientError) as e:
+            except (TimeoutError, ProviderTransientError) as e:
                 err_type = (
                     "ProviderTransientError"
                     if isinstance(e, ProviderTransientError)

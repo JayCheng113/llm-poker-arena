@@ -8,6 +8,7 @@ extraction instead of dot-access.
 """
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -29,8 +30,9 @@ def _run_small_session(tmp_path: Path) -> Path:
     )
     agents = [RandomAgent(), RuleBasedAgent()] * 3
     sess_dir = tmp_path / "sess_smoke"
-    Session(config=cfg, agents=agents, output_dir=sess_dir,
-            session_id="smoke").run()
+    sess = Session(config=cfg, agents=agents, output_dir=sess_dir,
+                   session_id="smoke")
+    asyncio.run(sess.run())
     return sess_dir
 
 

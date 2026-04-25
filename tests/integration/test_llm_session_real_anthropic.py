@@ -25,7 +25,6 @@ from llm_poker_arena.agents.random_agent import RandomAgent
 from llm_poker_arena.engine.config import SessionConfig
 from llm_poker_arena.session.session import Session
 
-
 pytestmark = pytest.mark.skipif(
     os.getenv("ANTHROPIC_INTEGRATION_TEST") != "1"
     or not os.getenv("ANTHROPIC_API_KEY"),

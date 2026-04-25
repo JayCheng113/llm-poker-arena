@@ -8,7 +8,7 @@ caching headers.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from anthropic import APIStatusError, APITimeoutError, AsyncAnthropic, RateLimitError
 
@@ -41,12 +41,14 @@ class AnthropicProvider(LLMProvider):
         seed: int | None,
     ) -> LLMResponse:
         try:
+            # Anthropic SDK uses TypedDict for messages/tools; we use plain
+            # dicts here for cross-provider portability and cast at the boundary.
             resp = await self._client.messages.create(
                 model=self._model,
                 max_tokens=self._max_tokens,
                 temperature=temperature,
-                messages=messages,
-                tools=tools or None,
+                messages=cast("Any", messages),
+                tools=cast("Any", tools) if tools else cast("Any", None),
             )
         except (APITimeoutError, RateLimitError) as e:
             raise ProviderTransientError(str(e)) from e
@@ -97,7 +99,7 @@ class AnthropicProvider(LLMProvider):
         return LLMResponse(
             provider="anthropic",
             model=resp.model,
-            stop_reason=stop_reason,
+            stop_reason=cast("Any", stop_reason),
             tool_calls=tuple(tool_calls),
             text_content="".join(text_parts),
             tokens=tokens,

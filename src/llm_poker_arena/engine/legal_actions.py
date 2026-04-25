@@ -145,7 +145,9 @@ def validate_action(view: PlayerView, action: Action) -> ValidationResult:
         must be in the inclusive range advertised by the tool spec.
       - fold/check/call/all_in actions must have `args == {}`.
     """
-    legal_specs = {t.name: t for t in view.legal_actions.tools}
+    legal_specs: dict[str, ActionToolSpec] = {
+        t.name: t for t in view.legal_actions.tools
+    }
     spec = legal_specs.get(action.tool_name)
     if spec is None:
         return ValidationResult(

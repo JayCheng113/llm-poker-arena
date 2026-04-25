@@ -102,7 +102,7 @@ def test_turn_decision_result_is_frozen() -> None:
         turn_timeout_exceeded=False,
     )
     with pytest.raises(ValidationError):
-        r.wall_time_ms = 999  # type: ignore[misc]
+        r.wall_time_ms = 999
 
 
 def test_assistant_turn_preserves_blocks() -> None:

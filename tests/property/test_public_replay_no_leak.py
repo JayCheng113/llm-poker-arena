@@ -1,6 +1,7 @@
 """Property P2: public_replay.jsonl never leaks hole cards of non-showdown seats."""
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -31,8 +32,9 @@ def test_public_replay_has_no_non_showdown_hole_leak(
     # fresh dir per hypothesis example.
     out_dir = tmp_path_factory.mktemp("sess_leakcheck")  # type: ignore[attr-defined]
     agents = [RandomAgent() for _ in range(6)]
-    Session(config=cfg, agents=agents, output_dir=Path(out_dir),
-            session_id="leaktest").run()
+    sess = Session(config=cfg, agents=agents, output_dir=Path(out_dir),
+                   session_id="leaktest")
+    asyncio.run(sess.run())
 
     # For each hand in canonical_private, compare its hole_cards against the
     # cards revealed (or absent) in public_replay. Both files are one hand

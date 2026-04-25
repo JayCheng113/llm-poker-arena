@@ -90,7 +90,7 @@ def test_happy_path_first_response_is_legal_action() -> None:
     agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
     result = asyncio.run(agent.decide(_view(legal)))
     assert result.final_action == Action(tool_name="fold", args={})
-    assert result.iterations and len(result.iterations) == 1
+    assert len(result.iterations) == 1
     assert result.api_retry_count == 0
     assert result.illegal_action_retry_count == 0
     assert result.no_tool_retry_count == 0
@@ -212,7 +212,7 @@ def test_total_turn_timeout_returns_api_error() -> None:
     legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
 
     class SlowMock(MockLLMProvider):
-        async def complete(self, **_kw):  # type: ignore[override]
+        async def complete(self, **_kw: object) -> LLMResponse:  # type: ignore[override]
             await asyncio.sleep(2.0)
             raise RuntimeError("unreachable")
 
