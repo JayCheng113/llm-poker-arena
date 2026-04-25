@@ -249,7 +249,10 @@ def test_multi_tool_call_response_increments_tool_usage_error_count() -> None:
     agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
     result = asyncio.run(agent.decide(_view(legal)))
     assert result.tool_usage_error_count == 1
-    assert result.illegal_action_retry_count == 1  # consumed 1 retry slot
+    # Phase 3d: tool_usage_retry is independent from illegal_retry (spec
+    # §4.1 BR2-05). Multi-tool retry consumes the new tool_usage_retry slot,
+    # leaving illegal_retry untouched.
+    assert result.illegal_action_retry_count == 0
     assert result.final_action is not None
     assert result.final_action.tool_name == "fold"
     assert result.default_action_fallback is False
@@ -264,6 +267,44 @@ def test_action_tool_specs_fails_fast_on_missing_bounds() -> None:
     view = _view(bad_legal)
     with pytest.raises(ValueError, match="missing amount bounds"):
         _action_tool_specs(view)
+
+
+def test_tool_usage_error_does_not_consume_illegal_retry_budget() -> None:
+    """spec §4.1 BR2-05: tool_usage_error_count and illegal_retry have
+    independent budgets. After a multi-tool-call (consumes tool_usage slot),
+    a subsequent illegal-action attempt must STILL have its own retry slot."""
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),
+                                   ActionToolSpec(name="call", args={})))
+    multi_tool_response = LLMResponse(
+        provider="mock", model="m1", stop_reason="tool_use",
+        tool_calls=(
+            ToolCall(name="fold", args={}, tool_use_id="t1a"),
+            ToolCall(name="call", args={}, tool_use_id="t1b"),
+        ),
+        text_content="reasoning here",
+        tokens=TokenCounts(input_tokens=10, output_tokens=5,
+                           cache_read_input_tokens=0,
+                           cache_creation_input_tokens=0),
+        raw_assistant_turn=AssistantTurn(provider="mock", blocks=()),
+    )
+    illegal_response = _resp(
+        ToolCall(name="raise_to", args={"amount": 500},
+                 tool_use_id="t2"),
+    )
+    legal_recovery = _resp(
+        ToolCall(name="fold", args={}, tool_use_id="t3"),
+    )
+    script = MockResponseScript(responses=(
+        multi_tool_response, illegal_response, legal_recovery,
+    ))
+    provider = MockLLMProvider(script=script)
+    agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
+    result = asyncio.run(agent.decide(_view(legal)))
+    assert result.tool_usage_error_count == 1
+    assert result.illegal_action_retry_count == 1
+    assert result.final_action is not None
+    assert result.final_action.tool_name == "fold"
+    assert result.default_action_fallback is False
 
 
 def test_rationale_required_strict_mode_retries_on_empty_text() -> None:

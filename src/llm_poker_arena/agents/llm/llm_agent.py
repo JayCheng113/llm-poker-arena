@@ -104,11 +104,13 @@ class LLMAgent(Agent):
         MAX_API_RETRY = 1
         MAX_ILLEGAL_RETRY = 1
         MAX_NO_TOOL_RETRY = 1
-        MAX_STEPS = 4
+        MAX_TOOL_USAGE_RETRY = 1  # spec §4.1 BR2-05: independent budget
+        MAX_STEPS = 5  # bumped to accommodate 4 independent retries
 
         api_retry = 0
         illegal_retry = 0
         no_tool_retry = 0
+        tool_usage_retry = 0  # phase 3d: separate from tool_usage_error_count
         tool_usage_error_count = 0
 
         iterations: list[IterationRecord] = []
@@ -200,7 +202,8 @@ class LLMAgent(Agent):
                     tool_usage_error_count=tool_usage_error_count,
                 )
 
-            # Multi-tool-call response is misuse: count + retry via illegal slot.
+            # Multi-tool-call response is misuse: count + retry on dedicated
+            # tool_usage_retry slot (spec §4.1 BR2-05: 4 independent budgets).
             if len(response.tool_calls) > 1:
                 tool_usage_error_count += 1
                 first_tc = response.tool_calls[0]
@@ -214,8 +217,8 @@ class LLMAgent(Agent):
                     wall_time_ms=iter_ms,
                 )
                 iterations.append(iter_record)
-                if illegal_retry < MAX_ILLEGAL_RETRY:
-                    illegal_retry += 1
+                if tool_usage_retry < MAX_TOOL_USAGE_RETRY:
+                    tool_usage_retry += 1
                     messages.append(_assistant_message(response))
                     # Anthropic protocol: every tool_use block in the prior
                     # assistant turn must be answered with a tool_result block
