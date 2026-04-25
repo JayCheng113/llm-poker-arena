@@ -20,6 +20,7 @@ from llm_poker_arena.agents.llm.provider_base import (
 from llm_poker_arena.agents.llm.types import (
     AssistantTurn,
     LLMResponse,
+    ObservedCapability,
     ReasoningArtifact,
     ReasoningArtifactKind,
     TokenCounts,
@@ -208,6 +209,47 @@ class AnthropicProvider(LLMProvider):
                     provider_raw_index=idx,
                 ))
         return tuple(out)
+
+    async def probe(self) -> ObservedCapability:
+        """spec §4.4 HR2-03: minimal cheap probe with HONEST capability
+        reporting. Anthropic does not accept `seed` (Anthropic SDK has no
+        seed kwarg → seed_accepted=False is a static fact, not a test).
+        Phase 3b does NOT enable extended thinking on real calls, so the
+        observed reasoning_kinds is `(UNAVAILABLE,)` and tool_use_with_thinking
+        is `not_tested` (flag in extra_flags). A future "Phase 3b.1: extended
+        thinking enablement" should extend this probe to actually drive
+        a thinking-enabled tool_use round and observe behavior.
+        """
+        from datetime import UTC, datetime
+        try:
+            await self._client.messages.create(
+                model=self._model,
+                max_tokens=8,
+                messages=cast("Any", [{"role": "user", "content": "ok"}]),
+            )
+        except (APITimeoutError, RateLimitError) as e:
+            raise ProviderTransientError(f"probe transient: {e}") from e
+        except APIStatusError as e:
+            raise ProviderPermanentError(f"probe permanent: {e}") from e
+        probed_at = (
+            datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        )
+        return ObservedCapability(
+            provider="anthropic",
+            probed_at=probed_at,
+            # spec §4.6: probe observed no reasoning artifacts → UNAVAILABLE
+            # (not empty tuple — empty would mean "didn't probe"). Anthropic
+            # CAN emit reasoning when extended thinking is enabled, but 3b
+            # doesn't enable it, so the observed capability is honestly
+            # "unavailable in current config".
+            reasoning_kinds=(ReasoningArtifactKind.UNAVAILABLE,),
+            seed_accepted=False,  # Anthropic SDK has no seed kwarg, factually
+            tool_use_with_thinking_ok=False,  # see extra_flags
+            extra_flags={
+                "tool_use_with_thinking_probed": False,
+                "extended_thinking_enabled": False,
+            },
+        )
 
 
 __all__ = ["AnthropicProvider"]

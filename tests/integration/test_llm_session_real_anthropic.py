@@ -79,3 +79,12 @@ def test_real_claude_haiku_plays_one_hand(tmp_path: Path) -> None:
     # chip_pnl conservation still holds.
     meta = json.loads((tmp_path / "meta.json").read_text())
     assert sum(meta["chip_pnl"].values()) == 0
+
+
+def test_real_anthropic_probe_returns_observed_capability() -> None:
+    api_key = os.environ["ANTHROPIC_API_KEY"]
+    provider = AnthropicProvider(model="claude-haiku-4-5", api_key=api_key)
+    cap = asyncio.run(provider.probe())
+    assert cap.provider == "anthropic"
+    assert cap.seed_accepted is False
+    assert cap.probed_at.endswith("Z")

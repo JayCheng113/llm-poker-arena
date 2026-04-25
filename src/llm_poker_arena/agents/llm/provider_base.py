@@ -10,6 +10,7 @@ from typing import Any
 from llm_poker_arena.agents.llm.types import (
     AssistantTurn,
     LLMResponse,
+    ObservedCapability,
     ReasoningArtifact,
     ToolCall,
 )
@@ -111,6 +112,9 @@ class LLMProvider(ABC):
         empty tuple if the response carries no reasoning artifact. Each
         artifact carries `provider_raw_index` for forensic traceability."""
 
-    async def probe(self) -> Any:  # noqa: ANN401
-        """spec §4.4 HR2-03: live capability probe. 3a stub."""
-        raise NotImplementedError("Phase 3b feature — capability probe")
+    @abstractmethod
+    async def probe(self) -> ObservedCapability:
+        """spec §4.4 HR2-03: minimal cheap probe; called once per session at
+        startup. Result is written to meta.json.provider_capabilities. Used
+        to surface real provider behavior (vs the stale spec capability table)
+        for cross-provider analysis."""

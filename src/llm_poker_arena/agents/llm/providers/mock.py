@@ -14,6 +14,7 @@ from llm_poker_arena.agents.llm.provider_base import (
 )
 from llm_poker_arena.agents.llm.types import (
     LLMResponse,
+    ObservedCapability,
     ReasoningArtifact,
     ToolCall,
 )
@@ -122,6 +123,18 @@ class MockLLMProvider(LLMProvider):
         """Mock has no reasoning artifacts unless the test explicitly puts
         them into raw_assistant_turn.blocks (which mock tests don't)."""
         return ()
+
+    async def probe(self) -> ObservedCapability:
+        """Mock probe: no network, returns a deterministic fake capability."""
+        from datetime import UTC, datetime
+        return ObservedCapability(
+            provider="mock",
+            probed_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+            reasoning_kinds=(),
+            seed_accepted=True,
+            tool_use_with_thinking_ok=True,
+            extra_flags={"mock": True},
+        )
 
 
 __all__ = ["MockLLMProvider", "MockResponseScript", "ProviderTransientError"]
