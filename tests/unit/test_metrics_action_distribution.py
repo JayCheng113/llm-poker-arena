@@ -1,6 +1,7 @@
 """Tests for compute_action_distribution."""
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -19,8 +20,9 @@ def _run(tmp_path: Path) -> Path:
         opponent_stats_min_samples=30, rng_seed=11,
     )
     sess_dir = tmp_path / "b1"
-    Session(config=cfg, agents=[RandomAgent() for _ in range(6)],
-            output_dir=sess_dir, session_id="b1").run()
+    sess = Session(config=cfg, agents=[RandomAgent() for _ in range(6)],
+                   output_dir=sess_dir, session_id="b1")
+    asyncio.run(sess.run())
     return sess_dir
 
 

@@ -1,6 +1,7 @@
 """MVP 6 exit criterion: 1,000 mock-agent hands → 3-layer JSONL + meta + zero leak."""
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -26,7 +27,7 @@ def test_mvp6_thousand_hands_heterogeneous_lineup(tmp_path: Path) -> None:
     # Heterogeneous lineup: 3 Random + 3 RuleBased.
     agents = [RandomAgent(), RuleBasedAgent()] * 3
     sess = Session(config=cfg, agents=agents, output_dir=tmp_path, session_id="mvp6")
-    sess.run()
+    asyncio.run(sess.run())
 
     # Three layer files + meta + config.json exist.
     for fname in ("canonical_private.jsonl", "public_replay.jsonl",
