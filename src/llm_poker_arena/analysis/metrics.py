@@ -10,7 +10,7 @@ from typing import Any
 
 import duckdb
 
-from llm_poker_arena.analysis.sql import VPIP_SQL
+from llm_poker_arena.analysis.sql import PFR_SQL, VPIP_SQL
 
 
 def compute_vpip(con: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
@@ -24,5 +24,14 @@ def compute_vpip(con: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
     rows = con.sql(VPIP_SQL).fetchall()
     return [
         {"seat": int(r[0]), "n_hands": int(r[1]), "vpip_rate": float(r[2])}
+        for r in rows
+    ]
+
+
+def compute_pfr(con: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
+    """Return per-seat PFR rate (preflop raise frequency, voluntary only)."""
+    rows = con.sql(PFR_SQL).fetchall()
+    return [
+        {"seat": int(r[0]), "n_hands": int(r[1]), "pfr_rate": float(r[2])}
         for r in rows
     ]

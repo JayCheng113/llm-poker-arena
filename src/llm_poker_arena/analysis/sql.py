@@ -57,3 +57,34 @@ LEFT JOIN voluntary_preflop v ON s.seat = v.seat
 GROUP BY s.seat, t.n_hands
 ORDER BY s.seat;
 """
+
+
+PFR_SQL: str = """
+-- PFR: per-seat fraction of hands where player voluntarily raised preflop.
+-- PFR ⊆ VPIP (raising is a subset of voluntary action).
+-- Denominator semantics: identical to VPIP — hand count from `hands` view,
+-- NOT from `actions` (Risk 14; see VPIP_SQL comment).
+
+WITH all_seats AS (
+    SELECT DISTINCT seat FROM actions
+),
+total_hands_dealt AS (
+    SELECT COUNT(*) AS n_hands FROM hands
+),
+preflop_raises AS (
+    SELECT DISTINCT seat, hand_id
+    FROM actions
+    WHERE street = 'preflop'
+      AND is_forced_blind = false
+      AND final_action.type IN ('raise_to', 'bet')
+)
+SELECT
+    s.seat,
+    t.n_hands,
+    COUNT(p.hand_id) * 1.0 / t.n_hands AS pfr_rate
+FROM all_seats s
+CROSS JOIN total_hands_dealt t
+LEFT JOIN preflop_raises p ON s.seat = p.seat
+GROUP BY s.seat, t.n_hands
+ORDER BY s.seat;
+"""
