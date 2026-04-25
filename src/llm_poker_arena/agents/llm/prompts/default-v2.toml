@@ -1,0 +1,18 @@
+# Phase 3d default prompt profile.
+# Spec §6.3 anchors. TOML chosen over YAML to avoid pyyaml dep
+# (Python 3.11+ stdlib tomllib).
+
+name = "default-v2"
+language = "en"
+persona = ""                       # blank = no persona prefix
+reasoning_prompt = "light"
+rationale_required = true          # spec §4.5 H-14 default
+stats_min_samples = 30
+card_format = "Ah Kh"
+player_label_format = "Player_{seat}"
+position_label_format = "{short} ({full})"
+
+# Phase 3d-specific: which Jinja files to load
+[templates]
+system = "system.j2"
+user = "user.j2"

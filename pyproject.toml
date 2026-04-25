@@ -11,6 +11,7 @@ authors = [{ name = "zcheng256" }]
 dependencies = [
     "anthropic>=0.34,<1.0",
     "duckdb>=1.0,<2.0",
+    "jinja2>=3.1,<4.0",
     "matplotlib>=3.8,<4.0",
     "pokerkit>=0.7,<0.8",
     "pydantic>=2.0",
