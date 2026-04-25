@@ -238,6 +238,41 @@ class LLMAgent(Agent):
                     tool_usage_error_count=tool_usage_error_count,
                 )
 
+            # Phase 3d: rationale_required strict mode (spec §4.5).
+            # When the profile demands reasoning, an empty text_content with
+            # a tool_use block is treated as "no rationale" — same family of
+            # error as no_tool, consume the no_tool_retry budget.
+            if (self._prompt_profile.rationale_required
+                    and not response.text_content.strip()):
+                tc = response.tool_calls[0]
+                iter_record = IterationRecord(
+                    step=step + 1,
+                    request_messages_digest=digest,
+                    provider_response_kind="no_tool",
+                    tool_call=tc,
+                    text_content="",
+                    tokens=response.tokens,
+                    wall_time_ms=iter_ms,
+                )
+                iterations.append(iter_record)
+                if no_tool_retry < MAX_NO_TOOL_RETRY:
+                    no_tool_retry += 1
+                    messages.append(_assistant_message(response))
+                    messages.append(_tool_result_user(
+                        tool_use_id=tc.tool_use_id,
+                        is_error=True,
+                        content=(
+                            "Reasoning required: write 1-3 short paragraphs "
+                            "of reasoning before calling the tool. Try again."
+                        ),
+                    ))
+                    continue
+                return self._fallback_default_safe(
+                    view, iterations, total_tokens, turn_start,
+                    api_retry, illegal_retry, no_tool_retry,
+                    tool_usage_error_count=tool_usage_error_count,
+                )
+
             tc = response.tool_calls[0]
             candidate = Action(tool_name=tc.name, args=dict(tc.args or {}))
             v = validate_action(view, candidate)

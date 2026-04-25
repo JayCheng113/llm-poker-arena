@@ -68,7 +68,7 @@ def _view(legal: LegalActionSet) -> PlayerView:
 
 
 def _resp(*tool_calls: ToolCall, stop_reason: str = "tool_use",
-          text: str = "") -> LLMResponse:
+          text: str = "rationale: tactical decision") -> LLMResponse:
     return LLMResponse(
         provider="mock", model="m1",
         stop_reason=stop_reason,  # type: ignore[arg-type]
@@ -264,6 +264,77 @@ def test_action_tool_specs_fails_fast_on_missing_bounds() -> None:
     view = _view(bad_legal)
     with pytest.raises(ValueError, match="missing amount bounds"):
         _action_tool_specs(view)
+
+
+def test_rationale_required_strict_mode_retries_on_empty_text() -> None:
+    """When rationale_required=True (default), an LLM response with tool_use
+    but no text content triggers a 'rationale missing' retry (consumes the
+    no_tool_retry slot — text-only emit is the same family of error)."""
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
+    no_text_response = LLMResponse(
+        provider="mock", model="m1", stop_reason="tool_use",
+        tool_calls=(ToolCall(name="fold", args={}, tool_use_id="t1"),),
+        text_content="",
+        tokens=TokenCounts(input_tokens=10, output_tokens=5,
+                           cache_read_input_tokens=0,
+                           cache_creation_input_tokens=0),
+        raw_assistant_turn=AssistantTurn(provider="mock", blocks=()),
+    )
+    recovery = LLMResponse(
+        provider="mock", model="m1", stop_reason="tool_use",
+        tool_calls=(ToolCall(name="fold", args={}, tool_use_id="t2"),),
+        text_content="I am folding because 9-5o is weak.",
+        tokens=TokenCounts(input_tokens=10, output_tokens=10,
+                           cache_read_input_tokens=0,
+                           cache_creation_input_tokens=0),
+        raw_assistant_turn=AssistantTurn(provider="mock", blocks=()),
+    )
+    script = MockResponseScript(responses=(no_text_response, recovery))
+    provider = MockLLMProvider(script=script)
+    agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
+    result = asyncio.run(agent.decide(_view(legal)))
+    assert result.no_tool_retry_count == 1
+    assert result.final_action is not None
+    assert result.final_action.tool_name == "fold"
+
+
+def test_rationale_required_false_accepts_empty_text() -> None:
+    """When the profile has rationale_required=False, an empty-text response
+    with a legal tool call is accepted directly (no retry)."""
+    import tempfile
+    from pathlib import Path
+
+    from llm_poker_arena.agents.llm.prompt_profile import PromptProfile
+
+    with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as f:
+        f.write(
+            'name = "no-rat"\nlanguage = "en"\npersona = ""\n'
+            'reasoning_prompt = "light"\nrationale_required = false\n'
+            'stats_min_samples = 30\ncard_format = "Ah Kh"\n'
+            'player_label_format = "Player_{seat}"\n'
+            'position_label_format = "{short} ({full})"\n'
+            '[templates]\nsystem = "system.j2"\nuser = "user.j2"\n'
+        )
+        toml_path = Path(f.name)
+    profile = PromptProfile.from_toml(toml_path)
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
+    script = MockResponseScript(responses=(
+        LLMResponse(
+            provider="mock", model="m1", stop_reason="tool_use",
+            tool_calls=(ToolCall(name="fold", args={}, tool_use_id="t1"),),
+            text_content="",
+            tokens=TokenCounts(input_tokens=10, output_tokens=5,
+                               cache_read_input_tokens=0,
+                               cache_creation_input_tokens=0),
+            raw_assistant_turn=AssistantTurn(provider="mock", blocks=()),
+        ),
+    ))
+    provider = MockLLMProvider(script=script)
+    agent = LLMAgent(provider=provider, model="m1", temperature=0.7,
+                     prompt_profile=profile)
+    result = asyncio.run(agent.decide(_view(legal)))
+    assert result.no_tool_retry_count == 0
+    assert result.final_action is not None
 
 
 def test_llm_agent_renders_my_position_short_in_user_prompt() -> None:
