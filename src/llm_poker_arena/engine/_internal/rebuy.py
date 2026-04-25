@@ -16,6 +16,7 @@ Audit coverage (spec P7 / BR2-03):
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -92,7 +93,19 @@ def run_single_hand(
         actor = _current_actor(state)
         turn_seed = _derive_turn_seed(ctx.deck_seed, actor, turn_counter)
         view = build_player_view(state, actor, turn_seed=turn_seed)
-        action = agents[actor].decide(view)
+        # Phase 3a: Agent.decide is async; bridge here with asyncio.run so
+        # the 8 sync property/integration test files calling run_single_hand
+        # don't need migration. NOTE: cannot be called from inside an
+        # already-running event loop. Session is the async-native path.
+        decision = asyncio.run(agents[actor].decide(view))
+        if decision.api_error is not None or decision.final_action is None:
+            raise RuntimeError(
+                f"agent at seat {actor} returned api_error or null final_action: "
+                f"{decision.api_error!r}. The Phase-1 `run_single_hand` helper "
+                f"does not implement censor; use `Session` if your agents may "
+                f"emit api_error."
+            )
+        action = decision.final_action
 
         result = apply_action(state, actor, action)
         if not result.is_valid:

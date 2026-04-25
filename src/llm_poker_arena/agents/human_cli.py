@@ -14,6 +14,7 @@ import sys
 from typing import TextIO
 
 from llm_poker_arena.agents.base import Agent
+from llm_poker_arena.agents.llm.types import TokenCounts, TurnDecisionResult
 from llm_poker_arena.engine.legal_actions import Action
 from llm_poker_arena.engine.views import PlayerView
 
@@ -38,7 +39,20 @@ class HumanCLIAgent(Agent):
 
     # ----- Agent ABC -------------------------------------------------
 
-    def decide(self, view: PlayerView) -> Action:
+    async def decide(self, view: PlayerView) -> TurnDecisionResult:
+        action = self._pick_action(view)
+        return TurnDecisionResult(
+            iterations=(),
+            final_action=action,
+            total_tokens=TokenCounts.zero(),
+            wall_time_ms=0,
+            api_retry_count=0, illegal_action_retry_count=0,
+            no_tool_retry_count=0, tool_usage_error_count=0,
+            default_action_fallback=False,
+            api_error=None, turn_timeout_exceeded=False,
+        )
+
+    def _pick_action(self, view: PlayerView) -> Action:
         self._render_view(view)
         legal = {t.name for t in view.legal_actions.tools}
         while True:

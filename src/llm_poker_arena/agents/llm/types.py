@@ -24,11 +24,11 @@ class TokenCounts(BaseModel):
     cache_creation_input_tokens: int
 
     @classmethod
-    def zero(cls) -> "TokenCounts":
+    def zero(cls) -> TokenCounts:
         return cls(input_tokens=0, output_tokens=0,
                    cache_read_input_tokens=0, cache_creation_input_tokens=0)
 
-    def __add__(self, other: "TokenCounts") -> "TokenCounts":
+    def __add__(self, other: TokenCounts) -> TokenCounts:
         return TokenCounts(
             input_tokens=self.input_tokens + other.input_tokens,
             output_tokens=self.output_tokens + other.output_tokens,

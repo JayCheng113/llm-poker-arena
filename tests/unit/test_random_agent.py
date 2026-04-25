@@ -47,6 +47,13 @@ def _view_with(tools: LegalActionSet, turn_seed: int = 1) -> PlayerView:
     )
 
 
+def _act(agent: RandomAgent, view: object) -> object:
+    """Phase 3a helper: call async decide() and unwrap to Action."""
+    import asyncio
+    result = asyncio.run(agent.decide(view))  # type: ignore[arg-type]
+    return result.final_action
+
+
 def test_random_agent_picks_only_legal_tool_names() -> None:
     tools = LegalActionSet(tools=(
         ActionToolSpec(name="fold", args={}),
@@ -55,8 +62,8 @@ def test_random_agent_picks_only_legal_tool_names() -> None:
     agent = RandomAgent()
     for seed in range(100):
         view = _view_with(tools, turn_seed=seed)
-        act = agent.decide(view)
-        assert act.tool_name in {"fold", "call"}
+        act = _act(agent, view)
+        assert act.tool_name in {"fold", "call"}  # type: ignore[union-attr]
 
 
 def test_random_agent_is_deterministic_given_turn_seed() -> None:
@@ -66,8 +73,8 @@ def test_random_agent_is_deterministic_given_turn_seed() -> None:
         ActionToolSpec(name="raise_to", args={"amount": {"min": 200, "max": 1000}}),
     ))
     agent = RandomAgent()
-    a = agent.decide(_view_with(tools, turn_seed=777))
-    b = agent.decide(_view_with(tools, turn_seed=777))
+    a = _act(agent, _view_with(tools, turn_seed=777))
+    b = _act(agent, _view_with(tools, turn_seed=777))
     assert a == b
 
 
@@ -78,8 +85,8 @@ def test_random_agent_raise_amount_within_bounds() -> None:
     ))
     agent = RandomAgent()
     for seed in range(200):
-        act = agent.decide(_view_with(tools, turn_seed=seed))
-        if act.tool_name == "raise_to":
+        act = _act(agent, _view_with(tools, turn_seed=seed))
+        if act.tool_name == "raise_to":  # type: ignore[union-attr]
             assert 200 <= int(act.args["amount"]) <= 1000
 
 

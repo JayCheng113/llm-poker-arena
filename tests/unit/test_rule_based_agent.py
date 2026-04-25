@@ -1,9 +1,11 @@
 """Tests for RuleBasedAgent (B2 baseline) — rule dispatch, not play quality."""
 from __future__ import annotations
 
+import asyncio
 from typing import Literal, cast
 
 from llm_poker_arena.agents.rule_based import RuleBasedAgent
+from llm_poker_arena.engine.legal_actions import Action
 from llm_poker_arena.engine.types import Street
 from llm_poker_arena.engine.views import (
     ActionToolSpec,
@@ -12,6 +14,13 @@ from llm_poker_arena.engine.views import (
     SeatPublicInfo,
     SessionParamsView,
 )
+
+
+def _act(agent: RuleBasedAgent, view: PlayerView) -> Action:
+    """Phase 3a helper: call async decide() and unwrap to Action."""
+    result = asyncio.run(agent.decide(view))
+    assert result.final_action is not None
+    return result.final_action
 
 _ToolName = Literal["fold", "check", "call", "bet", "raise_to", "all_in"]
 
@@ -82,7 +91,7 @@ def _view(
 def test_premium_preflop_raises_from_utg() -> None:
     agent = RuleBasedAgent()
     v = _view(hole=("As", "Ad"))  # AA
-    act = agent.decide(v)
+    act = _act(agent, v)
     assert act.tool_name == "raise_to"
     # bb × 3 = 300 target
     assert act.args["amount"] == 300
@@ -91,7 +100,7 @@ def test_premium_preflop_raises_from_utg() -> None:
 def test_junk_preflop_folds_from_utg() -> None:
     agent = RuleBasedAgent()
     v = _view(hole=("7c", "2d"))  # 72o junk
-    act = agent.decide(v)
+    act = _act(agent, v)
     assert act.tool_name == "fold"
 
 
@@ -103,7 +112,7 @@ def test_medium_hand_folds_to_3bet_from_utg() -> None:
         legal_names=("fold", "call", "raise_to"),
         raise_min_max=(1800, 10_000),
     )
-    act = agent.decide(v)
+    act = _act(agent, v)
     assert act.tool_name == "fold"
 
 
@@ -115,7 +124,7 @@ def test_medium_hand_calls_single_raise_from_utg() -> None:
         legal_names=("fold", "call", "raise_to"),
         raise_min_max=(600, 10_000),
     )
-    act = agent.decide(v)
+    act = _act(agent, v)
     assert act.tool_name == "call"
 
 
@@ -135,7 +144,7 @@ def test_postflop_top_pair_bets_when_checkable_clamped_to_min() -> None:
         community=("Ah", "8c", "2d"),  # top pair aces
         raise_min_max=(100, 10_000),
     )
-    act = agent.decide(v)
+    act = _act(agent, v)
     assert act.tool_name == "bet"
     # pot/2 = 75 but min = 100 → clamp up to 100
     assert act.args["amount"] == 100
@@ -152,7 +161,7 @@ def test_postflop_missed_folds_when_facing_bet() -> None:
         community=("Ah", "Kc", "Qd"),
         raise_min_max=(400, 10_000),
     )
-    act = agent.decide(v)
+    act = _act(agent, v)
     assert act.tool_name == "fold"
 
 
@@ -167,7 +176,7 @@ def test_postflop_missed_checks_when_checkable() -> None:
         community=("Ah", "Kc", "Qd"),
         raise_min_max=(100, 10_000),
     )
-    act = agent.decide(v)
+    act = _act(agent, v)
     assert act.tool_name == "check"
 
 
@@ -183,7 +192,7 @@ def test_returned_action_is_always_in_legal_set() -> None:
         if c1 == c2:
             continue
         v = _view(hole=(c1, c2))
-        act = agent.decide(v)
+        act = _act(agent, v)
         names = {t.name for t in v.legal_actions.tools}
         assert act.tool_name in names, (c1, c2, act.tool_name, names)
 
@@ -205,7 +214,7 @@ def test_rule_based_falls_back_to_all_in_when_only_all_in_legal() -> None:
         hole=("7c", "2d"),
         legal_names=("all_in",),
     )
-    act = agent.decide(junk_v)
+    act = _act(agent, junk_v)
     assert act.tool_name == "all_in"
 
     # Postflop missed-hand view: hits `_safe_fold_or_check` fallback.
@@ -217,5 +226,5 @@ def test_rule_based_falls_back_to_all_in_when_only_all_in_legal() -> None:
         my_invested_this_round=0,
         legal_names=("all_in",),
     )
-    act = agent.decide(flop_v)
+    act = _act(agent, flop_v)
     assert act.tool_name == "all_in"

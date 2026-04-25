@@ -1,26 +1,24 @@
-"""Minimal Phase-1 Agent interface.
-
-This is intentionally narrower than the full spec §4.1 interface:
-  - Synchronous only (no async, no ToolRunner).
-  - Returns a bare Action (no iterations / reasoning / retry counters).
-
-Phase 3 will widen to `async decide(view, tool_runner) -> TurnDecisionResult`.
-The RandomAgent below implements this narrow shape to keep Phase-1 engine
-tests self-contained.
-"""
+"""Async Agent ABC (spec §4.1, Phase 3a)."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from llm_poker_arena.engine.legal_actions import Action
+from llm_poker_arena.agents.llm.types import TurnDecisionResult
 from llm_poker_arena.engine.views import PlayerView
 
 
 class Agent(ABC):
-    @abstractmethod
-    def decide(self, view: PlayerView) -> Action:
-        """Return a concrete Action proposal for this turn."""
+    """Phase 3 contract: every agent returns a complete decision record.
+
+    Sync-by-nature agents (RandomAgent / RuleBasedAgent / HumanCLIAgent)
+    implement `decide` as `async def` and return a TurnDecisionResult with
+    a single final_action and empty iterations / zero retries. LLMAgent
+    populates iterations + retry counters during ReAct.
+    """
 
     @abstractmethod
-    def provider_id(self) -> str:
-        """Stable identifier, e.g. 'random:seed42' or 'anthropic:claude-opus-4-7'."""
+    async def decide(self, view: PlayerView) -> TurnDecisionResult:
+        """Return a TurnDecisionResult for the given view. May not raise."""
+
+    @abstractmethod
+    def provider_id(self) -> str: ...

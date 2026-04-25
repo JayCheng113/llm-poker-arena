@@ -25,6 +25,7 @@ opponent.
 from __future__ import annotations
 
 from llm_poker_arena.agents.base import Agent
+from llm_poker_arena.agents.llm.types import TokenCounts, TurnDecisionResult
 from llm_poker_arena.engine.legal_actions import Action
 from llm_poker_arena.engine.types import Street
 from llm_poker_arena.engine.views import LegalActionSet, PlayerView
@@ -86,7 +87,20 @@ def _clamp(amount: int, lo: int, hi: int) -> int:
 class RuleBasedAgent(Agent):
     """B2 baseline: tight/aggressive rule dispatcher. Deterministic in `view`."""
 
-    def decide(self, view: PlayerView) -> Action:
+    async def decide(self, view: PlayerView) -> TurnDecisionResult:
+        action = self._pick_action(view)
+        return TurnDecisionResult(
+            iterations=(),
+            final_action=action,
+            total_tokens=TokenCounts.zero(),
+            wall_time_ms=0,
+            api_retry_count=0, illegal_action_retry_count=0,
+            no_tool_retry_count=0, tool_usage_error_count=0,
+            default_action_fallback=False,
+            api_error=None, turn_timeout_exceeded=False,
+        )
+
+    def _pick_action(self, view: PlayerView) -> Action:
         legal: set[str] = {str(t.name) for t in view.legal_actions.tools}
         bb = view.immutable_session_params.bb
         to_call = view.current_bet_to_match - view.my_invested_this_round

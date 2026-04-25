@@ -1,6 +1,7 @@
-"""Tests for HumanCLIAgent (sync Agent ABC implementation for terminal play)."""
+"""Tests for HumanCLIAgent (Phase 3a async Agent ABC, sync I/O underneath)."""
 from __future__ import annotations
 
+import asyncio
 import io
 from typing import Literal
 
@@ -16,6 +17,13 @@ from llm_poker_arena.engine.views import (
     SeatPublicInfo,
     SessionParamsView,
 )
+
+
+def _act(agent: HumanCLIAgent, view: PlayerView) -> Action:
+    """Phase 3a helper: call async decide() and unwrap to Action."""
+    result = asyncio.run(agent.decide(view))
+    assert result.final_action is not None
+    return result.final_action
 
 
 def _params() -> SessionParamsView:
@@ -79,7 +87,7 @@ def test_fold_is_accepted_verbatim() -> None:
     stdout = io.StringIO()
     agent = HumanCLIAgent(input_stream=stdin, output_stream=stdout)
     view = _view(legal_names=("fold", "call", "raise_to"))
-    act = agent.decide(view)
+    act = _act(agent, view)
     assert act == Action(tool_name="fold", args={})
 
 
@@ -88,7 +96,7 @@ def test_check_is_accepted_verbatim() -> None:
     stdout = io.StringIO()
     agent = HumanCLIAgent(input_stream=stdin, output_stream=stdout)
     view = _view(legal_names=("check", "bet"))
-    act = agent.decide(view)
+    act = _act(agent, view)
     assert act.tool_name == "check"
 
 
@@ -98,7 +106,7 @@ def test_raise_to_prompts_for_amount_on_separate_line() -> None:
     stdout = io.StringIO()
     agent = HumanCLIAgent(input_stream=stdin, output_stream=stdout)
     view = _view(legal_names=("fold", "call", "raise_to"), raise_min_max=(200, 10_000))
-    act = agent.decide(view)
+    act = _act(agent, view)
     assert act.tool_name == "raise_to"
     assert act.args == {"amount": 300}
 
@@ -108,7 +116,7 @@ def test_bet_prompts_for_amount_on_separate_line() -> None:
     stdout = io.StringIO()
     agent = HumanCLIAgent(input_stream=stdin, output_stream=stdout)
     view = _view(legal_names=("check", "bet"), raise_min_max=(100, 10_000))
-    act = agent.decide(view)
+    act = _act(agent, view)
     assert act.tool_name == "bet"
     assert act.args == {"amount": 500}
 
@@ -119,7 +127,7 @@ def test_unknown_action_name_reprompts() -> None:
     stdout = io.StringIO()
     agent = HumanCLIAgent(input_stream=stdin, output_stream=stdout)
     view = _view(legal_names=("fold", "call"))
-    act = agent.decide(view)
+    act = _act(agent, view)
     assert act.tool_name == "fold"
     assert "not a known action" in stdout.getvalue().lower()
 
@@ -130,7 +138,7 @@ def test_known_action_outside_legal_set_reprompts() -> None:
     stdout = io.StringIO()
     agent = HumanCLIAgent(input_stream=stdin, output_stream=stdout)
     view = _view(legal_names=("fold", "call"))
-    act = agent.decide(view)
+    act = _act(agent, view)
     assert act.tool_name == "fold"
     assert "not in legal set" in stdout.getvalue().lower()
 
@@ -144,7 +152,7 @@ def test_raise_below_min_reprompts() -> None:
         legal_names=("fold", "call", "raise_to"),
         raise_min_max=(200, 10_000),
     )
-    act = agent.decide(view)
+    act = _act(agent, view)
     assert act == Action(tool_name="raise_to", args={"amount": 400})
     assert "out of" in stdout.getvalue().lower() or "below min" in stdout.getvalue().lower()
 
@@ -157,7 +165,7 @@ def test_amount_not_an_integer_reprompts() -> None:
         legal_names=("fold", "call", "raise_to"),
         raise_min_max=(200, 10_000),
     )
-    act = agent.decide(view)
+    act = _act(agent, view)
     assert act.args == {"amount": 400}
 
 
@@ -168,7 +176,7 @@ def test_eof_mid_prompt_raises() -> None:
     agent = HumanCLIAgent(input_stream=stdin, output_stream=stdout)
     view = _view(legal_names=("fold", "call"))
     with pytest.raises(EOFError):
-        agent.decide(view)
+        asyncio.run(agent.decide(view))
 
 
 def test_provider_id_is_stable_and_namespaced() -> None:
@@ -187,7 +195,7 @@ def test_view_renders_hole_community_stack_to_output() -> None:
     stdout = io.StringIO()
     agent = HumanCLIAgent(input_stream=stdin, output_stream=stdout)
     view = _view(legal_names=("fold", "call"))
-    agent.decide(view)
+    asyncio.run(agent.decide(view))
     text = stdout.getvalue()
     assert "As" in text
     assert "Kd" in text

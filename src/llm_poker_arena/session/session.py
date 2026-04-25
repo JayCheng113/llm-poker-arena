@@ -1,7 +1,8 @@
 """Session orchestrator: multi-hand loop with audit + 3-layer event emission.
 
 Replaces Phase-1 `engine._internal.rebuy.run_single_hand` for end-to-end runs.
-Phase 2a: synchronous; each agent's `decide(view)` is called inline. Per hand:
+Phase 3a: async; each agent's `await decide(view) -> TurnDecisionResult` is
+called inline. Per hand:
 
   - One `CanonicalPrivateHandRecord` line (canonical_private.jsonl)
   - One `PublicHandRecord` line (public_replay.jsonl; spec §7.3 hand-per-line
@@ -29,11 +30,11 @@ from pathlib import Path
 from typing import Any, cast
 
 from llm_poker_arena.agents.base import Agent
+from llm_poker_arena.agents.llm.types import ApiErrorInfo
 from llm_poker_arena.engine._internal.audit import HandPhase, audit_invariants
 from llm_poker_arena.engine._internal.poker_state import CanonicalState
 from llm_poker_arena.engine._internal.rebuy import derive_deck_seed
 from llm_poker_arena.engine.config import HandContext, SessionConfig
-from llm_poker_arena.engine.legal_actions import default_safe_action
 from llm_poker_arena.engine.projections import build_player_view
 from llm_poker_arena.engine.transition import apply_action
 from llm_poker_arena.engine.types import Street
@@ -107,13 +108,13 @@ class Session:
         self._chip_pnl: dict[int, int] = {i: 0 for i in range(config.num_players)}
         self._total_hands_played = 0
 
-    def run(self) -> None:
+    async def run(self) -> None:
         started_at_iso = _now_iso()
         started_at_monotonic = time.monotonic()
         initial_button_seat = 0
         try:
             for hand_id in range(self._config.num_hands):
-                self._run_one_hand(hand_id)
+                await self._run_one_hand(hand_id)
                 self._total_hands_played += 1
         finally:
             ended_at_iso = _now_iso()
@@ -136,7 +137,7 @@ class Session:
 
     # ------------------------------------------------- per-hand
 
-    def _run_one_hand(self, hand_id: int) -> None:
+    async def _run_one_hand(self, hand_id: int) -> None:
         cfg = self._config
         ctx = HandContext(
             hand_id=hand_id,
@@ -172,18 +173,22 @@ class Session:
             turn_seed = _derive_turn_seed(ctx.deck_seed, actor, turn_counter)
             view = build_player_view(state, actor, turn_seed=turn_seed)
             street = view.street
-            chosen = self._agents[actor].decide(view)
-            fallback = False
+            decision = await self._agents[actor].decide(view)
+            if decision.api_error is not None or decision.final_action is None:
+                # spec §4.1 BR2-01: censor hand on api_error.
+                self._record_censored_hand(
+                    hand_id=hand_id, seat=actor, error=decision.api_error,
+                )
+                return
+            chosen = decision.final_action
+            fallback = decision.default_action_fallback
             result = apply_action(state, actor, chosen)
             if not result.is_valid:
-                fallback = True
-                chosen = default_safe_action(view)
-                result2 = apply_action(state, actor, chosen)
-                if not result2.is_valid:
-                    raise RuntimeError(
-                        f"default_safe_action also rejected by pokerkit at seat {actor}: "
-                        f"reason={result2.reason}"
-                    )
+                raise RuntimeError(
+                    f"agent at seat {actor} returned action {chosen!r} that "
+                    f"pokerkit rejected: {result.reason}. This is an agent "
+                    f"contract violation."
+                )
 
             events.append(build_public_action_event(
                 hand_id=hand_id, seat=actor, street=street, action=chosen,
@@ -195,8 +200,15 @@ class Session:
                 street=street, timestamp=_now_iso(), view=view,
                 action=chosen, turn_index=turn_counter,
                 agent_provider=provider, agent_model=model,
-                agent_version="phase2a",
+                agent_version="phase3a",
                 default_action_fallback=fallback,
+                iterations=decision.iterations,
+                total_tokens=decision.total_tokens,
+                wall_time_ms=decision.wall_time_ms,
+                api_retry_count=decision.api_retry_count,
+                illegal_action_retry_count=decision.illegal_action_retry_count,
+                no_tool_retry_count=decision.no_tool_retry_count,
+                tool_usage_error_count=decision.tool_usage_error_count,
             )
             self._snapshot_writer.write(snapshot.model_dump(mode="json"))
 
@@ -323,4 +335,22 @@ class Session:
             "_maybe_advance_between_streets exceeded 32 iterations; pokerkit "
             "between-streets state machine is not converging (hand_id="
             f"{hand_id})"
+        )
+
+    # ------------------------------------------------- censor
+
+    def _record_censored_hand(
+        self, *, hand_id: int, seat: int, error: ApiErrorInfo | None,
+    ) -> None:
+        """Phase 3a stub for spec BR2-01 hand censoring.
+
+        On api_error / null final_action, abandon the current hand without
+        applying any action. Phase 3d adds proper censor record into
+        public_replay; for now we just log to stderr-like stdout.
+        """
+        print(
+            f"[SESSION] hand {hand_id} censored: agent at seat {seat} "
+            f"returned api_error or null final_action ({error!r}). "
+            f"No action applied; hand abandoned.",
+            flush=True,
         )

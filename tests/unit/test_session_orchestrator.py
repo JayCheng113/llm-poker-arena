@@ -1,6 +1,7 @@
 """Tests for Session orchestrator (3-hand smoke + artifact structural checks)."""
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -24,7 +25,7 @@ def test_session_writes_three_jsonl_files(tmp_path: Path) -> None:
     cfg = _cfg()
     agents = [RandomAgent(), RuleBasedAgent()] * 3
     sess = Session(config=cfg, agents=agents, output_dir=tmp_path, session_id="sess_test")
-    sess.run()
+    asyncio.run(sess.run())
     # All 3 layer files exist and are non-empty.
     for fname in ("canonical_private.jsonl", "public_replay.jsonl",
                   "agent_view_snapshots.jsonl", "meta.json"):
@@ -37,7 +38,7 @@ def test_session_canonical_private_has_num_hands_lines(tmp_path: Path) -> None:
     cfg = _cfg()
     agents = [RandomAgent() for _ in range(6)]
     sess = Session(config=cfg, agents=agents, output_dir=tmp_path, session_id="sess_c")
-    sess.run()
+    asyncio.run(sess.run())
     lines = (tmp_path / "canonical_private.jsonl").read_text().strip().splitlines()
     assert len(lines) == cfg.num_hands
 
@@ -47,7 +48,7 @@ def test_session_public_replay_is_one_hand_per_line(tmp_path: Path) -> None:
     cfg = _cfg()
     agents = [RandomAgent() for _ in range(6)]
     sess = Session(config=cfg, agents=agents, output_dir=tmp_path, session_id="sess_p")
-    sess.run()
+    asyncio.run(sess.run())
     lines = (tmp_path / "public_replay.jsonl").read_text().strip().splitlines()
     assert len(lines) == cfg.num_hands
     first_hand = json.loads(lines[0])
@@ -74,7 +75,7 @@ def test_session_agent_view_snapshot_is_at_least_one_per_hand(tmp_path: Path) ->
     cfg = _cfg()
     agents = [RandomAgent() for _ in range(6)]
     sess = Session(config=cfg, agents=agents, output_dir=tmp_path, session_id="sess_a")
-    sess.run()
+    asyncio.run(sess.run())
     lines = (tmp_path / "agent_view_snapshots.jsonl").read_text().strip().splitlines()
     # Each hand has >= 1 action turn (minimum: 1 fold settles pre-action? No --
     # with blinds posted, BB can check at minimum, so >= 1 turn always).
@@ -85,7 +86,7 @@ def test_session_meta_json_carries_total_hands_and_chip_pnl(tmp_path: Path) -> N
     cfg = _cfg()
     agents = [RandomAgent() for _ in range(6)]
     sess = Session(config=cfg, agents=agents, output_dir=tmp_path, session_id="sess_m")
-    sess.run()
+    asyncio.run(sess.run())
     meta = json.loads((tmp_path / "meta.json").read_text())
     assert meta["session_id"] == "sess_m"
     assert meta["total_hands_played"] == cfg.num_hands
@@ -117,9 +118,10 @@ def test_session_canonical_private_preserves_hole_cards_of_folded_seats(
     """
     cfg = _cfg()  # 6 hands, rng_seed=42 — produces natural folds
     agents = [RandomAgent() for _ in range(6)]
-    Session(
+    sess = Session(
         config=cfg, agents=agents, output_dir=tmp_path, session_id="sess_holes",
-    ).run()
+    )
+    asyncio.run(sess.run())
 
     lines = (tmp_path / "canonical_private.jsonl").read_text().strip().splitlines()
     assert len(lines) == cfg.num_hands
@@ -155,9 +157,10 @@ def test_session_public_showdown_event_reveals_all_participants_not_just_winner(
         opponent_stats_min_samples=30, rng_seed=99,
     )
     agents = [RandomAgent() for _ in range(6)]
-    Session(
+    sess = Session(
         config=cfg, agents=agents, output_dir=tmp_path, session_id="sess_showdown",
-    ).run()
+    )
+    asyncio.run(sess.run())
 
     hands_with_showdown: list[dict[str, object]] = []
     for line in (tmp_path / "public_replay.jsonl").read_text().splitlines():

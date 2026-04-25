@@ -29,9 +29,16 @@ class MockResponseScript:
 
 
 class MockLLMProvider(LLMProvider):
+    """Two-cursor mock: `call_index` tracks total calls (drives error injection),
+    `response_cursor` indexes into `responses` and only advances when a real
+    response is delivered. This way an error at call 0 followed by a real
+    response at call 1 returns `responses[0]`, not `responses[1]`.
+    """
+
     def __init__(self, script: MockResponseScript) -> None:
         self._script = script
-        self._cursor = 0
+        self._call_index = 0
+        self._response_cursor = 0
 
     async def complete(
         self,
@@ -40,17 +47,19 @@ class MockLLMProvider(LLMProvider):
         temperature: float,
         seed: int | None,
     ) -> LLMResponse:
-        idx = self._cursor
-        if idx in self._script.errors_at_step:
-            self._cursor += 1
-            raise self._script.errors_at_step[idx]
-        if idx >= len(self._script.responses):
+        call_idx = self._call_index
+        self._call_index += 1
+        if call_idx in self._script.errors_at_step:
+            raise self._script.errors_at_step[call_idx]
+        ridx = self._response_cursor
+        if ridx >= len(self._script.responses):
             raise RuntimeError(
-                f"MockLLMProvider script exhausted at step {idx} "
-                f"(have {len(self._script.responses)} responses)"
+                f"MockLLMProvider script exhausted at call {call_idx} "
+                f"(response cursor {ridx}, have {len(self._script.responses)} "
+                f"responses)"
             )
-        resp = self._script.responses[idx]
-        self._cursor += 1
+        resp = self._script.responses[ridx]
+        self._response_cursor += 1
         return resp
 
     def provider_name(self) -> str:

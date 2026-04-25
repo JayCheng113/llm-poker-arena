@@ -7,6 +7,7 @@ session-level summary from `meta.json`.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import sys
 from collections.abc import Sequence
@@ -118,10 +119,11 @@ def run_cli(
             f"aborting to avoid appending to stale artifacts\n"
         )
         return 1
-    Session(
+    sess = Session(
         config=cfg, agents=agents, output_dir=session_dir,
         session_id=session_dir.name,
-    ).run()
+    )
+    asyncio.run(sess.run())
 
     _print_session_summary(session_dir, my_seat=my_seat, output_stream=out_stream)
     return 0

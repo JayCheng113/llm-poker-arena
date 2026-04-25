@@ -20,8 +20,10 @@ always `False` (mock agents never post blinds).
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, cast
 
+from llm_poker_arena.agents.llm.types import IterationRecord, TokenCounts
 from llm_poker_arena.engine.legal_actions import Action
 from llm_poker_arena.engine.types import Street
 from llm_poker_arena.engine.views import PlayerView
@@ -175,12 +177,32 @@ def build_agent_view_snapshot(
     timestamp: str, view: PlayerView, action: Action, turn_index: int,
     agent_provider: str, agent_model: str, agent_version: str,
     default_action_fallback: bool,
+    iterations: tuple[IterationRecord, ...] = (),
+    total_tokens: TokenCounts | Mapping[str, int] | None = None,
+    wall_time_ms: int = 0,
+    api_retry_count: int = 0,
+    illegal_action_retry_count: int = 0,
+    no_tool_retry_count: int = 0,
+    tool_usage_error_count: int = 0,
 ) -> AgentViewSnapshot:
     final_action: dict[str, Any] = {"type": action.tool_name}
     if action.tool_name in ("bet", "raise_to"):
         amt = action.args.get("amount") if isinstance(action.args, dict) else None
         if amt is not None:
             final_action["amount"] = int(amt)
+
+    iter_dump: tuple[dict[str, Any], ...] = tuple(
+        cast("Any", ir).model_dump(mode="json") for ir in iterations
+    )
+    total_tokens_dict: dict[str, int]
+    if total_tokens is None:
+        total_tokens_dict = {}
+    elif isinstance(total_tokens, TokenCounts):
+        total_tokens_dict = cast("dict[str, int]",
+                                 total_tokens.model_dump(mode="json"))
+    else:
+        total_tokens_dict = dict(total_tokens)
+
     return AgentViewSnapshot(
         hand_id=hand_id,
         turn_id=f"{hand_id}-{street.value}-{turn_index}",
@@ -189,19 +211,19 @@ def build_agent_view_snapshot(
         street=cast(Any, street.value),
         timestamp=timestamp,
         view_at_turn_start=view.model_dump(mode="json"),
-        iterations=(),
+        iterations=iter_dump,
         final_action=final_action,
         is_forced_blind=False,
         total_utility_calls=0,
-        api_retry_count=0,
-        illegal_action_retry_count=0,
-        no_tool_retry_count=0,
-        tool_usage_error_count=0,
+        api_retry_count=api_retry_count,
+        illegal_action_retry_count=illegal_action_retry_count,
+        no_tool_retry_count=no_tool_retry_count,
+        tool_usage_error_count=tool_usage_error_count,
         default_action_fallback=default_action_fallback,
         api_error=None,
         turn_timeout_exceeded=False,
-        total_tokens={},
-        wall_time_ms=0,
+        total_tokens=total_tokens_dict,
+        wall_time_ms=wall_time_ms,
         agent=AgentDescriptor(
             provider=agent_provider,
             model=agent_model,
