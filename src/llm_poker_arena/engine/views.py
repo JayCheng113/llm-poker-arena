@@ -163,9 +163,13 @@ class PlayerView(BaseModel):
     my_invested_this_hand: Chips
     my_invested_this_round: Chips
     current_bet_to_match: Chips
+    to_call: Chips
+    pot_odds_required: float | None
+    effective_stack: Chips
     seats_public: tuple[SeatPublicInfo, ...]
     opponent_seats_in_hand: tuple[SeatId, ...]
     action_order_this_street: tuple[SeatId, ...]
+    seats_yet_to_act_after_me: tuple[SeatId, ...]
     already_acted_this_street: tuple[ActionRecord, ...]
     hand_history: tuple[StreetHistory, ...]
     legal_actions: LegalActionSet

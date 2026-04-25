@@ -143,29 +143,83 @@ def build_player_view(
     stacks = list(getattr(raw, "stacks", ()) or [0] * state.num_players)
     my_stack = int(stacks[actor]) if actor < len(stacks) else 0
 
+    pot_total = int(getattr(raw, "total_pot_amount", 0) or 0)
+    street = _infer_street(state)
+    to_call = max(0, max_bet - my_invested_round)
+    pot_odds_required: float | None = (
+        to_call / (pot_total + to_call) if to_call > 0 else None
+    )
+    # Effective stack: capped by deepest non-folded opponent. With no opps left
+    # the heads-up notion degenerates to my own stack.
+    opp_stacks = [seats[i].stack for i in opp_in_hand]
+    effective_stack = min(my_stack, max(opp_stacks)) if opp_stacks else my_stack
+
     return PlayerView(
         my_seat=actor,
         my_hole_cards=my_hole,
         community=tuple(state.community()),
-        pot=int(getattr(raw, "total_pot_amount", 0) or 0),
+        pot=pot_total,
         sidepots=(),  # TODO(phase2): derive side pots from state.pots after BET_COLLECTION
         my_stack=my_stack,
         my_invested_this_hand=my_invested_round,  # TODO(phase2): plumb cumulative across streets; currently equals this_round
         my_invested_this_round=my_invested_round,
         current_bet_to_match=max_bet,
+        to_call=to_call,
+        pot_odds_required=pot_odds_required,
+        effective_stack=effective_stack,
         seats_public=seats,
         opponent_seats_in_hand=tuple(opp_in_hand),
-        action_order_this_street=tuple(range(state.num_players)),  # TODO(phase2): derive from state.actor_indices; preflop first-to-act is UTG, not seat 0
+        action_order_this_street=_canonical_street_action_order(
+            button=state.button_seat, n=state.num_players, street=street,
+        ),
+        seats_yet_to_act_after_me=_seats_yet_to_act_after_me(state, actor),
         already_acted_this_street=(),  # TODO(phase2): thread street-history plumbing
         hand_history=(),  # TODO(phase2): thread street-history plumbing
         legal_actions=compute_legal_tool_set(state, actor),
         opponent_stats={},  # TODO(phase2): thread HUD stats from DuckDB
         hand_id=state._ctx.hand_id,  # noqa: SLF001
-        street=_infer_street(state),
+        street=street,
         button_seat=state.button_seat,
         turn_seed=turn_seed,
         immutable_session_params=_session_params_view(state),
     )
+
+
+def _canonical_street_action_order(
+    *, button: int, n: int, street: Street,
+) -> tuple[int, ...]:
+    """The canonical seat-order for a street, full N seats including folded.
+
+    Preflop: UTG (= button+3) acts first, then HJ, CO, BTN, SB, BB.
+    Postflop: SB (= button+1) acts first; BTN (= button) closes.
+
+    This is the *theoretical* street order, not the live action queue: it
+    includes every seat at the table in their natural turn so that callers
+    relying on `view.action_order_this_street.index(my_seat)` get a stable
+    position index. For live "who's still to act" use
+    `seats_yet_to_act_after_me` (PokerKit-derived).
+    """
+    start = (button + 3) % n if street == Street.PREFLOP else (button + 1) % n
+    return tuple((start + i) % n for i in range(n))
+
+
+def _seats_yet_to_act_after_me(state: CanonicalState, actor: int) -> tuple[int, ...]:
+    """Seats remaining in PokerKit's actor queue *after* dropping me.
+
+    PokerKit's `state.actor_indices` is a deque whose head is the current
+    actor. The tail enumerates the seats that will act next on this street
+    after the current actor; PokerKit handles fold / all-in / re-queueing
+    after a raise, so reading the deque is more robust than recomputing it
+    from scratch.
+    """
+    raw = state._state  # noqa: SLF001
+    queue = getattr(raw, "actor_indices", None)
+    if queue is None:
+        return ()
+    seq = tuple(int(i) for i in queue)
+    if not seq or seq[0] != actor:
+        return seq
+    return seq[1:]
 
 
 def build_public_view(state: CanonicalState) -> PublicView:

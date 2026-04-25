@@ -32,19 +32,26 @@ def _seats() -> tuple[SeatPublicInfo, ...]:
 
 
 def _view(*, current_bet_to_match: int, my_invested_this_round: int) -> PlayerView:
+    to_call = max(0, current_bet_to_match - my_invested_this_round)
+    pot = 150
+    pot_odds = to_call / (pot + to_call) if to_call > 0 else None
     return PlayerView(
         my_seat=3,
         my_hole_cards=("As", "Kd"),
         community=(),
-        pot=150,
+        pot=pot,
         sidepots=(),
         my_stack=10_000,
         my_invested_this_hand=my_invested_this_round,
         my_invested_this_round=my_invested_this_round,
         current_bet_to_match=current_bet_to_match,
+        to_call=to_call,
+        pot_odds_required=pot_odds,
+        effective_stack=10_000,
         seats_public=_seats(),
         opponent_seats_in_hand=(0, 1, 2, 4, 5),
         action_order_this_street=(2, 3, 4, 5, 0, 1),
+        seats_yet_to_act_after_me=(4, 5, 0, 1),
         already_acted_this_street=(),
         hand_history=(),
         legal_actions=LegalActionSet(
