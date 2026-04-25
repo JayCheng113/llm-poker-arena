@@ -259,3 +259,41 @@ def test_observed_capability_round_trip() -> None:
     blob = cap.model_dump_json()
     cap2 = ObservedCapability.model_validate_json(blob)
     assert cap2 == cap
+
+
+def test_iteration_record_default_reasoning_artifacts_is_empty_tuple() -> None:
+    rec = IterationRecord(
+        step=1, request_messages_digest="sha256:abcd",
+        provider_response_kind="tool_use", tool_call=None,
+        text_content="thinking", tokens=TokenCounts.zero(),
+        wall_time_ms=42,
+    )
+    assert rec.reasoning_artifacts == ()
+
+
+def test_iteration_record_with_reasoning_artifacts_round_trip() -> None:
+    from llm_poker_arena.agents.llm.types import (
+        ReasoningArtifact,
+        ReasoningArtifactKind,
+    )
+    arts = (
+        ReasoningArtifact(
+            kind=ReasoningArtifactKind.THINKING_BLOCK,
+            content="step 1 of CoT", provider_raw_index=0,
+        ),
+        ReasoningArtifact(
+            kind=ReasoningArtifactKind.ENCRYPTED,
+            content="opaque_blob", provider_raw_index=1,
+        ),
+    )
+    rec = IterationRecord(
+        step=2, request_messages_digest="sha256:1234",
+        provider_response_kind="tool_use", tool_call=None,
+        text_content="surface answer", tokens=TokenCounts.zero(),
+        wall_time_ms=99, reasoning_artifacts=arts,
+    )
+    blob = rec.model_dump_json()
+    rec2 = IterationRecord.model_validate_json(blob)
+    assert rec2 == rec
+    assert len(rec2.reasoning_artifacts) == 2
+    assert rec2.reasoning_artifacts[0].kind == ReasoningArtifactKind.THINKING_BLOCK

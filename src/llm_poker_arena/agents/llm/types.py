@@ -76,7 +76,15 @@ class LLMResponse(BaseModel):
 
 
 class IterationRecord(BaseModel):
-    """spec §4.3: one per ReAct loop iteration. Written into agent_view_snapshots."""
+    """spec §4.3: one per ReAct loop iteration. Written into agent_view_snapshots.
+
+    `reasoning_artifacts` is a tuple (not the singular field name in spec §4.3
+    code block) because §4.6 ReasoningArtifact carries `provider_raw_index`
+    implying a list — Anthropic extended thinking can emit multiple thinking
+    blocks per turn. Empty tuple is the default for providers that emit no
+    reasoning artifacts (Anthropic without extended thinking, OpenAI Chat,
+    DeepSeek-Chat / V3).
+    """
 
     model_config = _frozen()
 
@@ -87,6 +95,7 @@ class IterationRecord(BaseModel):
     text_content: str
     tokens: TokenCounts
     wall_time_ms: int
+    reasoning_artifacts: tuple[ReasoningArtifact, ...] = ()
 
 
 class ApiErrorInfo(BaseModel):
