@@ -41,7 +41,7 @@ Skip nothing in this section — Phase 1 and Phase 2a both had plan code that di
 - **`meta.json`** — session-level aggregate; has `session_id`, `chip_pnl: dict[str, int]`, `total_hands_played`, `session_wall_time_sec`, `seat_assignment`, etc. Read for chart titles + P&L histograms.
 - **`config.json`** — the SessionConfig snapshot (`rng_seed`, `num_hands`, `sb/bb`, etc.). Read for reproducibility annotations in plots.
 
-### Pitfall register (13 risks — the plan addresses each)
+### Pitfall register (15 risks — the plan addresses each)
 
 1. **DuckDB struct inference on heterogeneous `final_action`.** Rows alternate between `{"type":"fold"}` and `{"type":"raise_to","amount":300}`. `read_json_auto` samples rows to infer a struct schema; if sampling misses the `amount` field, later rows with `amount` might fail to parse or come in as NULL. **Mitigation**: Task 3 is a canary smoke test that reads a real Phase 2a session BEFORE any metric SQL lands. Use `read_json_auto(..., sample_size=-1)` (full scan) to guarantee schema unification.
 
@@ -68,6 +68,10 @@ Skip nothing in this section — Phase 1 and Phase 2a both had plan code that di
 12. **DuckDB in-memory connections are per-call.** `duckdb.connect(":memory:")` creates a fresh connection each call — views don't persist across calls. The analysis pipeline must either hold a single connection for the whole analysis OR re-open-and-re-create-views per metric. Task 2's `open_session` returns a connection that callers MUST close (use `with` context manager or explicit `.close()`).
 
 13. **`readline` segfault environment workaround.** Already documented in Phase 1 memory. `source .venv/bin/activate && pytest` works; `uv run pytest` segfaults. No Phase-2b-specific action needed.
+
+14. **Not every (seat, hand) pair produces an `AgentViewSnapshot`.** Empirically verified (Codex review of this plan, DuckDB 1.5.2, 24-hand session rng_seed=42): seat 4 had snapshots on 23/24 hands. When all other seats fold pre-flop and the BB wins by walk, the BB never enters the `while state.actor_index is not None` loop — no snapshot is written for that (seat=BB, hand). Implication: `COUNT(DISTINCT hand_id) FROM actions GROUP BY seat` UNDERCOUNTS the per-seat participating-hand count and inflates VPIP/PFR rates proportionally. The fix used in T4/T5: derive `n_hands` from the `hands` view (which has one row per hand regardless of action count). Tests MUST cover this edge case — see T4/T5 regression fixtures.
+
+15. **DuckDB views over `read_json_auto` re-scan the file on every query.** Empirically confirmed (Codex review). Acceptable for MVP-7-sized sessions (≤ 2000 hands); for multi-session analyses or repeated metrics/charts, materialise to a temporary TABLE via `CREATE TABLE actions AS SELECT * FROM read_json_auto(...)`. Phase 2b does not materialise — plan's tests all open a fresh connection per test so view re-scan cost is bounded.
 
 ### What Phase 2b does NOT do (scope discipline)
 
@@ -254,7 +258,7 @@ def test_rejects_path_traversal(
 
     # Path with `..` that resolves outside runs_root.
     traversal = runs_root / ".." / "etc" / "passwd"
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="not under trusted runs root"):
         safe_json_source(traversal)
 
 
@@ -550,8 +554,10 @@ def test_duckdb_can_read_actions_view(
 
     sess_dir = _run_small_session(tmp_path)
     with open_session(sess_dir, access_token=PRIVATE_ACCESS_TOKEN) as con:
+        # DESCRIBE returns (column_name, column_type, null, key, default, extra)
+        # — column NAMES live at row[0], NOT row[1].
         cols = {
-            row[1]
+            row[0]
             for row in con.sql("DESCRIBE actions").fetchall()
         }
         # Required fields for VPIP/PFR/action_distribution SQL.
@@ -669,12 +675,20 @@ def test_compute_vpip_returns_one_row_per_seat(
     sess_dir = _run_b1(tmp_path)
     with open_session(sess_dir, access_token=PRIVATE_ACCESS_TOKEN) as con:
         result = compute_vpip(con)
+        # Derive the authoritative hand count from `hands` view (NOT from
+        # actions — see Risk 14: walks cause missing snapshots, so an
+        # actions-derived count would be systematically low and inflate VPIP).
+        expected_n_hands = con.sql("SELECT COUNT(*) FROM hands").fetchone()[0]
     # 6 seats, ordered by seat asc.
     assert len(result) == 6
     assert [r["seat"] for r in result] == [0, 1, 2, 3, 4, 5]
     for row in result:
-        # n_hands should equal the 12 we ran (every seat is in every hand).
-        assert row["n_hands"] == 12
+        # n_hands MUST equal the actual hands dealt (every seat in 6-max cash
+        # with auto-rebuy is dealt into every hand per spec §3.5).
+        assert row["n_hands"] == expected_n_hands, (
+            f"seat {row['seat']}: VPIP denominator {row['n_hands']} "
+            f"!= hands dealt {expected_n_hands} — walk-handling regression"
+        )
         # vpip_rate is in [0, 1].
         assert 0.0 <= row["vpip_rate"] <= 1.0
 
@@ -710,6 +724,90 @@ def test_compute_vpip_counts_voluntary_actions_not_folds(
         }
         expected = len(seat0_voluntary_hands) / result[0]["n_hands"]
         assert abs(result[0]["vpip_rate"] - expected) < 1e-9
+
+
+def test_compute_vpip_denominator_uses_hands_not_actions_on_walks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression (Risk 14): a seat that had walks (BB wins without acting)
+    still gets VPIP denominator = total hands dealt, NOT the snapshot count.
+
+    Synthesises a minimal 3-hand session where seat 5 is missing from hand
+    2's agent_view_snapshots (simulating a walk). Asserts VPIP's
+    `n_hands` for seat 5 is 3 (all hands dealt), not 2 (snapshots only).
+    """
+    import json
+
+    monkeypatch.setattr(
+        "llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve()
+    )
+    from llm_poker_arena.analysis.metrics import compute_vpip
+    from llm_poker_arena.storage.duckdb_query import open_session
+
+    sess = tmp_path / "synth"
+    sess.mkdir()
+
+    # canonical_private.jsonl — 3 hands, all 6 seats dealt every hand.
+    hands_data = [
+        {
+            "hand_id": i, "started_at": "t0", "ended_at": "t1",
+            "button_seat": 0, "sb_seat": 1, "bb_seat": 2, "deck_seed": i,
+            "starting_stacks": {str(s): 10000 for s in range(6)},
+            "hole_cards": {str(s): ["As", "Kd"] for s in range(6)},
+            "community": [], "actions": [],
+            "result": {
+                "showdown": False, "winners": [], "side_pots": [],
+                "final_invested": {},
+                "net_pnl": {str(s): 0 for s in range(6)},
+            },
+        }
+        for i in range(3)
+    ]
+    (sess / "canonical_private.jsonl").write_text(
+        "\n".join(json.dumps(h) for h in hands_data) + "\n"
+    )
+
+    # agent_view_snapshots.jsonl — seat 5 is MISSING from hand 2 (walk).
+    snaps = []
+    for hand_id in range(3):
+        seats_here = range(6) if hand_id != 2 else range(5)
+        for seat in seats_here:
+            snaps.append({
+                "hand_id": hand_id, "turn_id": f"{hand_id}-preflop-{seat}",
+                "session_id": "synth", "seat": seat, "street": "preflop",
+                "timestamp": "t0", "view_at_turn_start": {},
+                "iterations": [],
+                "final_action": {"type": "fold"},
+                "is_forced_blind": False, "total_utility_calls": 0,
+                "api_retry_count": 0, "illegal_action_retry_count": 0,
+                "no_tool_retry_count": 0, "tool_usage_error_count": 0,
+                "default_action_fallback": False,
+                "api_error": None, "turn_timeout_exceeded": False,
+                "total_tokens": {}, "wall_time_ms": 0,
+                "agent": {
+                    "provider": "synth", "model": "x", "version": "1",
+                    "temperature": None, "seed": None,
+                },
+            })
+    (sess / "agent_view_snapshots.jsonl").write_text(
+        "\n".join(json.dumps(s) for s in snaps) + "\n"
+    )
+
+    # public_replay.jsonl — minimal stub (required by open_session).
+    (sess / "public_replay.jsonl").write_text(
+        '{"hand_id": 0, "street_events": []}\n'
+    )
+
+    with open_session(sess, access_token=PRIVATE_ACCESS_TOKEN) as con:
+        result = compute_vpip(con)
+
+    # Seat 5 has 2 snapshots (hands 0 and 1) but was dealt in 3 hands.
+    # The bugged denominator would report n_hands=2; correct is 3.
+    seat5 = next(r for r in result if r["seat"] == 5)
+    assert seat5["n_hands"] == 3, (
+        f"seat 5 denominator {seat5['n_hands']} != 3 (walk-handling bug). "
+        f"full result: {result}"
+    )
 ```
 
 - [ ] **Step 2: Run — expect ModuleNotFoundError**
@@ -759,29 +857,42 @@ load-bearing for Phase 3+ if/when agent-driven blind posts are recorded.
 
 VPIP_SQL: str = """
 -- VPIP: per-seat fraction of hands where player voluntarily put money in
--- pot preflop. "Voluntary" excludes forced blind posts. Same (seat, hand)
--- counted once even if multiple preflop actions (DISTINCT hand_id).
+-- pot preflop. "Voluntary" excludes forced blind posts.
+--
+-- Denominator note (Risk 14): n_hands = COUNT(*) FROM hands, NOT
+-- COUNT(DISTINCT hand_id) FROM actions. In 6-max cash with auto-rebuy
+-- every seat is dealt into every hand (§3.5), but an agent_view_snapshot
+-- is only written when the seat is the actor. A BB who wins by walk (all
+-- others folded pre-action) has ZERO snapshots for that hand, so an
+-- actions-based denominator would undercount and inflate VPIP.
+--
+-- Seat list is derived from `actions` (seats that took at least one
+-- action across the session). A seat with ZERO snapshots entire session
+-- would be missing from output — vanishingly unlikely for ≥10 hands of
+-- random play; tests assert `len(result) == num_players` to catch it.
 
-WITH voluntary_preflop AS (
+WITH all_seats AS (
+    SELECT DISTINCT seat FROM actions
+),
+total_hands_dealt AS (
+    SELECT COUNT(*) AS n_hands FROM hands
+),
+voluntary_preflop AS (
     SELECT DISTINCT seat, hand_id
     FROM actions
     WHERE street = 'preflop'
       AND is_forced_blind = false
       AND final_action.type IN ('call', 'raise_to', 'bet', 'all_in')
-),
-hands_played_per_seat AS (
-    SELECT seat, COUNT(DISTINCT hand_id) AS n_hands
-    FROM actions
-    GROUP BY seat
 )
 SELECT
-    h.seat,
-    h.n_hands,
-    COUNT(v.hand_id) * 1.0 / h.n_hands AS vpip_rate
-FROM hands_played_per_seat h
-LEFT JOIN voluntary_preflop v ON h.seat = v.seat
-GROUP BY h.seat, h.n_hands
-ORDER BY h.seat;
+    s.seat,
+    t.n_hands,
+    COUNT(v.hand_id) * 1.0 / t.n_hands AS vpip_rate
+FROM all_seats s
+CROSS JOIN total_hands_dealt t
+LEFT JOIN voluntary_preflop v ON s.seat = v.seat
+GROUP BY s.seat, t.n_hands
+ORDER BY s.seat;
 """
 ```
 
@@ -823,7 +934,7 @@ def compute_vpip(con: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
 ```bash
 cd /Users/zcheng256/llm-poker-arena && source .venv/bin/activate && pytest tests/unit/test_metrics_vpip.py -v
 ```
-Expected: 2 passed.
+Expected: 3 passed (including the walk-denominator regression).
 
 - [ ] **Step 5: Lint + type**
 
@@ -892,10 +1003,15 @@ def test_compute_pfr_returns_one_row_per_seat(
     sess_dir = _run_b1(tmp_path)
     with open_session(sess_dir, access_token=PRIVATE_ACCESS_TOKEN) as con:
         result = compute_pfr(con)
+        # Authoritative denominator from `hands` (Risk 14).
+        expected_n_hands = con.sql("SELECT COUNT(*) FROM hands").fetchone()[0]
     assert len(result) == 6
     assert [r["seat"] for r in result] == [0, 1, 2, 3, 4, 5]
     for row in result:
-        assert row["n_hands"] == 24
+        assert row["n_hands"] == expected_n_hands, (
+            f"seat {row['seat']}: PFR denominator {row['n_hands']} "
+            f"!= hands dealt {expected_n_hands} — walk-handling regression"
+        )
         assert 0.0 <= row["pfr_rate"] <= 1.0
 
 
@@ -936,27 +1052,31 @@ Add below `VPIP_SQL`:
 PFR_SQL: str = """
 -- PFR: per-seat fraction of hands where player voluntarily raised preflop.
 -- PFR ⊆ VPIP (raising is a subset of voluntary action).
+-- Denominator semantics: identical to VPIP — hand count from `hands` view,
+-- NOT from `actions` (Risk 14; see VPIP_SQL comment).
 
-WITH preflop_raises AS (
+WITH all_seats AS (
+    SELECT DISTINCT seat FROM actions
+),
+total_hands_dealt AS (
+    SELECT COUNT(*) AS n_hands FROM hands
+),
+preflop_raises AS (
     SELECT DISTINCT seat, hand_id
     FROM actions
     WHERE street = 'preflop'
       AND is_forced_blind = false
       AND final_action.type IN ('raise_to', 'bet')
-),
-hands_played_per_seat AS (
-    SELECT seat, COUNT(DISTINCT hand_id) AS n_hands
-    FROM actions
-    GROUP BY seat
 )
 SELECT
-    h.seat,
-    h.n_hands,
-    COUNT(p.hand_id) * 1.0 / h.n_hands AS pfr_rate
-FROM hands_played_per_seat h
-LEFT JOIN preflop_raises p ON h.seat = p.seat
-GROUP BY h.seat, h.n_hands
-ORDER BY h.seat;
+    s.seat,
+    t.n_hands,
+    COUNT(p.hand_id) * 1.0 / t.n_hands AS pfr_rate
+FROM all_seats s
+CROSS JOIN total_hands_dealt t
+LEFT JOIN preflop_raises p ON s.seat = p.seat
+GROUP BY s.seat, t.n_hands
+ORDER BY s.seat;
 """
 ```
 
@@ -1536,7 +1656,7 @@ If `ruff` flags `numpy` as undeclared, add `numpy` to `pyproject.toml` deps (mat
 **Files:**
 - Create: `tests/unit/test_mvp7_integration.py`
 
-Run B1 and B2 baselines (120 hands each), compute all three metrics on both, generate all three plots for both, and assert exit-criterion invariants: DuckDB queries return non-empty, `is_forced_blind=false` path works, chip_pnl is zero-sum.
+Run B1 and B2 baselines (60 hands each — multiple of 6 for button rotation balance; small enough that the MVP 7 integration test stays under 10s wall-clock; large enough that walks naturally occur and exercise the Risk-14 denominator path), compute all three metrics on both, generate all three plots for both, and assert exit-criterion invariants: DuckDB queries return non-empty, `is_forced_blind=false` path works, chip_pnl is zero-sum.
 
 - [ ] **Step 1: Write test**
 
@@ -1577,6 +1697,7 @@ def test_mvp7_b1_random_end_to_end(
         vpip = compute_vpip(con)
         pfr = compute_pfr(con)
         ad = compute_action_distribution(con)
+        expected_n = con.sql("SELECT COUNT(*) FROM hands").fetchone()[0]
 
     assert len(vpip) == 6
     assert len(pfr) == 6
@@ -1584,6 +1705,9 @@ def test_mvp7_b1_random_end_to_end(
     for seat in range(6):
         seat_vpip = next(r for r in vpip if r["seat"] == seat)
         seat_pfr = next(r for r in pfr if r["seat"] == seat)
+        # Denominator uses hands view (Risk 14 — walks don't undercount).
+        assert seat_vpip["n_hands"] == expected_n
+        assert seat_pfr["n_hands"] == expected_n
         assert seat_pfr["pfr_rate"] <= seat_vpip["vpip_rate"] + 1e-9
 
     # Plots.
@@ -1646,7 +1770,7 @@ Expected: 2 passed in < 10s wall-clock. (60 hands × 2 baselines × ~3ms/hand en
 ```bash
 cd /Users/zcheng256/llm-poker-arena && source .venv/bin/activate && pytest -m 'not slow' -q && ruff check . && mypy
 ```
-Expected: 170 Phase-2a baseline + (7 T2 + 2 T3 + 2 T4 + 2 T5 + 2 T6 + 2 T7 + 3 T8 + 2 T9) = 170 + 22 = 192 passing. Ruff + mypy clean.
+Expected: 170 Phase-2a baseline + (7 T2 + 2 T3 + 3 T4 + 2 T5 + 2 T6 + 2 T7 + 3 T8 + 2 T9) = 170 + 23 = 193 passing. Ruff + mypy clean. (Codex-audit amendment: T4 added a synthetic denominator-regression test to guard Risk 14.)
 
 - [ ] **Step 4: Commit**
 
@@ -1687,19 +1811,21 @@ Deferred-but-in-spec items explicitly noted: AF / 3bet% / WTSD% SQL, cross-sessi
 - No reaching into `engine._internal` from analysis layer (analysis consumes storage + session public APIs only).
 - pytest invocation uses venv-activate pattern (no `uv run pytest`).
 
-**5. Pitfall register cross-check.** Each of the 13 risks in the Pre-flight is actively mitigated by at least one task:
-- R1 (struct inference) → Task 2 (sample_size=-1) + Task 3 (canary)
+**5. Pitfall register cross-check.** Each of the 15 risks in the Pre-flight is actively mitigated by at least one task:
+- R1 (struct inference) → Task 2 (sample_size=-1) + Task 3 (canary); **empirically verified by Codex review: DuckDB 1.5.2 unifies `STRUCT(type VARCHAR, amount BIGINT)` with NULL amount for fold/call rows when `sample_size=-1`**
 - R2 (is_forced_blind always false) → Task 4-6 SQL comments
 - R3 (view naming) → Task 2 docstring
 - R4 (access_token convention) → Task 2 impl
 - R5 + R6 (RUNS_ROOT monkeypatch) → all test steps
 - R7 (blind posts missing from hands.actions) → metrics read from `actions` view (= snapshots) not `hands`
 - R8 (final_invested empty) → not used
-- R9 (dot-access) → Task 3 canary
+- R9 (dot-access) → Task 3 canary; **empirically verified: works in SELECT, WHERE, and GROUP BY**
 - R10 (plan drift) → Task 3 canary runs against real as-built output
 - R11 (matplotlib Agg) → Task 8 `matplotlib.use("Agg")` before pyplot
-- R12 (con lifecycle) → all tests use `with open_session(...) as con:`
+- R12 (con lifecycle) → all tests use `with open_session(...) as con:`; **empirically verified: DuckDB 1.5.2 supports context manager**
 - R13 (readline) → pytest invocation pattern documented
+- R14 (walks produce no snapshot → denominator undercounts) → Task 4+5 SQL derives `n_hands` from `hands` view, NOT `actions`; Task 4 adds explicit synthetic regression test
+- R15 (view re-scan cost) → acceptable for MVP-7-sized sessions; Task 2 docstring notes the option to materialize
 
 ---
 
