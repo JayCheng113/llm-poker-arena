@@ -24,6 +24,9 @@ dev = [
     "mypy>=1.8",
 ]
 
+[project.scripts]
+poker-play = "llm_poker_arena.cli.play:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/llm_poker_arena"]
 
