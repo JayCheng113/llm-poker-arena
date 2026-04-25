@@ -73,7 +73,7 @@ def test_turn_decision_result_minimal_with_action() -> None:
 
 
 def test_turn_decision_result_api_error_forbids_final_action() -> None:
-    """spec §4.1 BR2-01: api_error != None ↔ final_action == None."""
+    """spec §4.1 BR2-01: api_error != None ⇒ final_action == None."""
     with pytest.raises(ValidationError, match="final_action must be None"):
         TurnDecisionResult(
             iterations=(),
@@ -86,6 +86,26 @@ def test_turn_decision_result_api_error_forbids_final_action() -> None:
             tool_usage_error_count=0,
             default_action_fallback=False,
             api_error=ApiErrorInfo(type="ProviderTransient", detail="500"),
+            turn_timeout_exceeded=False,
+        )
+
+
+def test_turn_decision_result_both_action_and_error_none_forbidden() -> None:
+    """spec §4.1 BR2-01 (reverse direction): api_error is None AND
+    final_action is None is an inconsistent state — agent must return
+    either an action or an error, never neither."""
+    with pytest.raises(ValidationError, match="cannot both be None"):
+        TurnDecisionResult(
+            iterations=(),
+            final_action=None,
+            total_tokens=TokenCounts.zero(),
+            wall_time_ms=0,
+            api_retry_count=0,
+            illegal_action_retry_count=0,
+            no_tool_retry_count=0,
+            tool_usage_error_count=0,
+            default_action_fallback=False,
+            api_error=None,
             turn_timeout_exceeded=False,
         )
 

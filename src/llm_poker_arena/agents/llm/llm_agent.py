@@ -219,14 +219,19 @@ class LLMAgent(Agent):
                 if illegal_retry < MAX_ILLEGAL_RETRY:
                     illegal_retry += 1
                     messages.append(_assistant_message(response))
-                    messages.append(_tool_result_user(
-                        tool_use_id=first_tc.tool_use_id,
+                    # Anthropic protocol: every tool_use block in the prior
+                    # assistant turn must be answered with a tool_result block
+                    # (matched by tool_use_id). Reply to ALL N tool_use IDs,
+                    # not just the first, otherwise the next request 400s.
+                    err_content = (
+                        f"Multiple tool calls in one response are not "
+                        f"allowed. Got {len(response.tool_calls)} calls; "
+                        f"call exactly one action tool."
+                    )
+                    messages.append(_multi_tool_result_user(
+                        tool_calls=response.tool_calls,
                         is_error=True,
-                        content=(
-                            f"Multiple tool calls in one response are not "
-                            f"allowed. Got {len(response.tool_calls)} calls; "
-                            f"call exactly one action tool."
-                        ),
+                        content=err_content,
                     ))
                     continue
                 return self._fallback_default_safe(
@@ -456,6 +461,29 @@ def _tool_result_user(
             "is_error": is_error,
             "content": content,
         }],
+    }
+
+
+def _multi_tool_result_user(
+    *,
+    tool_calls: tuple[Any, ...],  # tuple[ToolCall, ...] but Any avoids cycle
+    is_error: bool,
+    content: str,
+) -> dict[str, Any]:
+    """Reply to EVERY tool_use block in the prior assistant turn with an
+    error tool_result. Anthropic API rejects requests where any assistant
+    tool_use lacks a corresponding tool_result, so we cover all N IDs."""
+    return {
+        "role": "user",
+        "content": [
+            {
+                "type": "tool_result",
+                "tool_use_id": tc.tool_use_id,
+                "is_error": is_error,
+                "content": content,
+            }
+            for tc in tool_calls
+        ],
     }
 
 

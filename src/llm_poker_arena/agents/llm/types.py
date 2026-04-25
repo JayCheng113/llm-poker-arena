@@ -117,11 +117,23 @@ class TurnDecisionResult(BaseModel):
     turn_timeout_exceeded: bool
 
     @model_validator(mode="after")
-    def _api_error_forbids_action(self) -> Self:
-        """spec §4.1 BR2-01: api_error != None ⇒ final_action == None."""
+    def _api_error_action_invariant(self) -> Self:
+        """spec §4.1 BR2-01: api_error != None ⇔ final_action == None.
+
+        Two violations rejected:
+          - api_error set + final_action set (would silently drop the censor)
+          - api_error unset + final_action unset (no third state — agent must
+            return either a concrete action or an api_error).
+        """
         if self.api_error is not None and self.final_action is not None:
             raise ValueError(
                 "final_action must be None when api_error is set "
                 "(spec §4.1 BR2-01: censor hand on api_error)"
+            )
+        if self.api_error is None and self.final_action is None:
+            raise ValueError(
+                "final_action and api_error cannot both be None: agent must "
+                "return either a concrete action (happy path / fallback) or "
+                "an api_error (censor)."
             )
         return self

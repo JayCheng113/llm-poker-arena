@@ -264,3 +264,66 @@ def test_action_tool_specs_fails_fast_on_missing_bounds() -> None:
     view = _view(bad_legal)
     with pytest.raises(ValueError, match="missing amount bounds"):
         _action_tool_specs(view)
+
+
+def test_multi_tool_retry_replies_to_all_tool_use_ids_not_just_first() -> None:
+    """Regression for codex B2: when the model returns N>1 tool_use blocks,
+    Anthropic protocol requires the next user message to include a
+    tool_result block for EVERY one of those tool_use_ids. Replying to
+    only the first would produce a 400 on the retry request.
+
+    We assert this by intercepting messages at the second provider call:
+    after the multi-tool retry, every original tool_use_id must appear in
+    the tool_result blocks.
+    """
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),
+                                   ActionToolSpec(name="call", args={})))
+
+    captured_messages: list[list[dict[str, object]]] = []
+
+    multi_tool_response = LLMResponse(
+        provider="mock", model="m1", stop_reason="tool_use",
+        tool_calls=(
+            ToolCall(name="fold", args={}, tool_use_id="tu_first"),
+            ToolCall(name="call", args={}, tool_use_id="tu_second"),
+            ToolCall(name="fold", args={}, tool_use_id="tu_third"),
+        ),
+        text_content="multi", tokens=TokenCounts(input_tokens=10, output_tokens=5,
+                                                  cache_read_input_tokens=0,
+                                                  cache_creation_input_tokens=0),
+        raw_assistant_turn=AssistantTurn(provider="mock", blocks=()),
+    )
+    single_recovery = _resp(ToolCall(name="fold", args={}, tool_use_id="tu_recovery"))
+    script = MockResponseScript(responses=(multi_tool_response, single_recovery))
+
+    class CapturingMock(MockLLMProvider):
+        async def complete(self, **kw):  # type: ignore[override, no-untyped-def]
+            captured_messages.append(list(kw["messages"]))
+            return await super().complete(**kw)
+
+    provider = CapturingMock(script=script)
+    agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
+    result = asyncio.run(agent.decide(_view(legal)))
+
+    # Sanity: 2 calls (original + retry); recovery succeeded
+    assert len(captured_messages) == 2
+    assert result.final_action is not None
+    assert result.final_action.tool_name == "fold"
+
+    # The retry's `messages` list must end with: assistant turn, then a user
+    # turn whose content blocks include tool_result for ALL 3 tool_use_ids.
+    retry_messages = captured_messages[1]
+    last_user = retry_messages[-1]
+    assert last_user["role"] == "user"
+    content = last_user["content"]
+    assert isinstance(content, list), (
+        f"retry user content must be structured (list of blocks); got {content!r}"
+    )
+    tool_result_ids = {
+        block["tool_use_id"] for block in content
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+    }
+    assert tool_result_ids == {"tu_first", "tu_second", "tu_third"}, (
+        f"every tool_use_id from the prior assistant turn must have a "
+        f"tool_result; got tool_result_ids={tool_result_ids}"
+    )
