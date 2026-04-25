@@ -23,12 +23,17 @@ import random
 import time
 from typing import Any
 
+from typing import TYPE_CHECKING
+
 from llm_poker_arena.agents.base import Agent
 from llm_poker_arena.agents.llm.provider_base import (
     LLMProvider,
     ProviderPermanentError,
     ProviderTransientError,
 )
+
+if TYPE_CHECKING:
+    from llm_poker_arena.agents.llm.prompt_profile import PromptProfile
 from llm_poker_arena.agents.llm.types import (
     ApiErrorInfo,
     IterationRecord,
@@ -43,21 +48,6 @@ from llm_poker_arena.engine.legal_actions import (
 )
 from llm_poker_arena.engine.views import PlayerView
 
-_SYSTEM_PROMPT = """You are a player in a No-Limit Texas Hold'em 6-max cash game simulation.
-
-YOUR ROLE
-- See only your hole cards.
-- Maximize chip EV over many hands.
-
-HOW TO ACT
-- Each turn you receive game state and a list of legal action tools.
-- Briefly state your reasoning, then call exactly one action tool.
-- Tools not in the list are not legal this turn.
-- Bet/raise amounts must be in the integer range advertised by the tool.
-
-Respond in English."""
-
-
 class LLMAgent(Agent):
     def __init__(
         self,
@@ -68,7 +58,8 @@ class LLMAgent(Agent):
         seed: int | None = None,
         per_iteration_timeout_sec: float = 60.0,
         total_turn_timeout_sec: float = 180.0,
-        version: str = "phase3a",
+        version: str = "phase3d",
+        prompt_profile: "PromptProfile | None" = None,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -77,6 +68,12 @@ class LLMAgent(Agent):
         self._per_iter_timeout = per_iteration_timeout_sec
         self._total_turn_timeout = total_turn_timeout_sec
         self._version = version
+        if prompt_profile is None:
+            from llm_poker_arena.agents.llm.prompt_profile import (
+                load_default_prompt_profile,
+            )
+            prompt_profile = load_default_prompt_profile()
+        self._prompt_profile = prompt_profile
 
     def provider_id(self) -> str:
         return f"{self._provider.provider_name()}:{self._model}"
@@ -115,7 +112,7 @@ class LLMAgent(Agent):
         tool_usage_error_count = 0
 
         iterations: list[IterationRecord] = []
-        messages: list[dict[str, Any]] = self._build_initial_messages(view)
+        system_text, messages = self._build_initial_state(view)
         action_tools = _action_tool_specs(view)
         turn_start = time.monotonic()
         total_tokens = TokenCounts.zero()
@@ -126,6 +123,7 @@ class LLMAgent(Agent):
             try:
                 response = await asyncio.wait_for(
                     self._provider.complete(
+                        system=system_text,
                         messages=messages, tools=action_tools,
                         temperature=self._temperature, seed=self._seed,
                     ),
@@ -294,8 +292,38 @@ class LLMAgent(Agent):
             tool_usage_error_count=tool_usage_error_count,
         )
 
-    def _build_initial_messages(self, view: PlayerView) -> list[dict[str, Any]]:
-        return [{"role": "user", "content": _user_prompt_for(view)}]
+    def _build_initial_state(
+        self, view: PlayerView,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        """Returns (system_prompt, initial_messages). The system prompt is
+        passed via LLMProvider.complete(system=...) so Anthropic prompt
+        caching can take effect."""
+        params = view.immutable_session_params
+        system_text = self._prompt_profile.render_system(
+            num_players=params.num_players,
+            sb=params.sb, bb=params.bb,
+            starting_stack=params.starting_stack,
+        )
+        my_seat_info = view.seats_public[view.my_seat]
+        user_text = self._prompt_profile.render_user(
+            hand_id=view.hand_id,
+            street=view.street.value,
+            my_seat=view.my_seat,
+            my_position_short=my_seat_info.position_short,
+            my_position_full=my_seat_info.position_full,
+            my_hole_cards=view.my_hole_cards,
+            community=view.community,
+            pot=view.pot,
+            my_stack=view.my_stack,
+            to_call=view.to_call,
+            pot_odds_required=view.pot_odds_required,
+            effective_stack=view.effective_stack,
+            button_seat=view.button_seat,
+            opponent_seats_in_hand=view.opponent_seats_in_hand,
+            seats_yet_to_act_after_me=view.seats_yet_to_act_after_me,
+            seats_public=view.seats_public,
+        )
+        return system_text, [{"role": "user", "content": user_text}]
 
     def _fail_with_api_error(
         self,
@@ -394,29 +422,6 @@ def _action_tool_specs(view: PlayerView) -> list[dict[str, Any]]:
             "input_schema": schema,
         })
     return out
-
-
-def _user_prompt_for(view: PlayerView) -> str:
-    """Phase 3a hardcoded prompt; 3d swaps in Jinja templates per spec §6."""
-    return (
-        f"{_SYSTEM_PROMPT}\n\n"
-        f"=== STATE ===\n"
-        f"hand_id: {view.hand_id}\n"
-        f"street: {view.street.value}\n"
-        f"my_seat: {view.my_seat}\n"
-        f"my_hole_cards: {' '.join(view.my_hole_cards)}\n"
-        f"community: {' '.join(view.community) or '(none)'}\n"
-        f"pot: {view.pot}\n"
-        f"my_stack: {view.my_stack}\n"
-        f"to_call: {view.to_call}\n"
-        f"pot_odds_required: {view.pot_odds_required}\n"
-        f"effective_stack: {view.effective_stack}\n"
-        f"button_seat: {view.button_seat}\n"
-        f"opponents_in_hand: {list(view.opponent_seats_in_hand)}\n"
-        f"seats_yet_to_act_after_me: {list(view.seats_yet_to_act_after_me)}\n"
-        f"\nLegal action tools available below. "
-        f"Briefly explain your reasoning, then call exactly one tool."
-    )
 
 
 def _assistant_message(response: LLMResponse) -> dict[str, Any]:

@@ -266,6 +266,46 @@ def test_action_tool_specs_fails_fast_on_missing_bounds() -> None:
         _action_tool_specs(view)
 
 
+def test_llm_agent_renders_my_position_short_in_user_prompt() -> None:
+    """Regression for Phase 3a smoke finding: Claude was inferring the
+    wrong position from raw seat indices. The Jinja-rendered user prompt
+    must spell out my_position_short directly."""
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
+    captured: list[list[dict[str, object]]] = []
+    captured_systems: list[str | None] = []
+
+    class Capturing(MockLLMProvider):
+        async def complete(self, **kw: Any) -> LLMResponse:  # type: ignore[override]
+            captured.append(list(kw["messages"]))
+            captured_systems.append(kw.get("system"))
+            return await super().complete(**kw)
+
+    script = MockResponseScript(responses=(
+        _resp(ToolCall(name="fold", args={}, tool_use_id="t1")),
+    ))
+    provider = Capturing(script=script)
+    agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
+    result = asyncio.run(agent.decide(_view(legal)))
+    assert result.final_action is not None
+
+    # System prompt must be passed via system= (not folded into user message).
+    sys_text = captured_systems[0]
+    assert sys_text is not None
+    assert "No-Limit Texas Hold'em 6-max" in sys_text
+    assert "First write reasoning" in sys_text  # rationale_required default
+
+    # User message must contain the rendered template fields.
+    first = captured[0][0]
+    assert first["role"] == "user"
+    user_text = first["content"]
+    assert isinstance(user_text, str)
+    assert "my_position_short:" in user_text
+    # _seats() makes everyone "UTG" so position_short for seat 3 is "UTG"
+    assert "UTG" in user_text
+    assert "to_call: 100" in user_text
+    assert "pot_odds_required: 0.4" in user_text
+
+
 def test_multi_tool_retry_replies_to_all_tool_use_ids_not_just_first() -> None:
     """Regression for codex B2: when the model returns N>1 tool_use blocks,
     Anthropic protocol requires the next user message to include a
