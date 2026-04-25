@@ -18,7 +18,7 @@ load-bearing for Phase 3+ if/when agent-driven blind posts are recorded.
 """
 
 
-VPIP_SQL: str = """
+VPIP_SQL_TEMPLATE: str = """
 -- VPIP: per-seat fraction of hands where player voluntarily put money in
 -- pot preflop. "Voluntary" excludes forced blind posts.
 --
@@ -29,13 +29,16 @@ VPIP_SQL: str = """
 -- others folded pre-action) has ZERO snapshots for that hand, so an
 -- actions-based denominator would undercount and inflate VPIP.
 --
--- Seat list is derived from `actions` (seats that took at least one
--- action across the session). A seat with ZERO snapshots entire session
--- would be missing from output — vanishingly unlikely for ≥10 hands of
--- random play; tests assert `len(result) == num_players` to catch it.
+-- Seat list note (Codex Phase-2b audit Part B.2): derived from
+-- `range(0, {num_players})` passed in by the caller — NOT
+-- `SELECT DISTINCT seat FROM actions`. A seat that had ZERO snapshots
+-- across the entire session (possible on very small sessions where the
+-- player gets walks / folds-before-act every hand) would be silently
+-- dropped from the actions-derived seat list. {num_players} is safely
+-- interpolated via Python str.format on a validated int at call time.
 
 WITH all_seats AS (
-    SELECT DISTINCT seat FROM actions
+    SELECT seat FROM range(0, {num_players}) AS r(seat)
 ),
 total_hands_dealt AS (
     SELECT COUNT(*) AS n_hands FROM hands
@@ -59,14 +62,15 @@ ORDER BY s.seat;
 """
 
 
-PFR_SQL: str = """
+PFR_SQL_TEMPLATE: str = """
 -- PFR: per-seat fraction of hands where player voluntarily raised preflop.
 -- PFR ⊆ VPIP (raising is a subset of voluntary action).
--- Denominator semantics: identical to VPIP — hand count from `hands` view,
--- NOT from `actions` (Risk 14; see VPIP_SQL comment).
+-- Denominator + seat-list semantics: identical to VPIP — hand count from
+-- `hands` view, seat list from `range(0, {num_players})` (Risk 14 and
+-- Codex Phase-2b audit Part B.2; see VPIP_SQL_TEMPLATE comment).
 
 WITH all_seats AS (
-    SELECT DISTINCT seat FROM actions
+    SELECT seat FROM range(0, {num_players}) AS r(seat)
 ),
 total_hands_dealt AS (
     SELECT COUNT(*) AS n_hands FROM hands

@@ -171,3 +171,144 @@ def test_compute_vpip_denominator_uses_hands_not_actions_on_walks(
         f"seat 5 denominator {seat5['n_hands']} != 3 (walk-handling bug). "
         f"full result: {result}"
     )
+
+
+def test_compute_vpip_includes_seat_with_zero_actions_entire_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex Phase-2b audit Part B.2 regression: a seat with ZERO snapshots
+    across the entire session must still appear in VPIP output (with
+    vpip_rate=0.0), not be silently dropped.
+
+    Construct a 2-hand session where seat 5 has NO agent_view_snapshot rows
+    at all (simulating the pathological case where the BB gets walks every
+    single hand — possible on very small sessions or specific pre-flop
+    raise-fold patterns).
+    """
+    import json
+
+    monkeypatch.setattr(
+        "llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve()
+    )
+    from llm_poker_arena.analysis.metrics import compute_vpip
+    from llm_poker_arena.storage.duckdb_query import open_session
+
+    sess = tmp_path / "synth_zero_actions"
+    sess.mkdir()
+
+    hands_data = [
+        {
+            "hand_id": i, "started_at": "t0", "ended_at": "t1",
+            "button_seat": 0, "sb_seat": 1, "bb_seat": 2, "deck_seed": i,
+            "starting_stacks": {str(s): 10000 for s in range(6)},
+            "hole_cards": {str(s): ["As", "Kd"] for s in range(6)},
+            "community": [], "actions": [],
+            "result": {
+                "showdown": False, "winners": [], "side_pots": [],
+                "final_invested": {},
+                "net_pnl": {str(s): 0 for s in range(6)},
+            },
+        }
+        for i in range(2)
+    ]
+    (sess / "canonical_private.jsonl").write_text(
+        "\n".join(json.dumps(h) for h in hands_data) + "\n"
+    )
+
+    # Seat 5 has NO snapshots in either hand (pathological walks case).
+    snaps = []
+    for hand_id in range(2):
+        for seat in range(5):  # seats 0-4 only; seat 5 absent
+            snaps.append({
+                "hand_id": hand_id, "turn_id": f"{hand_id}-preflop-{seat}",
+                "session_id": "synth", "seat": seat, "street": "preflop",
+                "timestamp": "t0", "view_at_turn_start": {},
+                "iterations": [],
+                "final_action": {"type": "fold"},
+                "is_forced_blind": False, "total_utility_calls": 0,
+                "api_retry_count": 0, "illegal_action_retry_count": 0,
+                "no_tool_retry_count": 0, "tool_usage_error_count": 0,
+                "default_action_fallback": False,
+                "api_error": None, "turn_timeout_exceeded": False,
+                "total_tokens": {}, "wall_time_ms": 0,
+                "agent": {
+                    "provider": "synth", "model": "x", "version": "1",
+                    "temperature": None, "seed": None,
+                },
+            })
+    (sess / "agent_view_snapshots.jsonl").write_text(
+        "\n".join(json.dumps(s) for s in snaps) + "\n"
+    )
+    (sess / "public_replay.jsonl").write_text(
+        '{"hand_id": 0, "street_events": []}\n'
+    )
+
+    with open_session(sess, access_token=PRIVATE_ACCESS_TOKEN) as con:
+        result = compute_vpip(con, num_players=6)
+
+    # ALL 6 seats must appear — even seat 5 with zero snapshots.
+    assert len(result) == 6, (
+        f"expected 6 seats in VPIP output, got {len(result)}: {result}"
+    )
+    seat5 = next(r for r in result if r["seat"] == 5)
+    assert seat5["n_hands"] == 2
+    assert seat5["vpip_rate"] == 0.0
+
+
+def test_compute_vpip_rejects_invalid_num_players(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """num_players must be an int in [2, 10] — mirrors SessionConfig bounds."""
+    import json
+
+    monkeypatch.setattr(
+        "llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve()
+    )
+    from llm_poker_arena.analysis.metrics import compute_vpip
+    from llm_poker_arena.storage.duckdb_query import open_session
+
+    sess = tmp_path / "m"
+    sess.mkdir()
+    for fname in (
+        "canonical_private.jsonl",
+        "agent_view_snapshots.jsonl",
+    ):
+        (sess / fname).write_text("")
+    (sess / "public_replay.jsonl").write_text(
+        '{"hand_id": 0, "street_events": []}\n'
+    )
+    (sess / "canonical_private.jsonl").write_text(
+        json.dumps({
+            "hand_id": 0, "started_at": "t", "ended_at": "t",
+            "button_seat": 0, "sb_seat": 1, "bb_seat": 2, "deck_seed": 0,
+            "starting_stacks": {}, "hole_cards": {},
+            "community": [], "actions": [],
+            "result": {
+                "showdown": False, "winners": [], "side_pots": [],
+                "final_invested": {}, "net_pnl": {},
+            },
+        }) + "\n"
+    )
+    (sess / "agent_view_snapshots.jsonl").write_text(
+        json.dumps({
+            "hand_id": 0, "turn_id": "x", "session_id": "x", "seat": 0,
+            "street": "preflop", "timestamp": "t", "view_at_turn_start": {},
+            "iterations": [], "final_action": {"type": "fold"},
+            "is_forced_blind": False, "total_utility_calls": 0,
+            "api_retry_count": 0, "illegal_action_retry_count": 0,
+            "no_tool_retry_count": 0, "tool_usage_error_count": 0,
+            "default_action_fallback": False, "api_error": None,
+            "turn_timeout_exceeded": False, "total_tokens": {},
+            "wall_time_ms": 0,
+            "agent": {"provider": "x", "model": "x", "version": "1",
+                      "temperature": None, "seed": None},
+        }) + "\n"
+    )
+
+    with open_session(sess, access_token=PRIVATE_ACCESS_TOKEN) as con:
+        with pytest.raises(ValueError, match=r"num_players must be in \[2, 10\]"):
+            compute_vpip(con, num_players=1)
+        with pytest.raises(ValueError, match=r"num_players must be in \[2, 10\]"):
+            compute_vpip(con, num_players=11)
+        with pytest.raises(TypeError, match="num_players must be int"):
+            compute_vpip(con, num_players="6")  # type: ignore[arg-type]
