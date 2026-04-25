@@ -113,5 +113,52 @@ class AnthropicProvider(LLMProvider):
             ),
         )
 
+    def build_assistant_message_for_replay(
+        self, response: LLMResponse,
+    ) -> dict[str, Any]:
+        """spec §4.4 BR2-07: pass raw blocks through byte-identical so
+        thinking/encrypted_thinking/redacted_thinking blocks survive replay.
+        Synthesize text+tool_use blocks only when raw is empty (mock case).
+        """
+        blocks = list(response.raw_assistant_turn.blocks)
+        if not blocks:
+            synth: list[dict[str, Any]] = []
+            if response.text_content:
+                synth.append({"type": "text", "text": response.text_content})
+            for tc in response.tool_calls:
+                synth.append({
+                    "type": "tool_use",
+                    "id": tc.tool_use_id,
+                    "name": tc.name,
+                    "input": tc.args,
+                })
+            if not synth:
+                synth.append({"type": "text", "text": ""})
+            blocks = synth
+        return {"role": "assistant", "content": blocks}
+
+    def build_tool_result_messages(
+        self,
+        *,
+        tool_calls: tuple[ToolCall, ...],
+        is_error: bool,
+        content: str,
+    ) -> list[dict[str, Any]]:
+        return [{
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tc.tool_use_id,
+                    "is_error": is_error,
+                    "content": content,
+                }
+                for tc in tool_calls
+            ],
+        }]
+
+    def build_user_text_message(self, text: str) -> dict[str, Any]:
+        return {"role": "user", "content": text}
+
 
 __all__ = ["AnthropicProvider"]

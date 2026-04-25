@@ -10,6 +10,7 @@ from typing import Any
 from llm_poker_arena.agents.llm.types import (
     AssistantTurn,
     LLMResponse,
+    ToolCall,
 )
 
 
@@ -53,6 +54,44 @@ class LLMProvider(ABC):
     @abstractmethod
     def provider_name(self) -> str:
         """Stable provider identifier, e.g. 'anthropic'."""
+
+    @abstractmethod
+    def build_assistant_message_for_replay(
+        self, response: LLMResponse,
+    ) -> dict[str, Any]:
+        """Reconstruct the assistant turn (in this provider's wire format) so
+        it can be appended to `messages` for the next ReAct iteration. For
+        Anthropic this is `{"role":"assistant","content":[blocks...]}` with
+        thinking blocks preserved byte-identical (BR2-07). For OpenAI Chat:
+        `{"role":"assistant","content":text,"tool_calls":[...]}`.
+        """
+
+    @abstractmethod
+    def build_tool_result_messages(
+        self,
+        *,
+        tool_calls: tuple[ToolCall, ...],
+        is_error: bool,
+        content: str,
+    ) -> list[dict[str, Any]]:
+        """Build the message(s) that respond to the prior assistant turn's
+        tool_calls. Returned LIST because OpenAI requires one `role: tool`
+        message per tool_call, while Anthropic bundles all tool_results into
+        a single user message with N content blocks. LLMAgent always uses
+        `messages.extend(...)`.
+
+        EVERY tool_call in the prior assistant turn must be answered, otherwise
+        Anthropic returns 400; OpenAI similarly drops the conversation if
+        tool_call_ids go unanswered.
+        """
+
+    @abstractmethod
+    def build_user_text_message(self, text: str) -> dict[str, Any]:
+        """Plain user message. Used by LLMAgent's no_tool_retry branch where
+        the prior assistant turn had NO tool_calls (so we don't need
+        tool_result protocol). Anthropic + OpenAI both accept the canonical
+        `{"role":"user","content":text}`.
+        """
 
     def serialize_assistant_turn(self, response: LLMResponse) -> AssistantTurn:
         """spec §4.4 BR2-07: re-serialize provider response as assistant message

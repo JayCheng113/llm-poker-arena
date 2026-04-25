@@ -36,7 +36,6 @@ if TYPE_CHECKING:
 from llm_poker_arena.agents.llm.types import (
     ApiErrorInfo,
     IterationRecord,
-    LLMResponse,
     TokenCounts,
     TurnDecisionResult,
 )
@@ -191,8 +190,10 @@ class LLMAgent(Agent):
                 iterations.append(iter_record)
                 if no_tool_retry < MAX_NO_TOOL_RETRY:
                     no_tool_retry += 1
-                    messages.append(_assistant_message(response))
-                    messages.append(_user_text(
+                    messages.append(
+                        self._provider.build_assistant_message_for_replay(response)
+                    )
+                    messages.append(self._provider.build_user_text_message(
                         "You must call exactly one action tool. Try again."
                     ))
                     continue
@@ -219,17 +220,19 @@ class LLMAgent(Agent):
                 iterations.append(iter_record)
                 if tool_usage_retry < MAX_TOOL_USAGE_RETRY:
                     tool_usage_retry += 1
-                    messages.append(_assistant_message(response))
-                    # Anthropic protocol: every tool_use block in the prior
-                    # assistant turn must be answered with a tool_result block
-                    # (matched by tool_use_id). Reply to ALL N tool_use IDs,
-                    # not just the first, otherwise the next request 400s.
+                    messages.append(
+                        self._provider.build_assistant_message_for_replay(response)
+                    )
+                    # Provider-specific tool_result protocol (Anthropic: 1
+                    # user message with N tool_result blocks; OpenAI: N
+                    # role:tool messages). build_tool_result_messages hides
+                    # the difference; LLMAgent always extends.
                     err_content = (
                         f"Multiple tool calls in one response are not "
                         f"allowed. Got {len(response.tool_calls)} calls; "
                         f"call exactly one action tool."
                     )
-                    messages.append(_multi_tool_result_user(
+                    messages.extend(self._provider.build_tool_result_messages(
                         tool_calls=response.tool_calls,
                         is_error=True,
                         content=err_content,
@@ -260,9 +263,11 @@ class LLMAgent(Agent):
                 iterations.append(iter_record)
                 if no_tool_retry < MAX_NO_TOOL_RETRY:
                     no_tool_retry += 1
-                    messages.append(_assistant_message(response))
-                    messages.append(_tool_result_user(
-                        tool_use_id=tc.tool_use_id,
+                    messages.append(
+                        self._provider.build_assistant_message_for_replay(response)
+                    )
+                    messages.extend(self._provider.build_tool_result_messages(
+                        tool_calls=(tc,),
                         is_error=True,
                         content=(
                             "Reasoning required: write 1-3 short paragraphs "
@@ -306,9 +311,11 @@ class LLMAgent(Agent):
 
             if illegal_retry < MAX_ILLEGAL_RETRY:
                 illegal_retry += 1
-                messages.append(_assistant_message(response))
-                messages.append(_tool_result_user(
-                    tool_use_id=tc.tool_use_id,
+                messages.append(
+                    self._provider.build_assistant_message_for_replay(response)
+                )
+                messages.extend(self._provider.build_tool_result_messages(
+                    tool_calls=(tc,),
                     is_error=True,
                     content=(
                         f"Illegal action: {v.reason}. Legal action tools: "
@@ -460,74 +467,6 @@ def _action_tool_specs(view: PlayerView) -> list[dict[str, Any]]:
             "input_schema": schema,
         })
     return out
-
-
-def _assistant_message(response: LLMResponse) -> dict[str, Any]:
-    """Re-serialize provider response as Anthropic-shape assistant message."""
-    blocks = list(response.raw_assistant_turn.blocks)
-    if not blocks:
-        # No raw blocks captured (e.g. MockLLMProvider) — synthesize from
-        # text + tool_calls so the message is well-formed.
-        synth: list[dict[str, Any]] = []
-        if response.text_content:
-            synth.append({"type": "text", "text": response.text_content})
-        for tc in response.tool_calls:
-            synth.append({
-                "type": "tool_use",
-                "id": tc.tool_use_id,
-                "name": tc.name,
-                "input": tc.args,
-            })
-        if not synth:
-            synth.append({"type": "text", "text": ""})
-        blocks = synth
-    return {"role": "assistant", "content": blocks}
-
-
-def _user_text(text: str) -> dict[str, Any]:
-    """Plain text user message — only safe when previous assistant turn had
-    NO tool_use block. Anthropic API rejects plain-text after tool_use; use
-    _tool_result_user instead in that case."""
-    return {"role": "user", "content": text}
-
-
-def _tool_result_user(
-    *, tool_use_id: str, is_error: bool, content: str,
-) -> dict[str, Any]:
-    """Anthropic-compliant tool_result block, MUST follow any assistant turn
-    that contained a tool_use block (matching by tool_use_id)."""
-    return {
-        "role": "user",
-        "content": [{
-            "type": "tool_result",
-            "tool_use_id": tool_use_id,
-            "is_error": is_error,
-            "content": content,
-        }],
-    }
-
-
-def _multi_tool_result_user(
-    *,
-    tool_calls: tuple[Any, ...],  # tuple[ToolCall, ...] but Any avoids cycle
-    is_error: bool,
-    content: str,
-) -> dict[str, Any]:
-    """Reply to EVERY tool_use block in the prior assistant turn with an
-    error tool_result. Anthropic API rejects requests where any assistant
-    tool_use lacks a corresponding tool_result, so we cover all N IDs."""
-    return {
-        "role": "user",
-        "content": [
-            {
-                "type": "tool_result",
-                "tool_use_id": tc.tool_use_id,
-                "is_error": is_error,
-                "content": content,
-            }
-            for tc in tool_calls
-        ],
-    }
 
 
 __all__ = ["LLMAgent"]
