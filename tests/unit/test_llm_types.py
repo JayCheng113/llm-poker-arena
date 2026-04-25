@@ -201,3 +201,61 @@ def test_turn_decision_result_json_round_trip_with_api_error() -> None:
     assert restored == r
     assert restored.final_action is None
     assert restored.api_error is not None
+
+
+def test_reasoning_artifact_kind_enum_values() -> None:
+    from llm_poker_arena.agents.llm.types import ReasoningArtifactKind
+    assert ReasoningArtifactKind.RAW.value == "raw"
+    assert ReasoningArtifactKind.SUMMARY.value == "summary"
+    assert ReasoningArtifactKind.THINKING_BLOCK.value == "thinking_block"
+    assert ReasoningArtifactKind.ENCRYPTED.value == "encrypted"
+    assert ReasoningArtifactKind.REDACTED.value == "redacted"
+    assert ReasoningArtifactKind.UNAVAILABLE.value == "unavailable"
+
+
+def test_reasoning_artifact_round_trip() -> None:
+    from llm_poker_arena.agents.llm.types import (
+        ReasoningArtifact,
+        ReasoningArtifactKind,
+    )
+    art = ReasoningArtifact(
+        kind=ReasoningArtifactKind.RAW,
+        content="Let me think about pot odds...",
+        provider_raw_index=2,
+    )
+    blob = art.model_dump_json()
+    art2 = ReasoningArtifact.model_validate_json(blob)
+    assert art2 == art
+    # Encrypted variant: content is opaque base64-ish string.
+    enc = ReasoningArtifact(
+        kind=ReasoningArtifactKind.ENCRYPTED,
+        content="cipher_payload_base64==",
+        provider_raw_index=0,
+    )
+    assert ReasoningArtifact.model_validate_json(enc.model_dump_json()) == enc
+    # Unavailable: content is None, index is None.
+    none_art = ReasoningArtifact(
+        kind=ReasoningArtifactKind.UNAVAILABLE,
+        content=None,
+        provider_raw_index=None,
+    )
+    assert ReasoningArtifact.model_validate_json(none_art.model_dump_json()) == none_art
+
+
+def test_observed_capability_round_trip() -> None:
+    from llm_poker_arena.agents.llm.types import (
+        ObservedCapability,
+        ReasoningArtifactKind,
+    )
+    cap = ObservedCapability(
+        provider="anthropic",
+        probed_at="2026-04-25T10:00:00Z",
+        reasoning_kinds=(ReasoningArtifactKind.THINKING_BLOCK,
+                         ReasoningArtifactKind.ENCRYPTED),
+        seed_accepted=False,
+        tool_use_with_thinking_ok=False,
+        extra_flags={"system_fingerprint_returned": False},
+    )
+    blob = cap.model_dump_json()
+    cap2 = ObservedCapability.model_validate_json(blob)
+    assert cap2 == cap

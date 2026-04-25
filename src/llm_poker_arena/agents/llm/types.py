@@ -1,6 +1,7 @@
 """Pydantic dataclass schemas for LLM agent decision pipeline (spec §4.1, §4.3)."""
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -137,3 +138,41 @@ class TurnDecisionResult(BaseModel):
                 "an api_error (censor)."
             )
         return self
+
+
+class ReasoningArtifactKind(StrEnum):
+    """spec §4.6: enumeration of reasoning shapes a provider can emit."""
+
+    RAW = "raw"
+    SUMMARY = "summary"
+    THINKING_BLOCK = "thinking_block"
+    ENCRYPTED = "encrypted"
+    REDACTED = "redacted"
+    UNAVAILABLE = "unavailable"
+
+
+class ReasoningArtifact(BaseModel):
+    """spec §4.6: one provider-emitted reasoning unit (CoT / summary / opaque).
+
+    `provider_raw_index` is the position in the raw response (Anthropic block
+    list / DeepSeek field) for forensic traceability.
+    """
+
+    model_config = _frozen()
+
+    kind: ReasoningArtifactKind
+    content: str | None
+    provider_raw_index: int | None
+
+
+class ObservedCapability(BaseModel):
+    """spec §4.4 HR2-03: live probe result. Written to meta.json per seat."""
+
+    model_config = _frozen()
+
+    provider: str
+    probed_at: str
+    reasoning_kinds: tuple[ReasoningArtifactKind, ...]
+    seed_accepted: bool
+    tool_use_with_thinking_ok: bool
+    extra_flags: dict[str, Any]
