@@ -149,3 +149,59 @@ async def test_anthropic_provider_translates_400_to_permanent(
 def test_anthropic_provider_provider_name() -> None:
     p = AnthropicProvider(model="claude-haiku-4-5", api_key="fake")
     assert p.provider_name() == "anthropic"
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_threads_system_param_to_sdk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Phase 3d: system kwarg must reach SDK as messages.create(system=...).
+    Phase 3a folded system into user message which wastes tokens + breaks
+    prompt caching."""
+    captured: dict[str, Any] = {}
+
+    async def fake_create(**kw: Any) -> Any:
+        captured.update(kw)
+        return _fake_anthropic_response(content_blocks=[])
+
+    fake_client = MagicMock()
+    fake_client.messages.create = fake_create
+    monkeypatch.setattr(
+        "llm_poker_arena.agents.llm.providers.anthropic_provider.AsyncAnthropic",
+        lambda **_kw: fake_client,
+    )
+
+    p = AnthropicProvider(model="claude-haiku-4-5", api_key="fake")
+    await p.complete(
+        system="You are a poker bot.",
+        messages=[{"role": "user", "content": "play"}],
+        tools=[], temperature=0.7, seed=None,
+    )
+    assert captured["system"] == "You are a poker bot."
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_omits_system_when_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """system=None ⇒ no `system` key passed to SDK."""
+    captured: dict[str, Any] = {}
+
+    async def fake_create(**kw: Any) -> Any:
+        captured.update(kw)
+        return _fake_anthropic_response(content_blocks=[])
+
+    fake_client = MagicMock()
+    fake_client.messages.create = fake_create
+    monkeypatch.setattr(
+        "llm_poker_arena.agents.llm.providers.anthropic_provider.AsyncAnthropic",
+        lambda **_kw: fake_client,
+    )
+
+    p = AnthropicProvider(model="claude-haiku-4-5", api_key="fake")
+    await p.complete(
+        system=None,
+        messages=[{"role": "user", "content": "play"}],
+        tools=[], temperature=0.7, seed=None,
+    )
+    assert "system" not in captured

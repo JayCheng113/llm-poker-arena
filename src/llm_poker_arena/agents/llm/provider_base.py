@@ -33,12 +33,18 @@ class LLMProvider(ABC):
     @abstractmethod
     async def complete(
         self,
+        *,
+        system: str | None = None,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
         temperature: float,
         seed: int | None,
     ) -> LLMResponse:
         """Send a request to the provider and return a normalized LLMResponse.
+
+        `system` is the cached system prompt (Anthropic uses
+        messages.create(system=...)). Providers without a separate system
+        slot may prepend it to the first user message internally.
 
         Raises ProviderTransientError on retryable failure;
         ProviderPermanentError on non-retryable.

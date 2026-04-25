@@ -35,6 +35,8 @@ class AnthropicProvider(LLMProvider):
 
     async def complete(
         self,
+        *,
+        system: str | None = None,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
         temperature: float,
@@ -43,13 +45,16 @@ class AnthropicProvider(LLMProvider):
         try:
             # Anthropic SDK uses TypedDict for messages/tools; we use plain
             # dicts here for cross-provider portability and cast at the boundary.
-            resp = await self._client.messages.create(
-                model=self._model,
-                max_tokens=self._max_tokens,
-                temperature=temperature,
-                messages=cast("Any", messages),
-                tools=cast("Any", tools) if tools else cast("Any", None),
-            )
+            create_kwargs: dict[str, Any] = {
+                "model": self._model,
+                "max_tokens": self._max_tokens,
+                "temperature": temperature,
+                "messages": cast("Any", messages),
+                "tools": cast("Any", tools) if tools else cast("Any", None),
+            }
+            if system is not None:
+                create_kwargs["system"] = system
+            resp = await self._client.messages.create(**create_kwargs)
         except (APITimeoutError, RateLimitError) as e:
             raise ProviderTransientError(str(e)) from e
         except APIStatusError as e:

@@ -42,6 +42,8 @@ class MockLLMProvider(LLMProvider):
 
     async def complete(
         self,
+        *,
+        system: str | None = None,  # captured but unused by mock
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
         temperature: float,

@@ -32,6 +32,9 @@ poker-play = "llm_poker_arena.cli.play:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/llm_poker_arena"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/llm_poker_arena/agents/llm/prompts" = "llm_poker_arena/agents/llm/prompts"
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
