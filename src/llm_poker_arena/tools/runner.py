@@ -27,6 +27,7 @@ class ToolDispatchError(Exception):
 _ALLOWED_ARGS: dict[str, frozenset[str]] = {
     "pot_odds": frozenset({"to_call", "pot"}),
     "spr": frozenset({"stack", "pot"}),
+    "hand_equity_vs_ranges": frozenset({"range_by_seat"}),
 }
 
 
@@ -50,13 +51,19 @@ def run_utility_tool(
     view: PlayerView, name: str, args: dict[str, Any],
 ) -> dict[str, Any]:
     """Dispatch to the registered utility tool. Returns `{"value": float}` for
-    pot_odds/spr; richer dicts for future tools. Raises `ToolDispatchError`
-    on unknown tool name, extra args, or args type/value validation failure.
+    pot_odds/spr; richer dicts (EquityResult.model_dump()) for equity tools.
+    Raises `ToolDispatchError` on unknown tool name, extra args, or args
+    type/value validation failure.
 
     Codex audit IMPORTANT-3 fix: extra args are REJECTED (not silently
     dropped). The tool spec input_schema declares `additionalProperties: False`
     — silently dropping would let the model rely on undefined behavior.
+
+    NB: hand_equity_vs_ranges takes a dict-typed `range_by_seat` arg; the
+    int-only validation below applies to pot_odds/spr (which take int args).
+    Equity validates its own dict shape internally (Task 4).
     """
+    from llm_poker_arena.tools.equity import hand_equity_vs_ranges
     from llm_poker_arena.tools.pot_odds import pot_odds
     from llm_poker_arena.tools.spr import spr
 
@@ -70,12 +77,40 @@ def run_utility_tool(
             f"{name} received unexpected args {sorted(extra)}; "
             f"allowed: {sorted(allowed)}"
         )
-    for k, v in args.items():
-        _validate_int_arg(f"{name}.{k}", v)
 
     if name == "pot_odds":
+        for k, v in args.items():
+            _validate_int_arg(f"{name}.{k}", v)
         return {"value": pot_odds(view, **args)}
-    return {"value": spr(view, **args)}
+    if name == "spr":
+        for k, v in args.items():
+            _validate_int_arg(f"{name}.{k}", v)
+        return {"value": spr(view, **args)}
+    # name == "hand_equity_vs_ranges"
+    range_by_seat = args.get("range_by_seat")
+    if not isinstance(range_by_seat, dict):
+        raise ToolDispatchError(
+            f"hand_equity_vs_ranges.range_by_seat must be a dict; "
+            f"got {type(range_by_seat).__name__}"
+        )
+    # Coerce JSON-decoded string keys to int (Anthropic tool args may arrive
+    # with string keys from JSON, but spec §5.2.3 expects seat: int).
+    coerced: dict[int, str] = {}
+    for k, val in range_by_seat.items():
+        try:
+            seat_int = int(k)
+        except (ValueError, TypeError) as e:
+            raise ToolDispatchError(
+                f"hand_equity_vs_ranges.range_by_seat key {k!r} must be a "
+                f"seat integer (or string-encoded integer)"
+            ) from e
+        if not isinstance(val, str):
+            raise ToolDispatchError(
+                f"hand_equity_vs_ranges.range_by_seat[{seat_int}] must be a "
+                f"string range; got {type(val).__name__}"
+            )
+        coerced[seat_int] = val
+    return hand_equity_vs_ranges(view, coerced)
 
 
 def utility_tool_specs(view: PlayerView) -> list[dict[str, Any]]:

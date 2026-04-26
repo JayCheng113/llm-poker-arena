@@ -122,3 +122,24 @@ def test_dispatch_rejects_none_arg() -> None:
     v = _view()
     with pytest.raises(ToolDispatchError, match="must be an integer"):
         run_utility_tool(v, "pot_odds", {"to_call": None})
+
+
+def test_dispatch_hand_equity_vs_ranges() -> None:
+    """run_utility_tool dispatches the new equity tool. Validates the dict
+    flows through the normal dispatch path (extras-rejection, type-validation
+    DON'T apply to dict-typed args — equity has its own validation in Task 4).
+
+    Uses mostly-disjoint villain ranges so rejection sampling reaches the
+    n_samples=5000 target. Heavy-overlap ranges (e.g., 5 villains all on
+    QQ+) trip max_attempts before convergence — that's a real edge case
+    documented in equity.py but not what this dispatcher test verifies.
+    """
+    v = _view()
+    # Disjoint-by-suit ranges to minimize inter-villain card overlap rejection.
+    result = run_utility_tool(v, "hand_equity_vs_ranges",
+                              {"range_by_seat": {0: "22+", 1: "A2s+",
+                                                  2: "K2s+", 4: "Q2s+",
+                                                  5: "J2s+"}})
+    assert "hero_equity" in result
+    assert 0.0 <= result["hero_equity"] <= 1.0
+    assert result["n_samples"] > 0  # rejection-sampled some valid configurations
