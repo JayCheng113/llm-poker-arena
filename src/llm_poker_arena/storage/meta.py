@@ -37,6 +37,9 @@ def build_session_meta(
     chip_pnl: dict[int, int],
     session_wall_time_sec: int,
     provider_capabilities: dict[str, dict[str, Any]] | None = None,
+    retry_summary_per_seat: dict[int, dict[str, int]] | None = None,
+    tool_usage_summary: dict[int, dict[str, int]] | None = None,
+    total_tokens_per_seat: dict[int, dict[str, int]] | None = None,
 ) -> dict[str, Any]:
     return {
         "session_id": session_id,
@@ -50,11 +53,17 @@ def build_session_meta(
         "prompt_profile_version": "default-v2",
         "provider_capabilities": (provider_capabilities or {}),
         "chip_pnl": {str(s): int(v) for s, v in chip_pnl.items()},
-        "retry_summary_per_seat": {},
-        "tool_usage_summary": {},
+        "retry_summary_per_seat": (
+            {str(s): v for s, v in (retry_summary_per_seat or {}).items()}
+        ),
+        "tool_usage_summary": (
+            {str(s): v for s, v in (tool_usage_summary or {}).items()}
+        ),
         "censored_hands_count": 0,
         "censored_hand_ids": [],
-        "total_tokens": {},
+        "total_tokens": (
+            {str(s): v for s, v in (total_tokens_per_seat or {}).items()}
+        ),
         "estimated_cost_breakdown": {},
         "session_wall_time_sec": int(session_wall_time_sec),
         "seat_assignment": {str(s): label for s, label in seat_assignment.items()},

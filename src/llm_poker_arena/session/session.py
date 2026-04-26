@@ -125,6 +125,33 @@ class Session:
         self._chip_pnl: dict[int, int] = {i: 0 for i in range(config.num_players)}
         self._total_hands_played = 0
 
+        # Phase 4 Task 2: per-seat aggregation for meta.json. Initialized as
+        # empty dicts (one entry per seat appears as turns accumulate).
+        n = config.num_players
+        self._retry_summary_per_seat: dict[int, dict[str, int]] = {
+            i: {
+                "total_turns": 0,
+                "api_retry_count": 0,
+                "illegal_action_retry_count": 0,
+                "no_tool_retry_count": 0,
+                "tool_usage_error_count": 0,
+                "default_action_fallback_count": 0,
+                "turn_timeout_exceeded_count": 0,
+            }
+            for i in range(n)
+        }
+        self._tool_usage_summary: dict[int, dict[str, int]] = {
+            i: {"total_utility_calls": 0} for i in range(n)
+        }
+        self._total_tokens_per_seat: dict[int, dict[str, int]] = {
+            i: {
+                "input_tokens": 0, "output_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+            }
+            for i in range(n)
+        }
+
     async def run(self) -> None:
         started_at_iso = _now_iso()
         started_at_monotonic = time.monotonic()
@@ -152,6 +179,9 @@ class Session:
                 chip_pnl=self._chip_pnl,
                 session_wall_time_sec=wall_time_sec,
                 provider_capabilities=provider_capabilities,
+                retry_summary_per_seat=self._retry_summary_per_seat,
+                tool_usage_summary=self._tool_usage_summary,
+                total_tokens_per_seat=self._total_tokens_per_seat,
             )
             (self._output_dir / "meta.json").write_text(
                 json.dumps(meta, sort_keys=True, indent=2)
@@ -228,6 +258,29 @@ class Session:
             view = build_player_view(state, actor, turn_seed=turn_seed)
             street = view.street
             decision = await self._agents[actor].decide(view)
+            # Phase 4 Task 2: per-seat retry/token aggregation for meta.json.
+            rs = self._retry_summary_per_seat[actor]
+            rs["total_turns"] += 1
+            rs["api_retry_count"] += decision.api_retry_count
+            rs["illegal_action_retry_count"] += decision.illegal_action_retry_count
+            rs["no_tool_retry_count"] += decision.no_tool_retry_count
+            rs["tool_usage_error_count"] += decision.tool_usage_error_count
+            if decision.default_action_fallback:
+                rs["default_action_fallback_count"] += 1
+            if decision.turn_timeout_exceeded:
+                rs["turn_timeout_exceeded_count"] += 1
+
+            tu = self._tool_usage_summary[actor]
+            for ir in decision.iterations:
+                if ir.tool_result is not None:
+                    tu["total_utility_calls"] += 1
+
+            tt = self._total_tokens_per_seat[actor]
+            tt["input_tokens"] += decision.total_tokens.input_tokens
+            tt["output_tokens"] += decision.total_tokens.output_tokens
+            tt["cache_read_input_tokens"] += decision.total_tokens.cache_read_input_tokens
+            tt["cache_creation_input_tokens"] += decision.total_tokens.cache_creation_input_tokens
+
             if decision.api_error is not None or decision.final_action is None:
                 # spec §4.1 BR2-01: censor full hand. Discard staged
                 # per-hand artifacts (staged_snapshots is a local var, dropped
