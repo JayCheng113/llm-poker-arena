@@ -39,6 +39,7 @@ from llm_poker_arena.engine.config import HandContext, SessionConfig
 from llm_poker_arena.engine.projections import build_player_view
 from llm_poker_arena.engine.transition import apply_action
 from llm_poker_arena.engine.types import Street
+from llm_poker_arena.engine.views import OpponentStatsOrInsufficient
 from llm_poker_arena.storage.jsonl_writer import BatchedJsonlWriter
 from llm_poker_arena.storage.layer_builders import (
     build_agent_view_snapshot,
@@ -262,6 +263,58 @@ class Session:
             results[str(seat)] = cache[pid]
         return results
 
+    def _build_opponent_stats(
+        self, actor: int,
+    ) -> dict[int, OpponentStatsOrInsufficient]:
+        """Phase 3c-hud: build per-opponent OpponentStatsOrInsufficient dict
+        from cumulative HUD counters. Self-seat excluded.
+
+        Uses _hud_hands_counted (codex audit IMPORTANT-5) — counts only
+        cleanly-completed hands. Censored hands (api_error → early return
+        in _run_one_hand) don't depress VPIP/PFR rates or count toward
+        min-sample gating.
+
+        Returns insufficient=True for ALL opponents when _hud_hands_counted
+        < opponent_stats_min_samples. Past that threshold, returns
+        insufficient=True ONLY for individual opponents whose specific stat
+        denominator is 0 (rare edge case — opponent who played 30+ hands
+        but never had a 3-bet opportunity, or never called).
+
+        Conservative all-or-nothing per-opponent policy avoids the
+        OpponentStatsOrInsufficient validator's "non-insufficient → all
+        numeric required" constraint. Documented limitation: an opponent
+        past 30 hands with no 3-bet chance / no calls / no VPIP loses
+        all 5 stats. Future Phase 5+ may relax the validator to per-stat
+        None handling.
+        """
+        # OpponentStatsOrInsufficient imported at module top (codex re-audit
+        # BLOCKER N3 fix — annotation must resolve under mypy --strict).
+        n_played = self._hud_hands_counted
+        min_samples = self._config.opponent_stats_min_samples
+        out: dict[int, OpponentStatsOrInsufficient] = {}
+        for seat in range(self._config.num_players):
+            if seat == actor:
+                continue  # exclude self
+            if n_played < min_samples:
+                out[seat] = OpponentStatsOrInsufficient(insufficient=True)
+                continue
+            c = self._hud_counters[seat]
+            three_bet_den = c["three_bet_chances"]
+            af_den = c["af_passive"]
+            wtsd_den = c["wtsd_chances"]
+            if three_bet_den == 0 or af_den == 0 or wtsd_den == 0:
+                out[seat] = OpponentStatsOrInsufficient(insufficient=True)
+                continue
+            out[seat] = OpponentStatsOrInsufficient(
+                insufficient=False,
+                vpip=c["vpip_actions"] / n_played,
+                pfr=c["pfr_actions"] / n_played,
+                three_bet=c["three_bet_actions"] / three_bet_den,
+                af=c["af_aggressive"] / af_den,
+                wtsd=c["wtsd_actions"] / wtsd_den,
+            )
+        return out
+
     # ------------------------------------------------- per-hand
 
     async def _run_one_hand(self, hand_id: int) -> None:
@@ -322,7 +375,11 @@ class Session:
         while state._state.actor_index is not None:  # noqa: SLF001
             actor = int(state._state.actor_index)  # noqa: SLF001
             turn_seed = _derive_turn_seed(ctx.deck_seed, actor, turn_counter)
-            view = build_player_view(state, actor, turn_seed=turn_seed)
+            opp_stats = self._build_opponent_stats(actor)
+            view = build_player_view(
+                state, actor, turn_seed=turn_seed,
+                opponent_stats=opp_stats,
+            )
             street = view.street
             decision = await self._agents[actor].decide(view)
             # Phase 4 Task 2: per-seat retry/token aggregation for meta.json.

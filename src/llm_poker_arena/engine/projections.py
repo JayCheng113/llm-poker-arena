@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 from llm_poker_arena.engine.legal_actions import compute_legal_tool_set
 from llm_poker_arena.engine.types import Street
 from llm_poker_arena.engine.views import (
+    OpponentStatsOrInsufficient,
     PlayerView,
     PublicView,
     SeatPublicInfo,
@@ -117,12 +118,23 @@ def _infer_street(state: CanonicalState) -> Street:
     return Street.RIVER
 
 
-def build_player_view(state: CanonicalState, actor: int, *, turn_seed: int) -> PlayerView:
+def build_player_view(
+    state: CanonicalState,
+    actor: int,
+    *,
+    turn_seed: int,
+    opponent_stats: dict[int, OpponentStatsOrInsufficient] | None = None,
+) -> PlayerView:
     """Project CanonicalState into a seat-scoped PlayerView DTO.
 
     P2 invariant: the returned DTO carries only `actor`'s hole cards and
     `actor`'s turn_seed; it never contains other seats' hole cards or other
-    seats' turn_seed. Pure function of (state, actor, turn_seed).
+    seats' turn_seed. Pure function of (state, actor, turn_seed,
+    opponent_stats).
+
+    Phase 3c-hud: optional opponent_stats kwarg (default None → {}) carries
+    pre-computed per-opponent HUD stats. Session computes via
+    _build_opponent_stats(actor) and passes per turn.
     """
     raw = state._state  # noqa: SLF001
     my_hole = state.hole_cards().get(actor)
@@ -175,7 +187,7 @@ def build_player_view(state: CanonicalState, actor: int, *, turn_seed: int) -> P
         already_acted_this_street=(),  # TODO(phase2): thread street-history plumbing
         hand_history=(),  # TODO(phase2): thread street-history plumbing
         legal_actions=compute_legal_tool_set(state, actor),
-        opponent_stats={},  # TODO(phase2): thread HUD stats from DuckDB
+        opponent_stats=opponent_stats or {},
         hand_id=state._ctx.hand_id,  # noqa: SLF001
         street=street,
         button_seat=state.button_seat,
