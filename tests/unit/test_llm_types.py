@@ -324,3 +324,32 @@ def test_iteration_record_with_tool_result_round_trip() -> None:
     rec2 = IterationRecord.model_validate_json(blob)
     assert rec2 == rec
     assert rec2.tool_result == {"value": 0.2857142857142857}
+
+
+def test_equity_result_round_trip() -> None:
+    from llm_poker_arena.agents.llm.types import EquityResult
+
+    er = EquityResult(
+        hero_equity=0.4523,
+        ci_low=0.4385,
+        ci_high=0.4661,
+        n_samples=5000,
+        seed=12345,
+        backend="eval7",
+    )
+    blob = er.model_dump_json()
+    er2 = EquityResult.model_validate_json(blob)
+    assert er2 == er
+    assert er2.backend == "eval7"
+
+
+def test_equity_result_validates_equity_range() -> None:
+    """hero_equity must be in [0, 1]."""
+    from llm_poker_arena.agents.llm.types import EquityResult
+
+    with pytest.raises(ValidationError):
+        EquityResult(hero_equity=1.5, ci_low=0.0, ci_high=1.0,
+                     n_samples=5000, seed=0, backend="eval7")
+    with pytest.raises(ValidationError):
+        EquityResult(hero_equity=-0.1, ci_low=0.0, ci_high=1.0,
+                     n_samples=5000, seed=0, backend="eval7")

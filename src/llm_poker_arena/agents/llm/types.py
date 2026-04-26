@@ -4,7 +4,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from llm_poker_arena.engine.legal_actions import Action
 
@@ -191,3 +191,21 @@ class ObservedCapability(BaseModel):
     seed_accepted: bool
     tool_use_with_thinking_ok: bool
     extra_flags: dict[str, Any]
+
+
+class EquityResult(BaseModel):
+    """spec §5.2.3 + §7.4: multi-way MC equity tool return.
+
+    Hero's equity (win + 0.5 * tie probability) vs the dictionary of
+    villain ranges, with 95% normal-approximation CI and forensic
+    metadata (n_samples, seed, backend) for reproducibility.
+    """
+
+    model_config = _frozen()
+
+    hero_equity: float = Field(ge=0.0, le=1.0)
+    ci_low: float = Field(ge=0.0, le=1.0)
+    ci_high: float = Field(ge=0.0, le=1.0)
+    n_samples: int = Field(gt=0)
+    seed: int
+    backend: str
