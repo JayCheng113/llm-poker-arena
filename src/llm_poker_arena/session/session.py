@@ -404,6 +404,15 @@ class Session:
                 if chosen.tool_name in ("raise_to", "bet", "all_in"):
                     hand_state[actor]["preflop_raised"] = True
 
+            # Phase 3c-hud: AF — individual action ratio across all streets.
+            # aggressive = bet + raise_to + all_in
+            # passive = call
+            # fold + check not in formula (Task 5).
+            if chosen.tool_name in ("bet", "raise_to", "all_in"):
+                self._hud_counters[actor]["af_aggressive"] += 1
+            elif chosen.tool_name == "call":
+                self._hud_counters[actor]["af_passive"] += 1
+
             result = apply_action(state, actor, chosen)
             if not result.is_valid:
                 raise RuntimeError(
