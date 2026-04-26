@@ -1,4 +1,5 @@
 """MVP 5 exit: 50,000 hands with RandomAgent. No crash. Run with `pytest -m slow`."""
+
 from __future__ import annotations
 
 import pytest
@@ -11,10 +12,17 @@ from llm_poker_arena.engine.config import HandContext, SessionConfig
 @pytest.mark.slow
 def test_50k_random_hands_no_audit_failure() -> None:
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=60, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=2026,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=60,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=2026,
     )
     agents = [RandomAgent() for _ in range(6)]
     total = 50_000

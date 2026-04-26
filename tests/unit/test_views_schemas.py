@@ -1,4 +1,5 @@
 """Schema/serialization tests for view DTOs."""
+
 from __future__ import annotations
 
 import json
@@ -93,12 +94,18 @@ def _player_view() -> PlayerView:
 
 # ---------- SessionParamsView ----------
 
+
 def test_session_params_view_forbids_extra() -> None:
     with pytest.raises(ValidationError):
         SessionParamsView(
-            num_players=6, sb=50, bb=100, starting_stack=10_000,
-            max_utility_calls=5, rationale_required=True,
-            enable_math_tools=False, enable_hud_tool=False,
+            num_players=6,
+            sb=50,
+            bb=100,
+            starting_stack=10_000,
+            max_utility_calls=5,
+            rationale_required=True,
+            enable_math_tools=False,
+            enable_hud_tool=False,
             opponent_stats_min_samples=30,
             favorite_color="blue",  # type: ignore[call-arg]
         )
@@ -111,6 +118,7 @@ def test_session_params_view_is_frozen() -> None:
 
 
 # ---------- ActionToolSpec / LegalActionSet ----------
+
 
 def test_action_tool_spec_round_trip() -> None:
     spec = ActionToolSpec(
@@ -129,6 +137,7 @@ def test_legal_action_set_is_tuple_of_specs() -> None:
 
 
 # ---------- PlayerView ----------
+
 
 def test_player_view_round_trip_json() -> None:
     v = _player_view()
@@ -189,6 +198,7 @@ def test_player_view_nested_mutation_attempts_fail() -> None:
 
 # ---------- PublicView ----------
 
+
 def test_public_view_has_no_hole_card_field() -> None:
     fields = set(PublicView.model_fields.keys())
     leaks = {"my_hole_cards", "hole_cards", "hole_cards_by_seat", "deck", "turn_seed"}
@@ -212,9 +222,13 @@ def test_public_view_round_trip() -> None:
 
 def test_public_view_sequences_are_tuples() -> None:
     pv = PublicView(
-        hand_id=1, street=Street.FLOP, pot=500,
-        sidepots=(), community=("7c", "2d", "5s"),
-        seats_public=_seats(), button_seat=0,
+        hand_id=1,
+        street=Street.FLOP,
+        pot=500,
+        sidepots=(),
+        community=("7c", "2d", "5s"),
+        seats_public=_seats(),
+        button_seat=0,
     )
     assert isinstance(pv.sidepots, tuple)
     assert isinstance(pv.community, tuple)
@@ -223,6 +237,7 @@ def test_public_view_sequences_are_tuples() -> None:
 
 
 # ---------- OpponentStatsOrInsufficient ----------
+
 
 def test_opponent_stats_union_allows_insufficient_sentinel() -> None:
     ins = OpponentStatsOrInsufficient(insufficient=True)
@@ -245,6 +260,7 @@ def test_opponent_stats_rejects_insufficient_with_values() -> None:
 
 # ---------- AgentSnapshot ----------
 
+
 def test_agent_snapshot_round_trip() -> None:
     snap = AgentSnapshot(
         timestamp="2026-04-23T18:12:55.789Z",
@@ -259,6 +275,7 @@ def test_agent_snapshot_round_trip() -> None:
 
 
 # ---------- ActionRecord ----------
+
 
 def test_action_record_minimal() -> None:
     rec = ActionRecord(

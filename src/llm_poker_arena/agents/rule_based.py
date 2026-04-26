@@ -22,6 +22,7 @@ Phase-3+ enhancement. The Phase 2a goal is a deterministic, heterogeneous
 lineup partner for the RandomAgent-driven integration test, not a competitive
 opponent.
 """
+
 from __future__ import annotations
 
 from llm_poker_arena.agents.base import Agent
@@ -71,7 +72,11 @@ def _has_top_or_middle_pair(hole: tuple[str, str], community: tuple[str, ...]) -
 
 def _my_position_index(view: PlayerView) -> int:
     """Button-relative action order. 0=earliest (UTG), 5=latest (BB) for 6max."""
-    return view.action_order_this_street.index(view.my_seat) if view.my_seat in view.action_order_this_street else 0
+    return (
+        view.action_order_this_street.index(view.my_seat)
+        if view.my_seat in view.action_order_this_street
+        else 0
+    )
 
 
 def _find_tool_amount_bounds(legal: LegalActionSet, name: str) -> tuple[int, int]:
@@ -94,10 +99,13 @@ class RuleBasedAgent(Agent):
             final_action=action,
             total_tokens=TokenCounts.zero(),
             wall_time_ms=0,
-            api_retry_count=0, illegal_action_retry_count=0,
-            no_tool_retry_count=0, tool_usage_error_count=0,
+            api_retry_count=0,
+            illegal_action_retry_count=0,
+            no_tool_retry_count=0,
+            tool_usage_error_count=0,
             default_action_fallback=False,
-            api_error=None, turn_timeout_exceeded=False,
+            api_error=None,
+            turn_timeout_exceeded=False,
         )
 
     def _pick_action(self, view: PlayerView) -> Action:
@@ -116,7 +124,11 @@ class RuleBasedAgent(Agent):
     # --------------------------------------------------- preflop
 
     def _preflop(
-        self, view: PlayerView, legal: set[str], bb: int, to_call: int,
+        self,
+        view: PlayerView,
+        legal: set[str],
+        bb: int,
+        to_call: int,
     ) -> Action:
         cls = _classify_preflop(view.my_hole_cards)
         position_idx = _my_position_index(view)

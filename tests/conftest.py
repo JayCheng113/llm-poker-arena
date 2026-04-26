@@ -1,4 +1,5 @@
 """Shared pytest fixtures for llm-poker-arena tests."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -11,10 +12,17 @@ from llm_poker_arena.engine.config import HandContext, SessionConfig
 @pytest.fixture
 def sample_config() -> SessionConfig:
     return SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=60, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=60,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
 
 

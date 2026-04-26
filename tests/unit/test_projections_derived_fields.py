@@ -12,6 +12,7 @@ safety-critical derived values into PlayerView itself:
     postflop SB-first), full 6-seat tuple including folded seats — this is the
     contract rule_based.py already depends on for `position_idx` math.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -26,17 +27,25 @@ from llm_poker_arena.engine.types import Street
 
 def _cfg() -> SessionConfig:
     return SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=60, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=60,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
 
 
-def _state(button_seat: int = 0,
-           initial_stacks: tuple[int, ...] | None = None) -> CanonicalState:
+def _state(button_seat: int = 0, initial_stacks: tuple[int, ...] | None = None) -> CanonicalState:
     ctx = HandContext(
-        hand_id=0, deck_seed=42_000, button_seat=button_seat,
+        hand_id=0,
+        deck_seed=42_000,
+        button_seat=button_seat,
         initial_stacks=initial_stacks or (10_000,) * 6,
     )
     return CanonicalState(_cfg(), ctx)
@@ -44,16 +53,21 @@ def _state(button_seat: int = 0,
 
 # ---------- action_order_this_street ----------
 
-@pytest.mark.parametrize(("button", "expected"), [
-    (0, (3, 4, 5, 0, 1, 2)),  # button=0: UTG=3 first, then HJ,CO,BTN,SB,BB
-    (1, (4, 5, 0, 1, 2, 3)),  # button=1: UTG=4
-    (2, (5, 0, 1, 2, 3, 4)),  # button=2: UTG=5
-    (3, (0, 1, 2, 3, 4, 5)),  # button=3: UTG=0
-    (4, (1, 2, 3, 4, 5, 0)),  # button=4: UTG=1
-    (5, (2, 3, 4, 5, 0, 1)),  # button=5: UTG=2
-])
+
+@pytest.mark.parametrize(
+    ("button", "expected"),
+    [
+        (0, (3, 4, 5, 0, 1, 2)),  # button=0: UTG=3 first, then HJ,CO,BTN,SB,BB
+        (1, (4, 5, 0, 1, 2, 3)),  # button=1: UTG=4
+        (2, (5, 0, 1, 2, 3, 4)),  # button=2: UTG=5
+        (3, (0, 1, 2, 3, 4, 5)),  # button=3: UTG=0
+        (4, (1, 2, 3, 4, 5, 0)),  # button=4: UTG=1
+        (5, (2, 3, 4, 5, 0, 1)),  # button=5: UTG=2
+    ],
+)
 def test_action_order_preflop_starts_at_utg(
-    button: int, expected: tuple[int, ...],
+    button: int,
+    expected: tuple[int, ...],
 ) -> None:
     s = _state(button_seat=button)
     actor = (button + 3) % 6  # UTG
@@ -79,6 +93,7 @@ def test_action_order_postflop_starts_at_sb_for_button_zero() -> None:
 
 
 # ---------- seats_yet_to_act_after_me ----------
+
 
 def test_seats_yet_to_act_at_first_preflop_actor_button_zero() -> None:
     s = _state(button_seat=0)
@@ -107,6 +122,7 @@ def test_seats_yet_to_act_at_bb_with_no_raises_is_empty() -> None:
 
 # ---------- to_call ----------
 
+
 def test_to_call_at_first_preflop_actor_is_bb() -> None:
     s = _state(button_seat=0)
     view = build_player_view(s, 3, turn_seed=42)  # UTG facing 100bb
@@ -133,6 +149,7 @@ def test_to_call_is_non_negative_even_if_bookkeeping_drifts() -> None:
 
 # ---------- pot_odds_required ----------
 
+
 def test_pot_odds_required_when_facing_bb_open() -> None:
     """UTG facing BB: pot=150 (sb+bb), to_call=100. Required = 100/(150+100) = 0.4."""
     s = _state(button_seat=0)
@@ -154,6 +171,7 @@ def test_pot_odds_required_is_none_when_to_call_zero() -> None:
 
 
 # ---------- effective_stack ----------
+
 
 def test_effective_stack_with_equal_stacks_is_starting_stack() -> None:
     s = _state(button_seat=0)  # all 10000

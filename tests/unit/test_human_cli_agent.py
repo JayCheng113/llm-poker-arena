@@ -1,4 +1,5 @@
 """Tests for HumanCLIAgent (Phase 3a async Agent ABC, sync I/O underneath)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -28,9 +29,14 @@ def _act(agent: HumanCLIAgent, view: PlayerView) -> Action:
 
 def _params() -> SessionParamsView:
     return SessionParamsView(
-        num_players=6, sb=50, bb=100, starting_stack=10_000,
-        max_utility_calls=5, rationale_required=True,
-        enable_math_tools=False, enable_hud_tool=False,
+        num_players=6,
+        sb=50,
+        bb=100,
+        starting_stack=10_000,
+        max_utility_calls=5,
+        rationale_required=True,
+        enable_math_tools=False,
+        enable_hud_tool=False,
         opponent_stats_min_samples=30,
     )
 
@@ -38,9 +44,13 @@ def _params() -> SessionParamsView:
 def _seats() -> tuple[SeatPublicInfo, ...]:
     return tuple(
         SeatPublicInfo(
-            seat=i, label=f"Player_{i}",
-            position_short="UTG", position_full="Under the Gun",
-            stack=10_000, invested_this_hand=0, invested_this_round=0,
+            seat=i,
+            label=f"Player_{i}",
+            position_short="UTG",
+            position_full="Under the Gun",
+            stack=10_000,
+            invested_this_hand=0,
+            invested_this_round=0,
             status="in_hand",
         )
         for i in range(6)
@@ -58,26 +68,40 @@ def _view(
     tools: list[ActionToolSpec] = []
     for name in legal_names:
         if name in ("bet", "raise_to"):
-            tools.append(ActionToolSpec(
-                name=name,
-                args={"amount": {"min": raise_min_max[0], "max": raise_min_max[1]}},
-            ))
+            tools.append(
+                ActionToolSpec(
+                    name=name,
+                    args={"amount": {"min": raise_min_max[0], "max": raise_min_max[1]}},
+                )
+            )
         else:
             tools.append(ActionToolSpec(name=name, args={}))
     return PlayerView(
-        my_seat=3, my_hole_cards=("As", "Kd"), community=(),
-        pot=150, sidepots=(), my_stack=10_000,
-        my_invested_this_hand=0, my_invested_this_round=0,
+        my_seat=3,
+        my_hole_cards=("As", "Kd"),
+        community=(),
+        pot=150,
+        sidepots=(),
+        my_stack=10_000,
+        my_invested_this_hand=0,
+        my_invested_this_round=0,
         current_bet_to_match=100,
-        to_call=100, pot_odds_required=0.4, effective_stack=10_000,
-        seats_public=_seats(), opponent_seats_in_hand=(0, 1, 2, 4, 5),
+        to_call=100,
+        pot_odds_required=0.4,
+        effective_stack=10_000,
+        seats_public=_seats(),
+        opponent_seats_in_hand=(0, 1, 2, 4, 5),
         action_order_this_street=(3, 4, 5, 0, 1, 2),
         seats_yet_to_act_after_me=(4, 5, 0, 1, 2),
-        already_acted_this_street=(), hand_history=(),
+        already_acted_this_street=(),
+        hand_history=(),
         legal_actions=LegalActionSet(tools=tuple(tools)),
         opponent_stats={},
-        hand_id=1, street=Street.PREFLOP, button_seat=0,
-        turn_seed=1, immutable_session_params=_params(),
+        hand_id=1,
+        street=Street.PREFLOP,
+        button_seat=0,
+        turn_seed=1,
+        immutable_session_params=_params(),
     )
 
 

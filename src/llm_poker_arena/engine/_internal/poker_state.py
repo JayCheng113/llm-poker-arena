@@ -10,6 +10,7 @@ Invariants (from spec §3.1 / PP-01 / PP-02):
     (button_seat + 2) % num_players.
   - Starts fresh per hand; no state persists across hands in this object.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

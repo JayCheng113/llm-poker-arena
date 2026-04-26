@@ -1,4 +1,5 @@
 """Tests for BatchedJsonlWriter (durability + batch semantics)."""
+
 from __future__ import annotations
 
 import json
@@ -91,7 +92,8 @@ def test_write_after_close_raises(tmp_path: Path) -> None:
 
 
 def test_close_propagates_flush_errors_and_still_closes_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Explicit close() must propagate IO errors instead of silently swallowing.
 

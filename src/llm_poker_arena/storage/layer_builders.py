@@ -18,6 +18,7 @@ records from `state.operations` if VPIP/PFR SQL needs them; meanwhile
 VPIP-relevant filtering uses `is_forced_blind` on agent snapshots, which is
 always `False` (mock agents never post blinds).
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -50,7 +51,11 @@ from llm_poker_arena.storage.schemas import (
 
 
 def build_public_hand_started_event(
-    *, hand_id: int, state: Any, sb: int, bb: int,  # noqa: ANN401 — CanonicalState
+    *,
+    hand_id: int,
+    state: Any,
+    sb: int,
+    bb: int,  # noqa: ANN401 — CanonicalState
 ) -> PublicHandStarted:
     return PublicHandStarted(
         hand_id=hand_id,
@@ -64,7 +69,11 @@ def build_public_hole_dealt_event(*, hand_id: int) -> PublicHoleDealt:
 
 
 def build_public_action_event(
-    *, hand_id: int, seat: int, street: Street, action: Action,
+    *,
+    hand_id: int,
+    seat: int,
+    street: Street,
+    action: Action,
 ) -> PublicAction:
     body: dict[str, Any] = {"type": action.tool_name}
     if action.tool_name in ("bet", "raise_to"):
@@ -80,7 +89,10 @@ def build_public_action_event(
 
 
 def build_public_street_reveal_event(
-    *, hand_id: int, state: Any, street: Street,  # noqa: ANN401
+    *,
+    hand_id: int,
+    state: Any,
+    street: Street,  # noqa: ANN401
 ) -> PublicFlop | PublicTurn | PublicRiver:
     community = state.community()  # list[str]
     if street == Street.FLOP:
@@ -94,7 +106,8 @@ def build_public_street_reveal_event(
 
 
 def build_public_showdown_event(
-    *, hand_id: int,
+    *,
+    hand_id: int,
     showdown_seats: set[int],
     hole_cards: dict[int, tuple[str, str]],
 ) -> PublicShowdown:
@@ -107,14 +120,15 @@ def build_public_showdown_event(
     systematically under-reveal the showdown per spec §7.3.
     """
     revealed = {
-        str(seat): hole_cards[seat]
-        for seat in sorted(showdown_seats) if seat in hole_cards
+        str(seat): hole_cards[seat] for seat in sorted(showdown_seats) if seat in hole_cards
     }
     return PublicShowdown(hand_id=hand_id, revealed=revealed)
 
 
 def build_public_hand_ended_event(
-    *, hand_id: int, winnings: dict[int, int],
+    *,
+    hand_id: int,
+    winnings: dict[int, int],
 ) -> PublicHandEnded:
     return PublicHandEnded(
         hand_id=hand_id,
@@ -123,15 +137,20 @@ def build_public_hand_ended_event(
 
 
 def build_public_hand_record(
-    *, hand_id: int, events: tuple[PublicEvent, ...],
+    *,
+    hand_id: int,
+    events: tuple[PublicEvent, ...],
 ) -> PublicHandRecord:
     """Wrap a tuple of atomic public events into the spec-§7.3 hand-per-line shape."""
     return PublicHandRecord(hand_id=hand_id, street_events=events)
 
 
 def build_canonical_private_hand(
-    *, hand_id: int, state: Any,  # noqa: ANN401
-    started_at: str, ended_at: str,
+    *,
+    hand_id: int,
+    state: Any,  # noqa: ANN401
+    started_at: str,
+    ended_at: str,
     actions: tuple[ActionRecordPrivate, ...],
     hole_cards: dict[int, tuple[str, str]],
     winners: tuple[WinnerInfo, ...] = (),
@@ -155,9 +174,11 @@ def build_canonical_private_hand(
     stacks_initial = dict(enumerate(state._ctx.initial_stacks))  # noqa: SLF001
     return CanonicalPrivateHandRecord(
         hand_id=hand_id,
-        started_at=started_at, ended_at=ended_at,
+        started_at=started_at,
+        ended_at=ended_at,
         button_seat=state.button_seat,
-        sb_seat=state.sb_seat, bb_seat=state.bb_seat,
+        sb_seat=state.sb_seat,
+        bb_seat=state.bb_seat,
         deck_seed=state._ctx.deck_seed,  # noqa: SLF001
         starting_stacks={str(s): int(v) for s, v in stacks_initial.items()},
         hole_cards={str(s): cards for s, cards in hole_cards.items()},
@@ -174,9 +195,18 @@ def build_canonical_private_hand(
 
 
 def build_agent_view_snapshot(
-    *, hand_id: int, session_id: str, seat: int, street: Street,
-    timestamp: str, view: PlayerView, action: Action, turn_index: int,
-    agent_provider: str, agent_model: str, agent_version: str,
+    *,
+    hand_id: int,
+    session_id: str,
+    seat: int,
+    street: Street,
+    timestamp: str,
+    view: PlayerView,
+    action: Action,
+    turn_index: int,
+    agent_provider: str,
+    agent_model: str,
+    agent_version: str,
     default_action_fallback: bool,
     iterations: tuple[IterationRecord, ...] = (),
     total_tokens: TokenCounts | Mapping[str, int] | None = None,
@@ -203,15 +233,12 @@ def build_agent_view_snapshot(
     # this populated. Both successful (tool_result has "value") and failed
     # (tool_result has "error") utility attempts count — matches spec §4.2
     # line 1017 (utility_count increments on attempt, not just success).
-    total_utility_calls = sum(
-        1 for ir in iterations if ir.tool_result is not None
-    )
+    total_utility_calls = sum(1 for ir in iterations if ir.tool_result is not None)
     total_tokens_dict: dict[str, int]
     if total_tokens is None:
         total_tokens_dict = {}
     elif isinstance(total_tokens, TokenCounts):
-        total_tokens_dict = cast("dict[str, int]",
-                                 total_tokens.model_dump(mode="json"))
+        total_tokens_dict = cast("dict[str, int]", total_tokens.model_dump(mode="json"))
     else:
         total_tokens_dict = dict(total_tokens)
 
@@ -247,7 +274,10 @@ def build_agent_view_snapshot(
 
 
 def build_censored_hand_record(
-    *, hand_id: int, seat: int, session_id: str,
+    *,
+    hand_id: int,
+    seat: int,
+    session_id: str,
     api_error: object,
     timestamp: str,
 ) -> CensoredHandRecord:
@@ -267,6 +297,9 @@ def build_censored_hand_record(
     else:
         err_dict = {"type": "Unknown", "detail": str(api_error)}
     return CensoredHandRecord(
-        hand_id=hand_id, seat=seat, session_id=session_id,
-        api_error=err_dict, timestamp=timestamp,
+        hand_id=hand_id,
+        seat=seat,
+        session_id=session_id,
+        api_error=err_dict,
+        timestamp=timestamp,
     )

@@ -1,4 +1,5 @@
 """Hypothesis: chip conservation holds across random game sequences."""
+
 from __future__ import annotations
 
 from hypothesis import Verbosity, given, settings
@@ -17,10 +18,17 @@ from llm_poker_arena.engine.config import HandContext, SessionConfig
 @settings(max_examples=200, deadline=None, verbosity=Verbosity.quiet)
 def test_chip_conservation_after_each_hand(rng_seed: int, button_seat: int, hand_id: int) -> None:
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=60, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=rng_seed,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=60,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=rng_seed,
     )
     ctx = HandContext(
         hand_id=hand_id,

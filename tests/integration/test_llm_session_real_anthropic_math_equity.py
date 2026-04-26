@@ -18,6 +18,7 @@ following codex audit IMPORTANT-5):
 
 Frequency / behavior assertions belong in DuckDB analysis post-session.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -36,8 +37,7 @@ from llm_poker_arena.engine.config import SessionConfig
 from llm_poker_arena.session.session import Session
 
 pytestmark = pytest.mark.skipif(
-    os.getenv("ANTHROPIC_INTEGRATION_TEST") != "1"
-    or not os.getenv("ANTHROPIC_API_KEY"),
+    os.getenv("ANTHROPIC_INTEGRATION_TEST") != "1" or not os.getenv("ANTHROPIC_API_KEY"),
     reason="needs ANTHROPIC_INTEGRATION_TEST=1 and ANTHROPIC_API_KEY set",
 )
 
@@ -45,35 +45,45 @@ pytestmark = pytest.mark.skipif(
 def test_real_claude_haiku_two_llm_seats_with_equity_tool(tmp_path: Path) -> None:
     api_key = os.environ["ANTHROPIC_API_KEY"]
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=6, max_utility_calls=5,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=6,
+        max_utility_calls=5,
         enable_math_tools=True,
         enable_hud_tool=False,
         rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
     provider_a = AnthropicProvider(model="claude-haiku-4-5", api_key=api_key)
     provider_b = AnthropicProvider(model="claude-haiku-4-5", api_key=api_key)
-    llm_a = LLMAgent(provider=provider_a, model="claude-haiku-4-5",
-                     temperature=0.7, total_turn_timeout_sec=60.0)
-    llm_b = LLMAgent(provider=provider_b, model="claude-haiku-4-5",
-                     temperature=0.7, total_turn_timeout_sec=60.0)
+    llm_a = LLMAgent(
+        provider=provider_a, model="claude-haiku-4-5", temperature=0.7, total_turn_timeout_sec=60.0
+    )
+    llm_b = LLMAgent(
+        provider=provider_b, model="claude-haiku-4-5", temperature=0.7, total_turn_timeout_sec=60.0
+    )
     agents = [
         RandomAgent(),  # seat 0 (BTN)
-        llm_a,          # SB ← Claude
+        llm_a,  # SB ← Claude
         RandomAgent(),  # BB
-        llm_b,          # UTG ← Claude
+        llm_b,  # UTG ← Claude
         RandomAgent(),  # HJ
         RandomAgent(),  # CO
     ]
-    sess = Session(config=cfg, agents=agents, output_dir=tmp_path,
-                   session_id="real_anthropic_math_equity_smoke")
+    sess = Session(
+        config=cfg,
+        agents=agents,
+        output_dir=tmp_path,
+        session_id="real_anthropic_math_equity_smoke",
+    )
     asyncio.run(sess.run())
 
     snaps = (tmp_path / "agent_view_snapshots.jsonl").read_text().strip().splitlines()
     llm_seats = {1, 3}
-    llm_snaps = [json.loads(line) for line in snaps
-                 if json.loads(line)["seat"] in llm_seats]
+    llm_snaps = [json.loads(line) for line in snaps if json.loads(line)["seat"] in llm_seats]
     assert llm_snaps, "no LLM seat snapshots"
 
     # 1. Every final_action must be in the legal set (or default_safe_action).
@@ -91,8 +101,7 @@ def test_real_claude_haiku_two_llm_seats_with_equity_tool(tmp_path: Path) -> Non
             tc = it.get("tool_call")
             if tc and tc["name"] in ("pot_odds", "spr", "hand_equity_vs_ranges"):
                 assert it["tool_result"] is not None, (
-                    f"utility iteration without tool_result — dispatch broken "
-                    f"({tc['name']})"
+                    f"utility iteration without tool_result — dispatch broken ({tc['name']})"
                 )
                 # Each tool has its own result shape; verify minimally.
                 if tc["name"] in ("pot_odds", "spr"):

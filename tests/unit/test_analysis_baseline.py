@@ -1,4 +1,5 @@
 """Tests for run_random_baseline + run_rule_based_baseline."""
+
 from __future__ import annotations
 
 import json
@@ -11,8 +12,11 @@ def test_run_random_baseline_writes_session_artifacts(tmp_path: Path) -> None:
     out = run_random_baseline(tmp_path / "b1", num_hands=6, rng_seed=7)
     # All Phase-2a artefacts should exist.
     for fname in (
-        "canonical_private.jsonl", "public_replay.jsonl",
-        "agent_view_snapshots.jsonl", "meta.json", "config.json",
+        "canonical_private.jsonl",
+        "public_replay.jsonl",
+        "agent_view_snapshots.jsonl",
+        "meta.json",
+        "config.json",
     ):
         assert (out / fname).exists(), fname
     # session_id carries the baseline label.

@@ -1,5 +1,6 @@
 """Unit tests for provider-specific reasoning artifact extraction + byte-identical
 thinking-block preservation across replay."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -21,15 +22,17 @@ def _resp_with_thinking_blocks() -> LLMResponse:
     have provider-specific shape (signature, etc.) that MUST round-trip.
     """
     return LLMResponse(
-        provider="anthropic", model="claude-opus-4-7",
+        provider="anthropic",
+        model="claude-opus-4-7",
         stop_reason="tool_use",
-        tool_calls=(
-            ToolCall(name="fold", args={}, tool_use_id="toolu_x"),
-        ),
+        tool_calls=(ToolCall(name="fold", args={}, tool_use_id="toolu_x"),),
         text_content="My final answer: fold.",
-        tokens=TokenCounts(input_tokens=10, output_tokens=20,
-                           cache_read_input_tokens=0,
-                           cache_creation_input_tokens=0),
+        tokens=TokenCounts(
+            input_tokens=10,
+            output_tokens=20,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=0,
+        ),
         raw_assistant_turn=AssistantTurn(
             provider="anthropic",
             blocks=(
@@ -78,9 +81,12 @@ def test_anthropic_extract_reasoning_artifact_returns_thinking_and_redacted() ->
 def test_anthropic_extract_returns_empty_tuple_when_no_thinking_blocks() -> None:
     provider = AnthropicProvider(model="claude-haiku-4-5", api_key="sk-test")
     plain = LLMResponse(
-        provider="anthropic", model="claude-haiku-4-5",
-        stop_reason="end_turn", tool_calls=(),
-        text_content="ok", tokens=TokenCounts.zero(),
+        provider="anthropic",
+        model="claude-haiku-4-5",
+        stop_reason="end_turn",
+        tool_calls=(),
+        text_content="ok",
+        tokens=TokenCounts.zero(),
         raw_assistant_turn=AssistantTurn(
             provider="anthropic",
             blocks=({"type": "text", "text": "ok"},),
@@ -113,15 +119,15 @@ def test_anthropic_encrypted_thinking_kind_classified_correctly() -> None:
     appropriate ReasoningArtifactKind per spec §4.6."""
     provider = AnthropicProvider(model="claude-opus-4-7", api_key="sk-test")
     resp = LLMResponse(
-        provider="anthropic", model="claude-opus-4-7",
-        stop_reason="end_turn", tool_calls=(),
-        text_content="", tokens=TokenCounts.zero(),
+        provider="anthropic",
+        model="claude-opus-4-7",
+        stop_reason="end_turn",
+        tool_calls=(),
+        text_content="",
+        tokens=TokenCounts.zero(),
         raw_assistant_turn=AssistantTurn(
             provider="anthropic",
-            blocks=(
-                {"type": "encrypted_thinking",
-                 "data": "encrypted_blob=="},
-            ),
+            blocks=({"type": "encrypted_thinking", "data": "encrypted_blob=="},),
         ),
     )
     arts = provider.extract_reasoning_artifact(resp)
@@ -155,8 +161,7 @@ def test_anthropic_normalize_preserves_real_thinking_block_signature() -> None:
                 signature="real_sdk_sig_payload==",
             ),
             TextBlock(type="text", text="Final answer.", citations=None),
-            ToolUseBlock(type="tool_use", id="toolu_real",
-                         name="fold", input={}),
+            ToolUseBlock(type="tool_use", id="toolu_real", name="fold", input={}),
         ]
         usage = Usage(input_tokens=10, output_tokens=5)
 
@@ -165,9 +170,7 @@ def test_anthropic_normalize_preserves_real_thinking_block_signature() -> None:
     # The normalized blocks tuple must contain the thinking block dict
     # WITH the `signature` field intact — otherwise the next API call
     # would fail Anthropic's thinking-block validation.
-    thinking_dump = next(
-        b for b in resp.raw_assistant_turn.blocks if b.get("type") == "thinking"
-    )
+    thinking_dump = next(b for b in resp.raw_assistant_turn.blocks if b.get("type") == "thinking")
     assert thinking_dump["thinking"] == "Considering pot odds..."
     assert thinking_dump["signature"] == "real_sdk_sig_payload=="
     # And extract_reasoning_artifact lifts it correctly.

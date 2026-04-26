@@ -1,4 +1,5 @@
 """MVP 4 exit criterion: 1,000 hands with RandomAgent, zero crashes, zero audit failures."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -12,7 +13,11 @@ def test_thousand_random_hands_complete(
     sample_config: SessionConfig,
     hand_context_factory: Callable[..., HandContext],
 ) -> None:
-    cfg = sample_config._replace(num_hands=1_002) if hasattr(sample_config, "_replace") else sample_config
+    cfg = (
+        sample_config._replace(num_hands=1_002)
+        if hasattr(sample_config, "_replace")
+        else sample_config
+    )
     agents = [RandomAgent() for _ in range(6)]
     failures = 0
     total = 1_000

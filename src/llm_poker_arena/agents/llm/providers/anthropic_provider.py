@@ -6,6 +6,7 @@ translate APIStatusError into transient (5xx, 429) or permanent (4xx).
 Out of scope (3b): extended-thinking blocks, capability probe, system prompt
 caching headers.
 """
+
 from __future__ import annotations
 
 from typing import Any, cast
@@ -30,7 +31,11 @@ from llm_poker_arena.agents.llm.types import (
 
 class AnthropicProvider(LLMProvider):
     def __init__(
-        self, *, model: str, api_key: str, max_tokens: int = 1024,
+        self,
+        *,
+        model: str,
+        api_key: str,
+        max_tokens: int = 1024,
     ) -> None:
         self._model = model
         self._max_tokens = max_tokens
@@ -78,16 +83,16 @@ class AnthropicProvider(LLMProvider):
         text_parts: list[str] = []
         raw_blocks: list[dict[str, Any]] = []
         for block in resp.content:
-            block_dump = (
-                block.model_dump() if hasattr(block, "model_dump") else dict(block)
-            )
+            block_dump = block.model_dump() if hasattr(block, "model_dump") else dict(block)
             raw_blocks.append(block_dump)
             if block.type == "tool_use":
-                tool_calls.append(ToolCall(
-                    name=block.name,
-                    args=dict(block.input or {}),
-                    tool_use_id=block.id,
-                ))
+                tool_calls.append(
+                    ToolCall(
+                        name=block.name,
+                        args=dict(block.input or {}),
+                        tool_use_id=block.id,
+                    )
+                )
             elif block.type == "text":
                 text_parts.append(block.text)
 
@@ -100,9 +105,17 @@ class AnthropicProvider(LLMProvider):
         )
 
         stop_reason_raw = resp.stop_reason or "other"
-        stop_reason = stop_reason_raw if stop_reason_raw in (
-            "end_turn", "tool_use", "max_tokens", "stop_sequence",
-        ) else "other"
+        stop_reason = (
+            stop_reason_raw
+            if stop_reason_raw
+            in (
+                "end_turn",
+                "tool_use",
+                "max_tokens",
+                "stop_sequence",
+            )
+            else "other"
+        )
 
         return LLMResponse(
             provider="anthropic",
@@ -112,12 +125,14 @@ class AnthropicProvider(LLMProvider):
             text_content="".join(text_parts),
             tokens=tokens,
             raw_assistant_turn=AssistantTurn(
-                provider="anthropic", blocks=tuple(raw_blocks),
+                provider="anthropic",
+                blocks=tuple(raw_blocks),
             ),
         )
 
     def build_assistant_message_for_replay(
-        self, response: LLMResponse,
+        self,
+        response: LLMResponse,
     ) -> dict[str, Any]:
         """spec §4.4 BR2-07: pass raw blocks through byte-identical so
         thinking/encrypted_thinking/redacted_thinking blocks survive replay.
@@ -129,12 +144,14 @@ class AnthropicProvider(LLMProvider):
             if response.text_content:
                 synth.append({"type": "text", "text": response.text_content})
             for tc in response.tool_calls:
-                synth.append({
-                    "type": "tool_use",
-                    "id": tc.tool_use_id,
-                    "name": tc.name,
-                    "input": tc.args,
-                })
+                synth.append(
+                    {
+                        "type": "tool_use",
+                        "id": tc.tool_use_id,
+                        "name": tc.name,
+                        "input": tc.args,
+                    }
+                )
             if not synth:
                 synth.append({"type": "text", "text": ""})
             blocks = synth
@@ -147,24 +164,27 @@ class AnthropicProvider(LLMProvider):
         is_error: bool,
         content: str,
     ) -> list[dict[str, Any]]:
-        return [{
-            "role": "user",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": tc.tool_use_id,
-                    "is_error": is_error,
-                    "content": content,
-                }
-                for tc in tool_calls
-            ],
-        }]
+        return [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tc.tool_use_id,
+                        "is_error": is_error,
+                        "content": content,
+                    }
+                    for tc in tool_calls
+                ],
+            }
+        ]
 
     def build_user_text_message(self, text: str) -> dict[str, Any]:
         return {"role": "user", "content": text}
 
     def extract_reasoning_artifact(
-        self, response: LLMResponse,
+        self,
+        response: LLMResponse,
     ) -> tuple[ReasoningArtifact, ...]:
         """spec §4.6: walk raw blocks, return thinking/encrypted/redacted as
         ReasoningArtifact tuple. Empty tuple if extended thinking is OFF
@@ -183,31 +203,37 @@ class AnthropicProvider(LLMProvider):
         for idx, block in enumerate(response.raw_assistant_turn.blocks):
             btype = block.get("type")
             if btype == "thinking":
-                out.append(ReasoningArtifact(
-                    kind=ReasoningArtifactKind.THINKING_BLOCK,
-                    content=str(block.get("thinking") or ""),
-                    provider_raw_index=idx,
-                ))
+                out.append(
+                    ReasoningArtifact(
+                        kind=ReasoningArtifactKind.THINKING_BLOCK,
+                        content=str(block.get("thinking") or ""),
+                        provider_raw_index=idx,
+                    )
+                )
             elif btype == "redacted_thinking":
                 # Spec §4.6: REDACTED has no plaintext; content is None.
                 # The opaque `data` field is preserved in the raw blocks
                 # via build_assistant_message_for_replay; analysts who
                 # need it can read raw_assistant_turn.blocks directly.
-                out.append(ReasoningArtifact(
-                    kind=ReasoningArtifactKind.REDACTED,
-                    content=None,
-                    provider_raw_index=idx,
-                ))
+                out.append(
+                    ReasoningArtifact(
+                        kind=ReasoningArtifactKind.REDACTED,
+                        content=None,
+                        provider_raw_index=idx,
+                    )
+                )
             elif btype == "encrypted_thinking":
                 # Spec §4.6: ENCRYPTED carries opaque base64 payload. We
                 # store it for forensic recovery but downstream rationale
                 # checks must reject it (see _has_text_rationale_artifact
                 # in LLMAgent).
-                out.append(ReasoningArtifact(
-                    kind=ReasoningArtifactKind.ENCRYPTED,
-                    content=str(block.get("data") or ""),
-                    provider_raw_index=idx,
-                ))
+                out.append(
+                    ReasoningArtifact(
+                        kind=ReasoningArtifactKind.ENCRYPTED,
+                        content=str(block.get("data") or ""),
+                        provider_raw_index=idx,
+                    )
+                )
         return tuple(out)
 
     async def probe(self) -> ObservedCapability:
@@ -221,6 +247,7 @@ class AnthropicProvider(LLMProvider):
         a thinking-enabled tool_use round and observe behavior.
         """
         from datetime import UTC, datetime
+
         try:
             await self._client.messages.create(
                 model=self._model,
@@ -231,9 +258,7 @@ class AnthropicProvider(LLMProvider):
             raise ProviderTransientError(f"probe transient: {e}") from e
         except APIStatusError as e:
             raise ProviderPermanentError(f"probe permanent: {e}") from e
-        probed_at = (
-            datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-        )
+        probed_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
         return ObservedCapability(
             provider="anthropic",
             probed_at=probed_at,

@@ -1,4 +1,5 @@
 """BR2-03 / PP-04: default_safe_action must never return an illegal action."""
+
 from __future__ import annotations
 
 from llm_poker_arena.engine.legal_actions import default_safe_action
@@ -14,9 +15,14 @@ from llm_poker_arena.engine.views import (
 
 def _params() -> SessionParamsView:
     return SessionParamsView(
-        num_players=6, sb=50, bb=100, starting_stack=10_000,
-        max_utility_calls=5, rationale_required=True,
-        enable_math_tools=False, enable_hud_tool=False,
+        num_players=6,
+        sb=50,
+        bb=100,
+        starting_stack=10_000,
+        max_utility_calls=5,
+        rationale_required=True,
+        enable_math_tools=False,
+        enable_hud_tool=False,
         opponent_stats_min_samples=30,
     )
 
@@ -24,8 +30,14 @@ def _params() -> SessionParamsView:
 def _seats() -> tuple[SeatPublicInfo, ...]:
     return tuple(
         SeatPublicInfo(
-            seat=i, label=f"P{i}", position_short="BB", position_full="Big Blind",
-            stack=10_000, invested_this_hand=0, invested_this_round=0, status="in_hand",
+            seat=i,
+            label=f"P{i}",
+            position_short="BB",
+            position_full="Big Blind",
+            stack=10_000,
+            invested_this_hand=0,
+            invested_this_round=0,
+            status="in_hand",
         )
         for i in range(6)
     )
@@ -55,7 +67,10 @@ def _view(*, current_bet_to_match: int, my_invested_this_round: int) -> PlayerVi
         already_acted_this_street=(),
         hand_history=(),
         legal_actions=LegalActionSet(
-            tools=(ActionToolSpec(name="check", args={}), ActionToolSpec(name="bet", args={"amount": {"min": 100, "max": 10_000}})),
+            tools=(
+                ActionToolSpec(name="check", args={}),
+                ActionToolSpec(name="bet", args={"amount": {"min": 100, "max": 10_000}}),
+            ),
         ),
         opponent_stats={},
         hand_id=1,

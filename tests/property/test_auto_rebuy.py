@@ -1,4 +1,5 @@
 """§3.5 auto-rebuy: every hand starts with all seats at starting_stack."""
+
 from __future__ import annotations
 
 from hypothesis import given, settings
@@ -17,15 +18,24 @@ from llm_poker_arena.engine.config import HandContext, SessionConfig
 @settings(max_examples=100, deadline=None)
 def test_next_hand_starts_fresh(rng_seed: int, hand_id: int) -> None:
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=60, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=rng_seed,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=60,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=rng_seed,
     )
     # Play previous hand to arbitrary final stacks.
     prev_ctx = HandContext(
-        hand_id=hand_id, deck_seed=derive_deck_seed(rng_seed, hand_id),
-        button_seat=hand_id % 6, initial_stacks=(10_000,) * 6,
+        hand_id=hand_id,
+        deck_seed=derive_deck_seed(rng_seed, hand_id),
+        button_seat=hand_id % 6,
+        initial_stacks=(10_000,) * 6,
     )
     agents = [RandomAgent() for _ in range(6)]
     run_single_hand(cfg, prev_ctx, agents)

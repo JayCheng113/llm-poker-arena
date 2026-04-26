@@ -10,6 +10,7 @@ for public-only workflows.
 Phase 2a stub: `require_private_access` accepts a single sentinel token.
 Phase 3+ will wire real credential management.
 """
+
 from __future__ import annotations
 
 import json

@@ -8,6 +8,7 @@ Spec §8.1 / H-10. Guarantees:
 Each record serializes as one line via `json.dumps(..., sort_keys=True)` for
 deterministic output (diff-friendly under same input).
 """
+
 from __future__ import annotations
 
 import atexit

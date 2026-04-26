@@ -1,4 +1,5 @@
 """Tests for full BR2-01 censor record (Phase 3d Task 5)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -38,7 +39,8 @@ class _CensoringAgent(Agent):
                 tool_usage_error_count=0,
                 default_action_fallback=False,
                 api_error=ApiErrorInfo(
-                    type="ProviderTransientError", detail="503 timeout",
+                    type="ProviderTransientError",
+                    detail="503 timeout",
                 ),
                 turn_timeout_exceeded=False,
             )
@@ -47,10 +49,13 @@ class _CensoringAgent(Agent):
             final_action=default_safe_action(view),
             total_tokens=TokenCounts.zero(),
             wall_time_ms=0,
-            api_retry_count=0, illegal_action_retry_count=0,
-            no_tool_retry_count=0, tool_usage_error_count=0,
+            api_retry_count=0,
+            illegal_action_retry_count=0,
+            no_tool_retry_count=0,
+            tool_usage_error_count=0,
             default_action_fallback=True,
-            api_error=None, turn_timeout_exceeded=False,
+            api_error=None,
+            turn_timeout_exceeded=False,
         )
 
     def provider_id(self) -> str:
@@ -59,25 +64,37 @@ class _CensoringAgent(Agent):
 
 def _cfg() -> SessionConfig:
     return SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=6, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=6,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
 
 
 def _agents_with_censor_at_seat3() -> list[Agent]:
     return [
-        RandomAgent(), RandomAgent(), RandomAgent(),
+        RandomAgent(),
+        RandomAgent(),
+        RandomAgent(),
         _CensoringAgent(),
-        RandomAgent(), RandomAgent(),
+        RandomAgent(),
+        RandomAgent(),
     ]
 
 
 def test_censored_hand_writes_to_censored_hands_jsonl(tmp_path: Path) -> None:
     sess = Session(
-        config=_cfg(), agents=_agents_with_censor_at_seat3(),
-        output_dir=tmp_path, session_id="censor_test",
+        config=_cfg(),
+        agents=_agents_with_censor_at_seat3(),
+        output_dir=tmp_path,
+        session_id="censor_test",
     )
     asyncio.run(sess.run())
 
@@ -97,8 +114,10 @@ def test_censored_hand_does_not_emit_partial_canonical_record(
 ) -> None:
     """BR2-01 'censor 整手': hand 0 must NOT appear in canonical_private."""
     sess = Session(
-        config=_cfg(), agents=_agents_with_censor_at_seat3(),
-        output_dir=tmp_path, session_id="censor_test_2",
+        config=_cfg(),
+        agents=_agents_with_censor_at_seat3(),
+        output_dir=tmp_path,
+        session_id="censor_test_2",
     )
     asyncio.run(sess.run())
 
@@ -112,8 +131,10 @@ def test_censored_hand_does_not_emit_partial_public_record(
     tmp_path: Path,
 ) -> None:
     sess = Session(
-        config=_cfg(), agents=_agents_with_censor_at_seat3(),
-        output_dir=tmp_path, session_id="censor_test_3",
+        config=_cfg(),
+        agents=_agents_with_censor_at_seat3(),
+        output_dir=tmp_path,
+        session_id="censor_test_3",
     )
     asyncio.run(sess.run())
 
@@ -124,8 +145,10 @@ def test_censored_hand_does_not_emit_partial_public_record(
 
 def test_censored_hand_drops_partial_turn_snapshots(tmp_path: Path) -> None:
     sess = Session(
-        config=_cfg(), agents=_agents_with_censor_at_seat3(),
-        output_dir=tmp_path, session_id="censor_test_4",
+        config=_cfg(),
+        agents=_agents_with_censor_at_seat3(),
+        output_dir=tmp_path,
+        session_id="censor_test_4",
     )
     asyncio.run(sess.run())
 

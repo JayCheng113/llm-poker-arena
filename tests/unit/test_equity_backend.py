@@ -4,6 +4,7 @@ eval7.evaluate returns higher integers for stronger hands. We assert the
 ordering of well-known holdem hand ranks rather than specific values
 (eval7's exact ranking constants are an implementation detail).
 """
+
 from __future__ import annotations
 
 import eval7

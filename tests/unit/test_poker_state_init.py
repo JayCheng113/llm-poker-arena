@@ -1,4 +1,5 @@
 """CanonicalState construction + blinds rotation."""
+
 from __future__ import annotations
 
 import pytest
@@ -9,16 +10,25 @@ from llm_poker_arena.engine.config import HandContext, SessionConfig
 
 def _cfg() -> SessionConfig:
     return SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=60, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=60,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
 
 
 def _ctx(button_seat: int) -> HandContext:
     return HandContext(
-        hand_id=1, deck_seed=42_001, button_seat=button_seat,
+        hand_id=1,
+        deck_seed=42_001,
+        button_seat=button_seat,
         initial_stacks=(10_000,) * 6,
     )
 
@@ -51,7 +61,9 @@ def test_blinds_wrap_around_with_button_seat_5() -> None:
 
 def test_initial_stacks_length_mismatch_rejected() -> None:
     bad_ctx = HandContext(
-        hand_id=1, deck_seed=42_001, button_seat=0,
+        hand_id=1,
+        deck_seed=42_001,
+        button_seat=0,
         initial_stacks=(10_000,) * 5,  # only 5 vs num_players=6
     )
     with pytest.raises(ValueError, match="initial_stacks length"):
@@ -63,12 +75,15 @@ def test_button_seat_out_of_range_rejected() -> None:
     # button we get caught at HandContext construction already.
     with pytest.raises(ValueError, match="button_seat"):
         HandContext(
-            hand_id=1, deck_seed=42_001, button_seat=6,
+            hand_id=1,
+            deck_seed=42_001,
+            button_seat=6,
             initial_stacks=(10_000,) * 6,
         )
 
 
 # --------------------------- hole card deal ---------------------------
+
 
 def test_hole_cards_are_dealt_after_construction() -> None:
     s = CanonicalState(_cfg(), _ctx(0))
@@ -148,6 +163,7 @@ def test_same_seed_yields_same_community_cards() -> None:
 
 # --------------------------- card-invariant audit wiring (I-1) ---------------------------
 
+
 def test_canonical_state_init_runs_card_invariant_audit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -165,13 +181,22 @@ def test_canonical_state_init_runs_card_invariant_audit(
     monkeypatch.setattr(ps_module, "audit_cards_invariant", spy)
 
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=60, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=60,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
     ctx = HandContext(
-        hand_id=0, deck_seed=42_000, button_seat=0,
+        hand_id=0,
+        deck_seed=42_000,
+        button_seat=0,
         initial_stacks=(10_000,) * 6,
     )
     _ = CanonicalState(cfg, ctx)
@@ -189,13 +214,22 @@ def test_canonical_state_deal_community_runs_card_invariant_audit(
 
     # Construct state (__init__ audit happens here — we install spy only for deal_community).
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=60, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=60,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
     ctx = HandContext(
-        hand_id=0, deck_seed=42_000, button_seat=0,
+        hand_id=0,
+        deck_seed=42_000,
+        button_seat=0,
         initial_stacks=(10_000,) * 6,
     )
     s = CanonicalState(cfg, ctx)

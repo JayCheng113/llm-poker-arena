@@ -8,6 +8,7 @@ NumPy RNG without updating reproducibility guarantees (§11.1).
 PokerKit's `Card` class is confined to this `_internal/` package; outer code
 should consume only the 2-char string form via `card_to_str`.
 """
+
 from __future__ import annotations
 
 import random

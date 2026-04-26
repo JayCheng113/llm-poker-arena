@@ -19,6 +19,7 @@ Phase 3 responsibilities out of scope here:
   - `mark_hand_censored` for api_error / total_turn_timeout (spec BR2-01)
   - Seat permutation (Phase 2a uses `button_seat = hand_id % n`)
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -65,9 +66,7 @@ def _now_iso() -> str:
 
 def _derive_turn_seed(deck_seed: int, actor: int, turn_counter: int) -> int:
     payload = f"{deck_seed}:{actor}:{turn_counter}".encode()
-    return int.from_bytes(hashlib.blake2b(payload, digest_size=8).digest(), "big") & (
-        (1 << 63) - 1
-    )
+    return int.from_bytes(hashlib.blake2b(payload, digest_size=8).digest(), "big") & ((1 << 63) - 1)
 
 
 def _split_provider_id(pid: str) -> tuple[str, str]:
@@ -97,8 +96,12 @@ class Session:
     """Phase 2a synchronous session driver."""
 
     def __init__(
-        self, *, config: SessionConfig, agents: Sequence[Agent],
-        output_dir: Path, session_id: str,
+        self,
+        *,
+        config: SessionConfig,
+        agents: Sequence[Agent],
+        output_dir: Path,
+        session_id: str,
     ) -> None:
         if len(agents) != config.num_players:
             raise ValueError(
@@ -113,9 +116,7 @@ class Session:
         # spec §7.1: snapshot the SessionConfig at session start so analysts
         # can reproduce the exact run. Phase 2a uses config.json (no new dep);
         # Phase 2b renames to config.yaml when pyyaml is added.
-        (self._output_dir / "config.json").write_text(
-            config.model_dump_json(indent=2)
-        )
+        (self._output_dir / "config.json").write_text(config.model_dump_json(indent=2))
 
         self._private_writer = BatchedJsonlWriter(self._output_dir / "canonical_private.jsonl")
         self._public_writer = BatchedJsonlWriter(self._output_dir / "public_replay.jsonl")
@@ -145,7 +146,8 @@ class Session:
         }
         self._total_tokens_per_seat: dict[int, dict[str, int]] = {
             i: {
-                "input_tokens": 0, "output_tokens": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
                 "cache_read_input_tokens": 0,
                 "cache_creation_input_tokens": 0,
             }
@@ -183,11 +185,14 @@ class Session:
             ended_at_iso = _now_iso()
             wall_time_sec = max(0, int(time.monotonic() - started_at_monotonic))
             meta = build_session_meta(
-                session_id=self._session_id, config=self._config,
-                started_at=started_at_iso, ended_at=ended_at_iso,
+                session_id=self._session_id,
+                config=self._config,
+                started_at=started_at_iso,
+                ended_at=ended_at_iso,
                 total_hands_played=self._total_hands_played,
-                seat_assignment={i: self._agents[i].provider_id()
-                                 for i in range(self._config.num_players)},
+                seat_assignment={
+                    i: self._agents[i].provider_id() for i in range(self._config.num_players)
+                },
                 initial_button_seat=initial_button_seat,
                 chip_pnl=self._chip_pnl,
                 session_wall_time_sec=wall_time_sec,
@@ -197,11 +202,13 @@ class Session:
                 total_tokens_per_seat=self._total_tokens_per_seat,
                 stop_reason=stop_reason,
             )
-            (self._output_dir / "meta.json").write_text(
-                json.dumps(meta, sort_keys=True, indent=2)
-            )
-            for w in (self._private_writer, self._public_writer,
-                      self._snapshot_writer, self._censor_writer):
+            (self._output_dir / "meta.json").write_text(json.dumps(meta, sort_keys=True, indent=2))
+            for w in (
+                self._private_writer,
+                self._public_writer,
+                self._snapshot_writer,
+                self._censor_writer,
+            ):
                 w.close()
 
     async def _probe_providers(self) -> dict[str, dict[str, Any]]:
@@ -216,6 +223,7 @@ class Session:
         so analysts reading meta.json get the schema spec promises.
         """
         from llm_poker_arena.agents.llm.llm_agent import LLMAgent
+
         results: dict[str, dict[str, Any]] = {}
         cache: dict[int, dict[str, Any]] = {}
         for seat, agent in enumerate(self._agents):
@@ -254,9 +262,14 @@ class Session:
         # Per spec §7.3: one public_replay line per hand. Collect events
         # into a local buffer and flush via PublicHandRecord at hand-end.
         events: list[PublicEvent] = []
-        events.append(build_public_hand_started_event(
-            hand_id=hand_id, state=state, sb=cfg.sb, bb=cfg.bb,
-        ))
+        events.append(
+            build_public_hand_started_event(
+                hand_id=hand_id,
+                state=state,
+                sb=cfg.sb,
+                bb=cfg.bb,
+            )
+        )
         events.append(build_public_hole_dealt_event(hand_id=hand_id))
 
         action_records: list[ActionRecordPrivate] = []
@@ -300,7 +313,8 @@ class Session:
                 # per-hand artifacts (staged_snapshots is a local var, dropped
                 # on return) and emit one censor record.
                 censor_rec = build_censored_hand_record(
-                    hand_id=hand_id, seat=actor,
+                    hand_id=hand_id,
+                    seat=actor,
                     session_id=self._session_id,
                     api_error=decision.api_error,
                     timestamp=_now_iso(),
@@ -317,17 +331,28 @@ class Session:
                     f"contract violation."
                 )
 
-            events.append(build_public_action_event(
-                hand_id=hand_id, seat=actor, street=street, action=chosen,
-            ))
+            events.append(
+                build_public_action_event(
+                    hand_id=hand_id,
+                    seat=actor,
+                    street=street,
+                    action=chosen,
+                )
+            )
 
             provider, model = _split_provider_id(self._agents[actor].provider_id())
             agent_md = self._agents[actor].metadata() or {}
             snapshot = build_agent_view_snapshot(
-                hand_id=hand_id, session_id=self._session_id, seat=actor,
-                street=street, timestamp=_now_iso(), view=view,
-                action=chosen, turn_index=turn_counter,
-                agent_provider=provider, agent_model=model,
+                hand_id=hand_id,
+                session_id=self._session_id,
+                seat=actor,
+                street=street,
+                timestamp=_now_iso(),
+                view=view,
+                action=chosen,
+                turn_index=turn_counter,
+                agent_provider=provider,
+                agent_model=model,
                 agent_version="phase3a",
                 default_action_fallback=fallback,
                 iterations=decision.iterations,
@@ -342,18 +367,20 @@ class Session:
             )
             staged_snapshots.append(snapshot.model_dump(mode="json"))
 
-            action_records.append(ActionRecordPrivate(
-                seat=actor,
-                street=cast(Any, street.value),
-                action_type=cast(Any, chosen.tool_name),
-                amount=(
-                    int(chosen.args["amount"])
-                    if isinstance(chosen.args, dict) and "amount" in chosen.args
-                    else None
-                ),
-                is_forced_blind=False,
-                turn_index=turn_counter,
-            ))
+            action_records.append(
+                ActionRecordPrivate(
+                    seat=actor,
+                    street=cast(Any, street.value),
+                    action_type=cast(Any, chosen.tool_name),
+                    amount=(
+                        int(chosen.args["amount"])
+                        if isinstance(chosen.args, dict) and "amount" in chosen.args
+                        else None
+                    ),
+                    is_forced_blind=False,
+                    turn_index=turn_counter,
+                )
+            )
             turn_counter += 1
 
             self._maybe_advance_between_streets(state, hand_id, events)
@@ -369,23 +396,29 @@ class Session:
         showdown_seats = {i for i, alive in enumerate(statuses) if bool(alive)}
         showdown = len(showdown_seats) > 1
         if showdown:
-            events.append(build_public_showdown_event(
-                hand_id=hand_id,
-                showdown_seats=showdown_seats,
-                hole_cards=initial_hole_cards,
-            ))
+            events.append(
+                build_public_showdown_event(
+                    hand_id=hand_id,
+                    showdown_seats=showdown_seats,
+                    hole_cards=initial_hole_cards,
+                )
+            )
 
         payoffs = list(state._state.payoffs)  # noqa: SLF001
         winnings = {i: int(payoffs[i]) for i in range(cfg.num_players)}
-        events.append(build_public_hand_ended_event(
-            hand_id=hand_id, winnings=winnings,
-        ))
+        events.append(
+            build_public_hand_ended_event(
+                hand_id=hand_id,
+                winnings=winnings,
+            )
+        )
 
         audit_invariants(state, cfg, HandPhase.POST_SETTLEMENT)
 
         # Flush public_replay: ONE line per hand (spec §7.3 shape).
         public_record = build_public_hand_record(
-            hand_id=hand_id, events=tuple(events),
+            hand_id=hand_id,
+            events=tuple(events),
         )
         self._public_writer.write(public_record.model_dump(mode="json"))
 
@@ -396,13 +429,16 @@ class Session:
         # MVP 6 exit criterion does not depend on this field.
         ended_at = _now_iso()
         private_record = build_canonical_private_hand(
-            hand_id=hand_id, state=state,
-            started_at=started_at, ended_at=ended_at,
+            hand_id=hand_id,
+            state=state,
+            started_at=started_at,
+            ended_at=ended_at,
             actions=tuple(action_records),
             hole_cards=initial_hole_cards,
             winners=tuple(
                 WinnerInfo(seat=i, winnings=int(payoffs[i]), best_hand_desc="")
-                for i in range(cfg.num_players) if int(payoffs[i]) > 0
+                for i in range(cfg.num_players)
+                if int(payoffs[i]) > 0
             ),
             side_pots=(),
             final_invested={},
@@ -422,7 +458,10 @@ class Session:
     # ------------------------------------------------- between-street advance
 
     def _maybe_advance_between_streets(
-        self, state: CanonicalState, hand_id: int, events: list[PublicEvent],
+        self,
+        state: CanonicalState,
+        hand_id: int,
+        events: list[PublicEvent],
     ) -> None:
         """Drain pokerkit's show_or_muck + burn+deal queue between streets.
 
@@ -446,23 +485,33 @@ class Session:
                 board_len = sum(len(slot) for slot in (raw.board_cards or []))
                 if board_len == 0:
                     state.deal_community(Street.FLOP)
-                    events.append(build_public_street_reveal_event(
-                        hand_id=hand_id, state=state, street=Street.FLOP,
-                    ))
+                    events.append(
+                        build_public_street_reveal_event(
+                            hand_id=hand_id,
+                            state=state,
+                            street=Street.FLOP,
+                        )
+                    )
                 elif board_len == 3:
                     state.deal_community(Street.TURN)
-                    events.append(build_public_street_reveal_event(
-                        hand_id=hand_id, state=state, street=Street.TURN,
-                    ))
+                    events.append(
+                        build_public_street_reveal_event(
+                            hand_id=hand_id,
+                            state=state,
+                            street=Street.TURN,
+                        )
+                    )
                 elif board_len == 4:
                     state.deal_community(Street.RIVER)
-                    events.append(build_public_street_reveal_event(
-                        hand_id=hand_id, state=state, street=Street.RIVER,
-                    ))
-                else:
-                    raise RuntimeError(
-                        f"unexpected board length {board_len} requesting burn"
+                    events.append(
+                        build_public_street_reveal_event(
+                            hand_id=hand_id,
+                            state=state,
+                            street=Street.RIVER,
+                        )
                     )
+                else:
+                    raise RuntimeError(f"unexpected board length {board_len} requesting burn")
                 continue
             # Neither actor-required nor pending show/burn -- hand has
             # reached a stable terminal state. Return to outer loop.
@@ -472,4 +521,3 @@ class Session:
             "between-streets state machine is not converging (hand_id="
             f"{hand_id})"
         )
-

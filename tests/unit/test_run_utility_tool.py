@@ -1,4 +1,5 @@
 """Tests for run_utility_tool dispatcher (spec §5.4 simplified)."""
+
 from __future__ import annotations
 
 import pytest
@@ -16,34 +17,59 @@ from llm_poker_arena.tools import ToolDispatchError, run_utility_tool
 
 def _view() -> PlayerView:
     params = SessionParamsView(
-        num_players=6, sb=50, bb=100, starting_stack=10_000,
-        max_utility_calls=5, rationale_required=True,
-        enable_math_tools=True, enable_hud_tool=False,
+        num_players=6,
+        sb=50,
+        bb=100,
+        starting_stack=10_000,
+        max_utility_calls=5,
+        rationale_required=True,
+        enable_math_tools=True,
+        enable_hud_tool=False,
         opponent_stats_min_samples=30,
     )
     return PlayerView(
-        my_seat=3, my_hole_cards=("As", "Kd"), community=(),
-        pot=250, sidepots=(), my_stack=9_750,
-        my_invested_this_hand=0, my_invested_this_round=0,
+        my_seat=3,
+        my_hole_cards=("As", "Kd"),
+        community=(),
+        pot=250,
+        sidepots=(),
+        my_stack=9_750,
+        my_invested_this_hand=0,
+        my_invested_this_round=0,
         current_bet_to_match=100,
-        to_call=100, pot_odds_required=100 / 350,
+        to_call=100,
+        pot_odds_required=100 / 350,
         effective_stack=9_750,
         seats_public=tuple(
-            SeatPublicInfo(seat=i, label=f"P{i}", position_short="UTG",
-                           position_full="x", stack=10_000,
-                           invested_this_hand=0, invested_this_round=0,
-                           status="in_hand") for i in range(6)
+            SeatPublicInfo(
+                seat=i,
+                label=f"P{i}",
+                position_short="UTG",
+                position_full="x",
+                stack=10_000,
+                invested_this_hand=0,
+                invested_this_round=0,
+                status="in_hand",
+            )
+            for i in range(6)
         ),
         opponent_seats_in_hand=(0, 1, 2, 4, 5),
         action_order_this_street=(3, 4, 5, 0, 1, 2),
         seats_yet_to_act_after_me=(4, 5, 0, 1, 2),
-        already_acted_this_street=(), hand_history=(),
-        legal_actions=LegalActionSet(tools=(
-            ActionToolSpec(name="fold", args={}),
-            ActionToolSpec(name="call", args={}),
-        )),
-        opponent_stats={}, hand_id=1, street=Street.PREFLOP, button_seat=0,
-        turn_seed=42, immutable_session_params=params,
+        already_acted_this_street=(),
+        hand_history=(),
+        legal_actions=LegalActionSet(
+            tools=(
+                ActionToolSpec(name="fold", args={}),
+                ActionToolSpec(name="call", args={}),
+            )
+        ),
+        opponent_stats={},
+        hand_id=1,
+        street=Street.PREFLOP,
+        button_seat=0,
+        turn_seed=42,
+        immutable_session_params=params,
     )
 
 
@@ -136,10 +162,11 @@ def test_dispatch_hand_equity_vs_ranges() -> None:
     """
     v = _view()
     # Disjoint-by-suit ranges to minimize inter-villain card overlap rejection.
-    result = run_utility_tool(v, "hand_equity_vs_ranges",
-                              {"range_by_seat": {0: "22+", 1: "A2s+",
-                                                  2: "K2s+", 4: "Q2s+",
-                                                  5: "J2s+"}})
+    result = run_utility_tool(
+        v,
+        "hand_equity_vs_ranges",
+        {"range_by_seat": {0: "22+", 1: "A2s+", 2: "K2s+", 4: "Q2s+", 5: "J2s+"}},
+    )
     assert "hero_equity" in result
     assert 0.0 <= result["hero_equity"] <= 1.0
     assert result["n_samples"] > 0  # rejection-sampled some valid configurations

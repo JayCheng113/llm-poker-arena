@@ -3,6 +3,7 @@
 The mock does NOT simulate the wire format of any real provider; tests that
 care about wire format use AnthropicProvider with monkeypatched SDK calls.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -73,7 +74,8 @@ class MockLLMProvider(LLMProvider):
         return "mock"
 
     def build_assistant_message_for_replay(
-        self, response: LLMResponse,
+        self,
+        response: LLMResponse,
     ) -> dict[str, Any]:
         """Mirror Anthropic semantics so the existing 23 ReAct unit tests
         (which pre-date the provider abstraction) stay green."""
@@ -83,12 +85,14 @@ class MockLLMProvider(LLMProvider):
             if response.text_content:
                 synth.append({"type": "text", "text": response.text_content})
             for tc in response.tool_calls:
-                synth.append({
-                    "type": "tool_use",
-                    "id": tc.tool_use_id,
-                    "name": tc.name,
-                    "input": tc.args,
-                })
+                synth.append(
+                    {
+                        "type": "tool_use",
+                        "id": tc.tool_use_id,
+                        "name": tc.name,
+                        "input": tc.args,
+                    }
+                )
             if not synth:
                 synth.append({"type": "text", "text": ""})
             blocks = synth
@@ -101,24 +105,27 @@ class MockLLMProvider(LLMProvider):
         is_error: bool,
         content: str,
     ) -> list[dict[str, Any]]:
-        return [{
-            "role": "user",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": tc.tool_use_id,
-                    "is_error": is_error,
-                    "content": content,
-                }
-                for tc in tool_calls
-            ],
-        }]
+        return [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tc.tool_use_id,
+                        "is_error": is_error,
+                        "content": content,
+                    }
+                    for tc in tool_calls
+                ],
+            }
+        ]
 
     def build_user_text_message(self, text: str) -> dict[str, Any]:
         return {"role": "user", "content": text}
 
     def extract_reasoning_artifact(
-        self, response: LLMResponse,
+        self,
+        response: LLMResponse,
     ) -> tuple[ReasoningArtifact, ...]:
         """Mock has no reasoning artifacts unless the test explicitly puts
         them into raw_assistant_turn.blocks (which mock tests don't)."""
@@ -127,6 +134,7 @@ class MockLLMProvider(LLMProvider):
     async def probe(self) -> ObservedCapability:
         """Mock probe: no network, returns a deterministic fake capability."""
         from datetime import UTC, datetime
+
         return ObservedCapability(
             provider="mock",
             probed_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",

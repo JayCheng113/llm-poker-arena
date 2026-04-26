@@ -1,4 +1,5 @@
 """Tests for Session orchestrator (3-hand smoke + artifact structural checks)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,11 +14,17 @@ from llm_poker_arena.session.session import Session
 
 def _cfg() -> SessionConfig:
     return SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
         num_hands=6,  # smoke: 1 button rotation
         max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
 
 
@@ -27,8 +34,12 @@ def test_session_writes_three_jsonl_files(tmp_path: Path) -> None:
     sess = Session(config=cfg, agents=agents, output_dir=tmp_path, session_id="sess_test")
     asyncio.run(sess.run())
     # All 3 layer files exist and are non-empty.
-    for fname in ("canonical_private.jsonl", "public_replay.jsonl",
-                  "agent_view_snapshots.jsonl", "meta.json"):
+    for fname in (
+        "canonical_private.jsonl",
+        "public_replay.jsonl",
+        "agent_view_snapshots.jsonl",
+        "meta.json",
+    ):
         p = tmp_path / fname
         assert p.exists(), fname
         assert p.stat().st_size > 0, fname
@@ -99,10 +110,15 @@ def test_session_meta_json_carries_total_hands_and_chip_pnl(tmp_path: Path) -> N
 
 def test_session_rejects_agents_list_length_mismatch(tmp_path: Path) -> None:
     import pytest
+
     cfg = _cfg()
     with pytest.raises(ValueError, match="agents"):
-        Session(config=cfg, agents=[RandomAgent()] * 3,  # only 3 agents for 6 seats
-                output_dir=tmp_path, session_id="sess_bad")
+        Session(
+            config=cfg,
+            agents=[RandomAgent()] * 3,  # only 3 agents for 6 seats
+            output_dir=tmp_path,
+            session_id="sess_bad",
+        )
 
 
 def test_session_canonical_private_preserves_hole_cards_of_folded_seats(
@@ -119,7 +135,10 @@ def test_session_canonical_private_preserves_hole_cards_of_folded_seats(
     cfg = _cfg()  # 6 hands, rng_seed=42 — produces natural folds
     agents = [RandomAgent() for _ in range(6)]
     sess = Session(
-        config=cfg, agents=agents, output_dir=tmp_path, session_id="sess_holes",
+        config=cfg,
+        agents=agents,
+        output_dir=tmp_path,
+        session_id="sess_holes",
     )
     asyncio.run(sess.run())
 
@@ -151,14 +170,24 @@ def test_session_public_showdown_event_reveals_all_participants_not_just_winner(
     """
     # Use more hands so at least one naturally reaches showdown.
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=12, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=99,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=12,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=99,
     )
     agents = [RandomAgent() for _ in range(6)]
     sess = Session(
-        config=cfg, agents=agents, output_dir=tmp_path, session_id="sess_showdown",
+        config=cfg,
+        agents=agents,
+        output_dir=tmp_path,
+        session_id="sess_showdown",
     )
     asyncio.run(sess.run())
 
@@ -177,8 +206,7 @@ def test_session_public_showdown_event_reveals_all_participants_not_just_winner(
     # but the invariant we care about is the assertion below, not zero-
     # showdowns.
     assert hands_with_showdown, (
-        "no hand reached showdown in 12-hand seed=99 session; "
-        "try a different seed or more hands"
+        "no hand reached showdown in 12-hand seed=99 session; try a different seed or more hands"
     )
     for ev in hands_with_showdown:
         revealed = ev["revealed"]

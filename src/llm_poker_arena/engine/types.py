@@ -6,6 +6,7 @@ suit ∈ "cdhs". Examples: "As", "Td", "2c".
 PokerKit's own Card type is confined to `engine/_internal/`; do not import it
 outside that package.
 """
+
 from __future__ import annotations
 
 from enum import Enum

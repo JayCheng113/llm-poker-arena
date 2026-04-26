@@ -1,4 +1,5 @@
 """Tests for redact_secret (Phase 3d Task 6)."""
+
 from __future__ import annotations
 
 from llm_poker_arena.agents.llm.redaction import redact_secret

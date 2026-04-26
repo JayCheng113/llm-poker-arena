@@ -10,6 +10,7 @@ Flow:
      mutation is followed by card-conservation + chip-conservation checks using
      the SessionConfig attached to the CanonicalState (`state._config`).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -41,9 +42,7 @@ class TransitionResult:
     reason: str | None = None
 
 
-def apply_action(
-    state: CanonicalState, actor: int, action: Action
-) -> TransitionResult:
+def apply_action(state: CanonicalState, actor: int, action: Action) -> TransitionResult:
     """Validate `action` against the legal set, dispatch to PokerKit, then audit.
 
     Returns `TransitionResult(is_valid=False, reason=...)` without mutating
@@ -77,9 +76,7 @@ def apply_action(
             return TransitionResult(False, f"{action.tool_name} missing amount bounds")
         mn, mx = int(amt_bounds["min"]), int(amt_bounds["max"])
         if not (mn <= amt <= mx):
-            return TransitionResult(
-                False, f"{action.tool_name} amount {amt} out of [{mn}, {mx}]"
-            )
+            return TransitionResult(False, f"{action.tool_name} amount {amt} out of [{mn}, {mx}]")
 
     raw = state._state  # noqa: SLF001
 
@@ -97,9 +94,7 @@ def apply_action(
             # Translate to max-raise / max-bet; fall back to call-for-less when
             # max completion amount is 0 (actor's stack < call amount, so the
             # only legal action is to shove chips into a call).
-            max_amt = int(
-                getattr(raw, "max_completion_betting_or_raising_to_amount", 0) or 0
-            )
+            max_amt = int(getattr(raw, "max_completion_betting_or_raising_to_amount", 0) or 0)
             if max_amt > 0:
                 raw.complete_bet_or_raise_to(max_amt)
             else:

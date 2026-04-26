@@ -7,6 +7,7 @@ Convention: when to_call == 0 (check is legal), return 0.0 instead of
 NaN/error — matches the user-prompt convention that pot_odds_required is
 None when to_call == 0.
 """
+
 from __future__ import annotations
 
 from llm_poker_arena.engine.views import PlayerView

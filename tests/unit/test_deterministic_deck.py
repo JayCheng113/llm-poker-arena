@@ -1,4 +1,5 @@
 """Tests for the deterministic deck used by CanonicalState."""
+
 from __future__ import annotations
 
 from llm_poker_arena.engine._internal.deck import (

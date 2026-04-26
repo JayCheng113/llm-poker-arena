@@ -1,4 +1,5 @@
 """Tests for engine.transition.apply_action."""
+
 from __future__ import annotations
 
 from llm_poker_arena.engine._internal.poker_state import CanonicalState
@@ -9,13 +10,19 @@ from llm_poker_arena.engine.transition import TransitionResult, apply_action
 
 def _setup() -> tuple[CanonicalState, int]:
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=60, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=60,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
-    ctx = HandContext(hand_id=0, deck_seed=42_000, button_seat=0,
-                      initial_stacks=(10_000,) * 6)
+    ctx = HandContext(hand_id=0, deck_seed=42_000, button_seat=0, initial_stacks=(10_000,) * 6)
     s = CanonicalState(cfg, ctx)
     actor = int(getattr(s._state, "actor_index", None) or getattr(s._state, "actor", 0) or 0)
     return s, actor

@@ -1,4 +1,5 @@
 """Async Agent ABC (spec §4.1, Phase 3a)."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

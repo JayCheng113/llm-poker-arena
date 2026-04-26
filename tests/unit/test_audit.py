@@ -1,4 +1,5 @@
 """Unit tests for audit invariants."""
+
 from __future__ import annotations
 
 import pytest
@@ -16,17 +17,22 @@ from llm_poker_arena.engine.config import HandContext, SessionConfig
 
 def _cfg() -> SessionConfig:
     return SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=60, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=60,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
 
 
 def _state() -> CanonicalState:
-    ctx = HandContext(
-        hand_id=0, deck_seed=42_000, button_seat=0, initial_stacks=(10_000,) * 6
-    )
+    ctx = HandContext(hand_id=0, deck_seed=42_000, button_seat=0, initial_stacks=(10_000,) * 6)
     return CanonicalState(_cfg(), ctx)
 
 
@@ -72,10 +78,17 @@ def test_audit_failure_message_is_informative() -> None:
     s = _state()
     # Force a pre-settlement mismatch by adjusting the expected total downwards.
     bad_cfg = SessionConfig(
-        num_players=6, starting_stack=9_999, sb=50, bb=100,  # 9_999 != 10_000
-        num_hands=60, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        num_players=6,
+        starting_stack=9_999,
+        sb=50,
+        bb=100,  # 9_999 != 10_000
+        num_hands=60,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
     with pytest.raises(AuditFailure, match="chip conservation"):
         audit_pre_settlement(s, bad_cfg)

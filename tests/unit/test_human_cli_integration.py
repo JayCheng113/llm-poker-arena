@@ -1,4 +1,5 @@
 """Integration: Session with 1 human seat + 5 bots + scripted cyclic input."""
+
 from __future__ import annotations
 
 import io
@@ -19,9 +20,12 @@ def test_human_cli_cyclic_input_session_finishes_cleanly(tmp_path: Path) -> None
     output_stream = io.StringIO()
 
     rc = run_cli(
-        num_hands=6, my_seat=3, rng_seed=7,
+        num_hands=6,
+        my_seat=3,
+        rng_seed=7,
         output_root=tmp_path,
-        human_input=input_stream, human_output=output_stream,
+        human_input=input_stream,
+        human_output=output_stream,
     )
     assert rc == 0
 
@@ -52,7 +56,9 @@ def test_human_cli_session_meta_marks_human_seat(tmp_path: Path) -> None:
 
     cyclic = "call\ncheck\nfold\nall_in\n" * 50
     rc = run_cli(
-        num_hands=6, my_seat=2, rng_seed=3,
+        num_hands=6,
+        my_seat=2,
+        rng_seed=3,
         output_root=tmp_path,
         human_input=io.StringIO(cyclic),
         human_output=io.StringIO(),

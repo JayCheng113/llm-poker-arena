@@ -6,6 +6,7 @@ session (Pydantic BaseModel, frozen, extra=forbid).
 HandContext is a small immutable descriptor built by the session orchestrator
 for each hand and consumed by CanonicalState.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -70,6 +71,4 @@ class HandContext:
         if n < 2:
             raise ValueError(f"initial_stacks length must be >= 2 (got {n})")
         if not (0 <= self.button_seat < n):
-            raise ValueError(
-                f"button_seat ({self.button_seat}) must be in [0, {n})"
-            )
+            raise ValueError(f"button_seat ({self.button_seat}) must be in [0, {n})")

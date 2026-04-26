@@ -6,6 +6,7 @@ NOT my_stack / pot — effective_stack is the correct commitment measure).
 Optional-arg superset mirrors pot_odds: hypothetical post-flop SPR after a
 planned bet/raise.
 """
+
 from __future__ import annotations
 
 from llm_poker_arena.engine.views import PlayerView

@@ -1,4 +1,5 @@
 """MVP 6 exit criterion: 1,000 mock-agent hands → 3-layer JSONL + meta + zero leak."""
+
 from __future__ import annotations
 
 import asyncio
@@ -18,11 +19,17 @@ from llm_poker_arena.storage.access_control import (
 
 def test_mvp6_thousand_hands_heterogeneous_lineup(tmp_path: Path) -> None:
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
         num_hands=1_002,  # multiple of 6 closest to 1000
         max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=2026,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=2026,
     )
     # Heterogeneous lineup: 3 Random + 3 RuleBased.
     agents = [RandomAgent(), RuleBasedAgent()] * 3
@@ -30,8 +37,13 @@ def test_mvp6_thousand_hands_heterogeneous_lineup(tmp_path: Path) -> None:
     asyncio.run(sess.run())
 
     # Three layer files + meta + config.json exist.
-    for fname in ("canonical_private.jsonl", "public_replay.jsonl",
-                  "agent_view_snapshots.jsonl", "meta.json", "config.json"):
+    for fname in (
+        "canonical_private.jsonl",
+        "public_replay.jsonl",
+        "agent_view_snapshots.jsonl",
+        "meta.json",
+        "config.json",
+    ):
         assert (tmp_path / fname).exists(), fname
 
     # 1002 hand records in both canonical_private AND public_replay

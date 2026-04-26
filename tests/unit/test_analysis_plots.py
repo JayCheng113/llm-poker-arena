@@ -1,4 +1,5 @@
 """Tests for chart rendering — files exist, content is non-trivial."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,11 +8,10 @@ import pytest
 
 
 def test_plot_chip_pnl_writes_png(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve()
-    )
+    monkeypatch.setattr("llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve())
     from llm_poker_arena.analysis.baseline import run_random_baseline
     from llm_poker_arena.analysis.plots import plot_chip_pnl
 
@@ -23,11 +23,10 @@ def test_plot_chip_pnl_writes_png(
 
 
 def test_plot_vpip_pfr_table_writes_png(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve()
-    )
+    monkeypatch.setattr("llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve())
     from llm_poker_arena.analysis.baseline import run_random_baseline
     from llm_poker_arena.analysis.plots import plot_vpip_pfr_table
 
@@ -38,11 +37,10 @@ def test_plot_vpip_pfr_table_writes_png(
 
 
 def test_plot_action_distribution_writes_png(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve()
-    )
+    monkeypatch.setattr("llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve())
     from llm_poker_arena.analysis.baseline import run_random_baseline
     from llm_poker_arena.analysis.plots import plot_action_distribution
 

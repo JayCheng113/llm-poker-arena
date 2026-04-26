@@ -14,6 +14,7 @@ degenerate defaults (mock agents do not iterate, never hit api_error, never
 time out). The schema is forward-compatible with Phase 3 which fills the
 `iterations` tuple and the four retry counters properly.
 """
+
 from __future__ import annotations
 
 from typing import Annotated, Any, Literal
@@ -26,6 +27,7 @@ def _frozen() -> ConfigDict:
 
 
 # ----------------------------------------------------------- agent descriptor
+
 
 class AgentDescriptor(BaseModel):
     """Minimal per-snapshot agent identity (phase-1 mock agents: random/rule_based)."""
@@ -40,6 +42,7 @@ class AgentDescriptor(BaseModel):
 
 
 # ----------------------------------------------------------- canonical_private
+
 
 class WinnerInfo(BaseModel):
     model_config = _frozen()
@@ -102,6 +105,7 @@ class CanonicalPrivateHandRecord(BaseModel):
 
 
 # ----------------------------------------------------------- public_replay
+
 
 class PublicHandStarted(BaseModel):
     model_config = _frozen()
@@ -198,6 +202,7 @@ class PublicHandRecord(BaseModel):
 
 # ----------------------------------------------------------- agent_view_snapshots
 
+
 class AgentViewSnapshot(BaseModel):
     """One line per turn per agent in agent_view_snapshots.jsonl.
 
@@ -236,6 +241,7 @@ class AgentViewSnapshot(BaseModel):
 
 
 # ----------------------------------------------------------- censored_hands
+
 
 class CensoredHandRecord(BaseModel):
     """spec §4.1 BR2-01: one line per hand abandoned due to api_error or

@@ -32,6 +32,7 @@ CI calculation (multi-way correctness): each sample contributes a share
 sample variance directly. For HU + no ties, this reduces to the standard
 Bernoulli p(1-p)/n formula.
 """
+
 from __future__ import annotations
 
 import random
@@ -114,10 +115,7 @@ def _multi_way_equity_mc(
         full_board = board_list + extra_board
         # 4. Evaluate; multi-way tie accounting (codex BLOCKER B2).
         hero_score = backend.evaluate(tuple(hero_list + full_board))
-        villain_scores = [
-            backend.evaluate(tuple(list(v) + full_board))
-            for v in sampled_villains
-        ]
+        villain_scores = [backend.evaluate(tuple(list(v) + full_board)) for v in sampled_villains]
         all_scores = [hero_score] + villain_scores
         best = max(all_scores)
         if hero_score == best:
@@ -198,9 +196,7 @@ def hand_equity_vs_ranges(
         # 3. Combo cap.
         n_combos = len(parsed.hands)
         if n_combos == 0:
-            raise ToolDispatchError(
-                f"range for seat {seat} parses to 0 combos: {range_str!r}"
-            )
+            raise ToolDispatchError(f"range for seat {seat} parses to 0 combos: {range_str!r}")
         if n_combos > _MAX_COMBOS_PER_RANGE:
             raise ToolDispatchError(
                 f"range for seat {seat} parses to {n_combos} combos "
@@ -233,8 +229,12 @@ def hand_equity_vs_ranges(
     # tie accounting — codex BLOCKER B2).
     backend = Eval7Backend()
     equity, share_variance, valid_samples = _multi_way_equity_mc(
-        hero, board, villain_pools, backend,
-        n_samples=n_samples, seed=effective_seed,
+        hero,
+        board,
+        villain_pools,
+        backend,
+        n_samples=n_samples,
+        seed=effective_seed,
     )
 
     # 7. Edge case: max_attempts cap tripped without producing a single

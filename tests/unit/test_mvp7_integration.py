@@ -1,6 +1,7 @@
 """MVP 7 exit criterion: B1 + B2 baselines run to completion and all three
 metrics + three charts land on disk. Spec §16.1.
 """
+
 from __future__ import annotations
 
 import json
@@ -10,11 +11,10 @@ import pytest
 
 
 def test_mvp7_b1_random_end_to_end(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve()
-    )
+    monkeypatch.setattr("llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve())
     from llm_poker_arena.analysis.baseline import run_random_baseline
     from llm_poker_arena.analysis.metrics import (
         compute_action_distribution,
@@ -62,11 +62,10 @@ def test_mvp7_b1_random_end_to_end(
 
 
 def test_mvp7_b2_rule_based_end_to_end(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve()
-    )
+    monkeypatch.setattr("llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve())
     from llm_poker_arena.analysis.baseline import run_rule_based_baseline
     from llm_poker_arena.analysis.metrics import (
         compute_action_distribution,

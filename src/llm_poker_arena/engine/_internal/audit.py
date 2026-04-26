@@ -10,6 +10,7 @@ Three kinds of invariants:
 Fail fast with AuditFailure carrying a descriptive message; the Session
 orchestrator is expected to dump crash artifacts before re-raising.
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -45,7 +46,7 @@ def audit_cards_invariant(state: CanonicalState) -> None:
         if slot:
             community.extend(slot)
     hole_all: list[Card] = []
-    for seat_cards in (getattr(raw, "hole_cards", []) or []):
+    for seat_cards in getattr(raw, "hole_cards", []) or []:
         if not seat_cards:
             continue
         hole_all.extend(seat_cards)
@@ -70,9 +71,7 @@ def audit_cards_invariant(state: CanonicalState) -> None:
     hole_pairs = [set(cards) for cards in (getattr(raw, "hole_cards", []) or []) if cards]
     for i, j in combinations(range(len(hole_pairs)), 2):
         if hole_pairs[i] & hole_pairs[j]:
-            raise AuditFailure(
-                f"card conservation: hole cards overlap between seats {i} and {j}"
-            )
+            raise AuditFailure(f"card conservation: hole cards overlap between seats {i} and {j}")
 
 
 def audit_pre_settlement(state: CanonicalState, config: SessionConfig) -> None:
@@ -112,9 +111,7 @@ def audit_post_settlement(state: CanonicalState, config: SessionConfig) -> None:
         raise AuditFailure(f"post-settlement bets should be 0, got {bets}")
 
 
-def audit_invariants(
-    state: CanonicalState, config: SessionConfig, phase: HandPhase
-) -> None:
+def audit_invariants(state: CanonicalState, config: SessionConfig, phase: HandPhase) -> None:
     audit_cards_invariant(state)
     if phase == HandPhase.POST_SETTLEMENT:
         audit_post_settlement(state, config)

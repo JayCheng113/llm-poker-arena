@@ -14,6 +14,7 @@ spec §4.4 / §4.6 / §11.2:
     seed automatically (avoids burning real tokens just to re-discover the
     same rejection on every turn).
 """
+
 from __future__ import annotations
 
 import json
@@ -85,8 +86,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 "function": {
                     "name": t["name"],
                     "description": t.get("description", ""),
-                    "parameters": t.get("input_schema",
-                                         {"type": "object", "properties": {}}),
+                    "parameters": t.get("input_schema", {"type": "object", "properties": {}}),
                 },
             }
             for t in tools
@@ -129,14 +129,11 @@ class OpenAICompatibleProvider(LLMProvider):
                 except (APITimeoutError, RateLimitError) as e2:
                     raise ProviderTransientError(str(e2)) from e2
                 except APIStatusError as e2:
-                    status = getattr(getattr(e2, "response", None),
-                                      "status_code", None)
+                    status = getattr(getattr(e2, "response", None), "status_code", None)
                     if status is not None and status >= 500:
-                        raise ProviderTransientError(
-                            f"{status}: {e2}") from e2
+                        raise ProviderTransientError(f"{status}: {e2}") from e2
                     if status == 429:
-                        raise ProviderTransientError(
-                            f"429 rate limited: {e2}") from e2
+                        raise ProviderTransientError(f"429 rate limited: {e2}") from e2
                     raise ProviderPermanentError(f"{status}: {e2}") from e2
             else:
                 raise ProviderPermanentError(f"400: {e}") from e
@@ -178,11 +175,13 @@ class OpenAICompatibleProvider(LLMProvider):
                 # action validator will reject it as illegal → triggers
                 # illegal_action_retry. Better than crashing the agent.
                 args_dict = {}
-            tool_calls.append(ToolCall(
-                name=tc.function.name,
-                args=args_dict,
-                tool_use_id=tc.id,
-            ))
+            tool_calls.append(
+                ToolCall(
+                    name=tc.function.name,
+                    args=args_dict,
+                    tool_use_id=tc.id,
+                )
+            )
 
         text_content = msg.content or ""
         usage = getattr(resp, "usage", None)
@@ -196,9 +195,7 @@ class OpenAICompatibleProvider(LLMProvider):
         # Preserve the raw assistant message dict for replay. The dict carries
         # `reasoning_content` for DeepSeek-Reasoner so extract_reasoning_artifact
         # can find it. For OpenAI the field is simply absent.
-        raw_msg_dict = (
-            msg.model_dump() if hasattr(msg, "model_dump") else dict(msg)
-        )
+        raw_msg_dict = msg.model_dump() if hasattr(msg, "model_dump") else dict(msg)
 
         return LLMResponse(
             provider=self._provider_name,
@@ -214,7 +211,8 @@ class OpenAICompatibleProvider(LLMProvider):
         )
 
     def build_assistant_message_for_replay(
-        self, response: LLMResponse,
+        self,
+        response: LLMResponse,
     ) -> dict[str, Any]:
         """Reconstruct the OpenAI assistant message from raw blocks. The raw
         blocks tuple has exactly ONE element (the message dict), unlike
@@ -229,7 +227,8 @@ class OpenAICompatibleProvider(LLMProvider):
             return raw_msg
         # Fallback: synthesize from text + tool_calls (used when raw is empty).
         out: dict[str, Any] = {
-            "role": "assistant", "content": response.text_content or None,
+            "role": "assistant",
+            "content": response.text_content or None,
         }
         if response.tool_calls:
             out["tool_calls"] = [
@@ -265,7 +264,8 @@ class OpenAICompatibleProvider(LLMProvider):
         return {"role": "user", "content": text}
 
     def extract_reasoning_artifact(
-        self, response: LLMResponse,
+        self,
+        response: LLMResponse,
     ) -> tuple[ReasoningArtifact, ...]:
         """DeepSeek-Reasoner: surface `reasoning_content` as RAW. Other
         OpenAI-compatible models: empty tuple.
@@ -276,11 +276,13 @@ class OpenAICompatibleProvider(LLMProvider):
         rc = msg.get("reasoning_content")
         if rc is None or rc == "":
             return ()
-        return (ReasoningArtifact(
-            kind=ReasoningArtifactKind.RAW,
-            content=str(rc),
-            provider_raw_index=0,
-        ),)
+        return (
+            ReasoningArtifact(
+                kind=ReasoningArtifactKind.RAW,
+                content=str(rc),
+                provider_raw_index=0,
+            ),
+        )
 
     async def probe(self) -> ObservedCapability:
         """Send a one-token probe with seed=42 to test seed acceptance and
@@ -341,9 +343,7 @@ class OpenAICompatibleProvider(LLMProvider):
         if not observed_kinds:
             observed_kinds.append(ReasoningArtifactKind.UNAVAILABLE)
 
-        probed_at = (
-            datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-        )
+        probed_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
         return ObservedCapability(
             provider=self._provider_name,
             probed_at=probed_at,
@@ -351,8 +351,7 @@ class OpenAICompatibleProvider(LLMProvider):
             seed_accepted=seed_accepted,
             tool_use_with_thinking_ok=False,  # see extra_flags
             extra_flags={
-                "base_url": str(self._client.base_url)
-                            if hasattr(self._client, "base_url") else "",
+                "base_url": str(self._client.base_url) if hasattr(self._client, "base_url") else "",
                 "tool_use_with_thinking_probed": False,
                 "system_fingerprint": system_fingerprint or "",
             },

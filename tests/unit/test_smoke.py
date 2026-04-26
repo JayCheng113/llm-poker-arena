@@ -1,4 +1,5 @@
 """Smoke test: verifies pytest + package import work."""
+
 from __future__ import annotations
 
 

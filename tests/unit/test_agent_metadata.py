@@ -1,4 +1,5 @@
 """Agent.metadata() ABC + LLMAgent override (Phase 4 Task 1)."""
+
 from __future__ import annotations
 
 from llm_poker_arena.agents.llm.llm_agent import LLMAgent
@@ -23,8 +24,10 @@ def test_llm_agent_metadata_returns_temperature_and_seed() -> None:
     """LLMAgent surfaces its temperature + seed for spec §7.4 persistence."""
     provider = MockLLMProvider(script=MockResponseScript(responses=()))
     agent = LLMAgent(
-        provider=provider, model="m1",
-        temperature=0.7, seed=42,
+        provider=provider,
+        model="m1",
+        temperature=0.7,
+        seed=42,
     )
     md = agent.metadata()
     assert md == {"temperature": 0.7, "seed": 42}

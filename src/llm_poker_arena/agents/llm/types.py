@@ -1,4 +1,5 @@
 """Pydantic dataclass schemas for LLM agent decision pipeline (spec §4.1, §4.3)."""
+
 from __future__ import annotations
 
 from enum import StrEnum
@@ -26,15 +27,20 @@ class TokenCounts(BaseModel):
 
     @classmethod
     def zero(cls) -> TokenCounts:
-        return cls(input_tokens=0, output_tokens=0,
-                   cache_read_input_tokens=0, cache_creation_input_tokens=0)
+        return cls(
+            input_tokens=0,
+            output_tokens=0,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=0,
+        )
 
     def __add__(self, other: TokenCounts) -> TokenCounts:
         return TokenCounts(
             input_tokens=self.input_tokens + other.input_tokens,
             output_tokens=self.output_tokens + other.output_tokens,
             cache_read_input_tokens=self.cache_read_input_tokens + other.cache_read_input_tokens,
-            cache_creation_input_tokens=self.cache_creation_input_tokens + other.cache_creation_input_tokens,
+            cache_creation_input_tokens=self.cache_creation_input_tokens
+            + other.cache_creation_input_tokens,
         )
 
 
@@ -115,7 +121,9 @@ class TurnDecisionResult(BaseModel):
     """spec §4.1: complete decision record returned by Agent.decide()."""
 
     model_config = ConfigDict(
-        extra="forbid", frozen=True, arbitrary_types_allowed=True,
+        extra="forbid",
+        frozen=True,
+        arbitrary_types_allowed=True,
     )
 
     iterations: tuple[IterationRecord, ...]

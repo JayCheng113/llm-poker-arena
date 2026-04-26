@@ -1,4 +1,5 @@
 """Tests for Phase 2a Pydantic storage schemas (round-trip + frozen + tuple fields)."""
+
 from __future__ import annotations
 
 import pytest
@@ -35,8 +36,12 @@ def _hand_result() -> HandResultPrivate:
 
 def _action_record() -> ActionRecordPrivate:
     return ActionRecordPrivate(
-        seat=3, street="flop", action_type="raise_to",
-        amount=725, is_forced_blind=False, turn_index=12,
+        seat=3,
+        street="flop",
+        action_type="raise_to",
+        amount=725,
+        is_forced_blind=False,
+        turn_index=12,
     )
 
 
@@ -45,7 +50,9 @@ def _canonical_hand() -> CanonicalPrivateHandRecord:
         hand_id=127,
         started_at="2026-04-23T18:12:33.123Z",
         ended_at="2026-04-23T18:13:05.456Z",
-        button_seat=4, sb_seat=5, bb_seat=0,
+        button_seat=4,
+        sb_seat=5,
+        bb_seat=0,
         deck_seed=42_127,
         starting_stacks={"1": 10_000, "2": 10_000},
         hole_cards={"1": ("Ah", "Kh"), "2": ("7s", "7c")},
@@ -57,22 +64,31 @@ def _canonical_hand() -> CanonicalPrivateHandRecord:
 
 def _agent_descriptor() -> AgentDescriptor:
     return AgentDescriptor(
-        provider="random", model="uniform", version="phase1",
-        temperature=None, seed=None,
+        provider="random",
+        model="uniform",
+        version="phase1",
+        temperature=None,
+        seed=None,
     )
 
 
 def _snapshot() -> AgentViewSnapshot:
     return AgentViewSnapshot(
-        hand_id=127, turn_id="127-flop-3", session_id="session_abc",
-        seat=3, street="flop", timestamp="2026-04-23T18:12:55.789Z",
+        hand_id=127,
+        turn_id="127-flop-3",
+        session_id="session_abc",
+        seat=3,
+        street="flop",
+        timestamp="2026-04-23T18:12:55.789Z",
         view_at_turn_start={"my_seat": 3, "my_hole_cards": ["Ah", "Kh"]},
         iterations=(),
         final_action={"type": "raise_to", "amount": 725},
         is_forced_blind=False,
         total_utility_calls=0,
-        api_retry_count=0, illegal_action_retry_count=0,
-        no_tool_retry_count=0, tool_usage_error_count=0,
+        api_retry_count=0,
+        illegal_action_retry_count=0,
+        no_tool_retry_count=0,
+        tool_usage_error_count=0,
         default_action_fallback=False,
         api_error=None,
         turn_timeout_exceeded=False,
@@ -120,8 +136,9 @@ def test_public_hand_record_round_trip_with_mixed_events() -> None:
         hand_id=1,
         street_events=(
             PublicHandStarted(hand_id=1, button_seat=4, blinds={"sb": 50, "bb": 100}),
-            PublicAction(hand_id=1, seat=3, street="preflop",
-                         action={"type": "raise_to", "amount": 300}),
+            PublicAction(
+                hand_id=1, seat=3, street="preflop", action={"type": "raise_to", "amount": 300}
+            ),
             PublicShowdown(hand_id=1, revealed={"1": ("Ah", "Kh"), "3": ("2d", "2h")}),
             PublicHandEnded(hand_id=1, winnings={"1": -1200, "2": 1250}),
         ),
@@ -136,10 +153,19 @@ def test_public_hand_record_discriminator_selects_correct_variant() -> None:
         {
             "hand_id": 1,
             "street_events": [
-                {"type": "hand_started", "hand_id": 1, "button_seat": 4,
-                 "blinds": {"sb": 50, "bb": 100}},
-                {"type": "action", "hand_id": 1, "seat": 3, "street": "preflop",
-                 "action": {"type": "raise_to", "amount": 300}},
+                {
+                    "type": "hand_started",
+                    "hand_id": 1,
+                    "button_seat": 4,
+                    "blinds": {"sb": 50, "bb": 100},
+                },
+                {
+                    "type": "action",
+                    "hand_id": 1,
+                    "seat": 3,
+                    "street": "preflop",
+                    "action": {"type": "raise_to", "amount": 300},
+                },
                 {"type": "hand_ended", "hand_id": 1, "winnings": {"1": 100}},
             ],
         }
@@ -170,8 +196,7 @@ def test_public_hand_record_street_events_is_tuple_not_list() -> None:
 def test_agent_descriptor_supports_all_phase1_provider_values() -> None:
     # Phase 2a: only random + rule_based. Phase 3 adds anthropic/openai/google.
     for provider in ("random", "rule_based"):
-        AgentDescriptor(provider=provider, model="x", version="phase1",
-                        temperature=None, seed=None)
+        AgentDescriptor(provider=provider, model="x", version="phase1", temperature=None, seed=None)
 
 
 def test_canonical_hand_blinds_sum_sanity() -> None:

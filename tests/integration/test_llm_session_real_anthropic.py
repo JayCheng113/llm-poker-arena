@@ -8,6 +8,7 @@ Costs ~$0.01-0.05 per run depending on prompt + max_tokens. Uses
 claude-haiku-4-5 (cheapest) and 6 hands (validator min) but only seat 3
 is the LLM; other seats are RandomAgent.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -26,8 +27,7 @@ from llm_poker_arena.engine.config import SessionConfig
 from llm_poker_arena.session.session import Session
 
 pytestmark = pytest.mark.skipif(
-    os.getenv("ANTHROPIC_INTEGRATION_TEST") != "1"
-    or not os.getenv("ANTHROPIC_API_KEY"),
+    os.getenv("ANTHROPIC_INTEGRATION_TEST") != "1" or not os.getenv("ANTHROPIC_API_KEY"),
     reason="needs ANTHROPIC_INTEGRATION_TEST=1 and ANTHROPIC_API_KEY set",
 )
 
@@ -35,32 +35,40 @@ pytestmark = pytest.mark.skipif(
 def test_real_claude_haiku_plays_one_hand(tmp_path: Path) -> None:
     api_key = os.environ["ANTHROPIC_API_KEY"]
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=6, max_utility_calls=5,  # validator demands multiple of 6
-        enable_math_tools=False, enable_hud_tool=False,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=6,
+        max_utility_calls=5,  # validator demands multiple of 6
+        enable_math_tools=False,
+        enable_hud_tool=False,
         rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
     provider = AnthropicProvider(model="claude-haiku-4-5", api_key=api_key)
     llm_agent = LLMAgent(
-        provider=provider, model="claude-haiku-4-5",
-        temperature=0.7, total_turn_timeout_sec=60.0,
+        provider=provider,
+        model="claude-haiku-4-5",
+        temperature=0.7,
+        total_turn_timeout_sec=60.0,
     )
     agents = [
         RandomAgent(),  # BTN
         RandomAgent(),  # SB
         RandomAgent(),  # BB
-        llm_agent,      # UTG ← Claude
+        llm_agent,  # UTG ← Claude
         RandomAgent(),  # HJ
         RandomAgent(),  # CO
     ]
-    sess = Session(config=cfg, agents=agents, output_dir=tmp_path,
-                   session_id="real_anthropic_smoke")
+    sess = Session(
+        config=cfg, agents=agents, output_dir=tmp_path, session_id="real_anthropic_smoke"
+    )
     asyncio.run(sess.run())
 
     snaps = (tmp_path / "agent_view_snapshots.jsonl").read_text().strip().splitlines()
-    llm_snaps = [json.loads(line) for line in snaps
-                 if json.loads(line)["seat"] == 3]
+    llm_snaps = [json.loads(line) for line in snaps if json.loads(line)["seat"] == 3]
     assert llm_snaps, "no seat-3 snapshots found"
     rec = llm_snaps[0]
     assert rec["agent"]["provider"] == "anthropic"
@@ -92,6 +100,7 @@ def test_real_anthropic_probe_returns_observed_capability() -> None:
     # without these, a regression that silently flips probe semantics
     # would slip through the gated smoke.
     from llm_poker_arena.agents.llm.types import ReasoningArtifactKind
+
     assert cap.reasoning_kinds == (ReasoningArtifactKind.UNAVAILABLE,)
     assert cap.tool_use_with_thinking_ok is False
     assert cap.extra_flags["tool_use_with_thinking_probed"] is False

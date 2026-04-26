@@ -30,6 +30,7 @@ payload at a glance; keep them anyway to match spec.
 Callers own the returned connection's lifecycle: use a `with` block or
 call `con.close()` when done.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -50,15 +51,14 @@ def safe_json_source(path: Path) -> str:
     try:
         abs_path.relative_to(RUNS_ROOT)
     except ValueError as e:
-        raise ValueError(
-            f"Path {abs_path} not under trusted runs root {RUNS_ROOT}"
-        ) from e
+        raise ValueError(f"Path {abs_path} not under trusted runs root {RUNS_ROOT}") from e
     escaped = str(abs_path).replace("'", "''")
     return f"'{escaped}'"
 
 
 def open_session(
-    session_dir: Path, access_token: str | None = None,
+    session_dir: Path,
+    access_token: str | None = None,
 ) -> duckdb.DuckDBPyConnection:
     """Open an in-memory DuckDB connection over a session_dir's JSONL files.
 
@@ -80,8 +80,7 @@ def open_session(
 
     public_src = safe_json_source(session_dir / "public_replay.jsonl")
     con.sql(
-        f"CREATE VIEW public_events AS "
-        f"SELECT * FROM read_json_auto({public_src}, sample_size=-1);"
+        f"CREATE VIEW public_events AS SELECT * FROM read_json_auto({public_src}, sample_size=-1);"
     )
 
     if access_token is not None:
@@ -89,12 +88,10 @@ def open_session(
         private_src = safe_json_source(session_dir / "canonical_private.jsonl")
         snapshots_src = safe_json_source(session_dir / "agent_view_snapshots.jsonl")
         con.sql(
-            f"CREATE VIEW hands AS "
-            f"SELECT * FROM read_json_auto({private_src}, sample_size=-1);"
+            f"CREATE VIEW hands AS SELECT * FROM read_json_auto({private_src}, sample_size=-1);"
         )
         con.sql(
-            f"CREATE VIEW actions AS "
-            f"SELECT * FROM read_json_auto({snapshots_src}, sample_size=-1);"
+            f"CREATE VIEW actions AS SELECT * FROM read_json_auto({snapshots_src}, sample_size=-1);"
         )
 
     return con

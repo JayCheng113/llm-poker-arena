@@ -8,6 +8,7 @@ Run only when ALL of:
 
 Costs ~$0.02 per run (Claude Haiku ~$0.018, DeepSeek-Chat ~$0.001).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -40,11 +41,17 @@ pytestmark = pytest.mark.skipif(
 
 def test_real_multi_provider_six_hand_session(tmp_path: Path) -> None:
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=6, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=6,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
         rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
     anth_a = AnthropicProvider(
         model="claude-haiku-4-5",
@@ -55,30 +62,34 @@ def test_real_multi_provider_six_hand_session(tmp_path: Path) -> None:
         api_key=os.environ["ANTHROPIC_API_KEY"],
     )
     ds = OpenAICompatibleProvider(
-        provider_name_value="deepseek", model="deepseek-chat",
+        provider_name_value="deepseek",
+        model="deepseek-chat",
         api_key=os.environ["DEEPSEEK_API_KEY"],
         base_url="https://api.deepseek.com/v1",
     )
     agents = [
         RandomAgent(),  # seat 0
-        LLMAgent(provider=anth_a, model="claude-haiku-4-5",
-                 temperature=0.7, total_turn_timeout_sec=60.0),
+        LLMAgent(
+            provider=anth_a, model="claude-haiku-4-5", temperature=0.7, total_turn_timeout_sec=60.0
+        ),
         RandomAgent(),  # seat 2
-        LLMAgent(provider=ds, model="deepseek-chat",
-                 temperature=0.7, total_turn_timeout_sec=60.0),
+        LLMAgent(provider=ds, model="deepseek-chat", temperature=0.7, total_turn_timeout_sec=60.0),
         RandomAgent(),  # seat 4
-        LLMAgent(provider=anth_b, model="claude-haiku-4-5",
-                 temperature=0.7, total_turn_timeout_sec=60.0),
+        LLMAgent(
+            provider=anth_b, model="claude-haiku-4-5", temperature=0.7, total_turn_timeout_sec=60.0
+        ),
     ]
-    sess = Session(config=cfg, agents=agents, output_dir=tmp_path,
-                   session_id="real_multi_provider_smoke")
+    sess = Session(
+        config=cfg, agents=agents, output_dir=tmp_path, session_id="real_multi_provider_smoke"
+    )
     asyncio.run(sess.run())
 
     meta = json.loads((tmp_path / "meta.json").read_text())
     caps = meta["provider_capabilities"]
     # Two anthropic agents (different provider instances) + one deepseek.
     assert {caps["1"]["provider"], caps["3"]["provider"], caps["5"]["provider"]} == {
-        "anthropic", "deepseek",
+        "anthropic",
+        "deepseek",
     }
     # Random seats absent.
     for seat_str in ("0", "2", "4"):

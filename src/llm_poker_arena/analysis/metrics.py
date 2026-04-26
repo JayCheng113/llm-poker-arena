@@ -11,6 +11,7 @@ across the entire session (possible on very small or pathological runs
 where the player gets walks / folds-before-act every hand) would otherwise
 be silently dropped. Phase-2b Codex audit Part B.2.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -31,17 +32,15 @@ def _validate_num_players(num_players: int) -> None:
     the int formatted into the SQL template is always a small safe integer.
     """
     if not isinstance(num_players, int):
-        raise TypeError(
-            f"num_players must be int, got {type(num_players).__name__}"
-        )
+        raise TypeError(f"num_players must be int, got {type(num_players).__name__}")
     if not 2 <= num_players <= 10:
-        raise ValueError(
-            f"num_players must be in [2, 10], got {num_players}"
-        )
+        raise ValueError(f"num_players must be in [2, 10], got {num_players}")
 
 
 def compute_vpip(
-    con: duckdb.DuckDBPyConnection, *, num_players: int = 6,
+    con: duckdb.DuckDBPyConnection,
+    *,
+    num_players: int = 6,
 ) -> list[dict[str, Any]]:
     """Return per-seat VPIP rate for a 6-max (default) or n-max session.
 
@@ -53,14 +52,13 @@ def compute_vpip(
     _validate_num_players(num_players)
     sql = VPIP_SQL_TEMPLATE.format(num_players=num_players)
     rows = con.sql(sql).fetchall()
-    return [
-        {"seat": int(r[0]), "n_hands": int(r[1]), "vpip_rate": float(r[2])}
-        for r in rows
-    ]
+    return [{"seat": int(r[0]), "n_hands": int(r[1]), "vpip_rate": float(r[2])} for r in rows]
 
 
 def compute_pfr(
-    con: duckdb.DuckDBPyConnection, *, num_players: int = 6,
+    con: duckdb.DuckDBPyConnection,
+    *,
+    num_players: int = 6,
 ) -> list[dict[str, Any]]:
     """Return per-seat PFR rate (preflop raise frequency, voluntary only).
 
@@ -70,10 +68,7 @@ def compute_pfr(
     _validate_num_players(num_players)
     sql = PFR_SQL_TEMPLATE.format(num_players=num_players)
     rows = con.sql(sql).fetchall()
-    return [
-        {"seat": int(r[0]), "n_hands": int(r[1]), "pfr_rate": float(r[2])}
-        for r in rows
-    ]
+    return [{"seat": int(r[0]), "n_hands": int(r[1]), "pfr_rate": float(r[2])} for r in rows]
 
 
 def compute_action_distribution(

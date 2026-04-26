@@ -1,4 +1,5 @@
 """Tests for RuleBasedAgent (B2 baseline) — rule dispatch, not play quality."""
+
 from __future__ import annotations
 
 import asyncio
@@ -22,14 +23,20 @@ def _act(agent: RuleBasedAgent, view: PlayerView) -> Action:
     assert result.final_action is not None
     return result.final_action
 
+
 _ToolName = Literal["fold", "check", "call", "bet", "raise_to", "all_in"]
 
 
 def _params() -> SessionParamsView:
     return SessionParamsView(
-        num_players=6, sb=50, bb=100, starting_stack=10_000,
-        max_utility_calls=5, rationale_required=True,
-        enable_math_tools=False, enable_hud_tool=False,
+        num_players=6,
+        sb=50,
+        bb=100,
+        starting_stack=10_000,
+        max_utility_calls=5,
+        rationale_required=True,
+        enable_math_tools=False,
+        enable_hud_tool=False,
         opponent_stats_min_samples=30,
     )
 
@@ -37,10 +44,14 @@ def _params() -> SessionParamsView:
 def _seats(position_of_actor: str = "UTG") -> tuple[SeatPublicInfo, ...]:
     return tuple(
         SeatPublicInfo(
-            seat=i, label=f"P{i}",
+            seat=i,
+            label=f"P{i}",
             position_short=position_of_actor if i == 3 else "BB",
             position_full="pos",
-            stack=10_000, invested_this_hand=0, invested_this_round=0, status="in_hand",
+            stack=10_000,
+            invested_this_hand=0,
+            invested_this_round=0,
+            status="in_hand",
         )
         for i in range(6)
     )
@@ -61,30 +72,43 @@ def _view(
     for name in legal_names:
         tn = cast(_ToolName, name)
         if name in ("bet", "raise_to"):
-            tools.append(ActionToolSpec(
-                name=tn,
-                args={"amount": {"min": raise_min_max[0], "max": raise_min_max[1]}},
-            ))
+            tools.append(
+                ActionToolSpec(
+                    name=tn,
+                    args={"amount": {"min": raise_min_max[0], "max": raise_min_max[1]}},
+                )
+            )
         else:
             tools.append(ActionToolSpec(name=tn, args={}))
     to_call = max(0, current_bet_to_match - my_invested_this_round)
     pot_at_call = 150
     pot_odds = to_call / (pot_at_call + to_call) if to_call > 0 else None
     return PlayerView(
-        my_seat=3, my_hole_cards=hole, community=community,
-        pot=pot_at_call, sidepots=(), my_stack=10_000,
+        my_seat=3,
+        my_hole_cards=hole,
+        community=community,
+        pot=pot_at_call,
+        sidepots=(),
+        my_stack=10_000,
         my_invested_this_hand=my_invested_this_round,
         my_invested_this_round=my_invested_this_round,
         current_bet_to_match=current_bet_to_match,
-        to_call=to_call, pot_odds_required=pot_odds, effective_stack=10_000,
-        seats_public=_seats(position), opponent_seats_in_hand=(0, 1, 2, 4, 5),
+        to_call=to_call,
+        pot_odds_required=pot_odds,
+        effective_stack=10_000,
+        seats_public=_seats(position),
+        opponent_seats_in_hand=(0, 1, 2, 4, 5),
         action_order_this_street=(3, 4, 5, 0, 1, 2),
         seats_yet_to_act_after_me=(4, 5, 0, 1, 2),
-        already_acted_this_street=(), hand_history=(),
+        already_acted_this_street=(),
+        hand_history=(),
         legal_actions=LegalActionSet(tools=tuple(tools)),
         opponent_stats={},
-        hand_id=1, street=street, button_seat=0,
-        turn_seed=1, immutable_session_params=_params(),
+        hand_id=1,
+        street=street,
+        button_seat=0,
+        turn_seed=1,
+        immutable_session_params=_params(),
     )
 
 
@@ -183,6 +207,7 @@ def test_postflop_missed_checks_when_checkable() -> None:
 def test_returned_action_is_always_in_legal_set() -> None:
     agent = RuleBasedAgent()
     import random
+
     rng = random.Random(42)
     ranks = "23456789TJQKA"
     suits = "cdhs"

@@ -7,6 +7,7 @@ default_safe_action is the fallback for illegal-retry-exhausted or no-tool
 paths (§3.3 / BR2-03). It **never** returns an illegal action: `check` if the
 actor faces no bet, else `fold`.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -91,12 +92,8 @@ def compute_legal_tool_set(state: CanonicalState, actor: int) -> LegalActionSet:
             tools.append(ActionToolSpec(name="call", args={}))
 
     if can_bet_or_raise:
-        min_amt = int(
-            getattr(raw, "min_completion_betting_or_raising_to_amount", 0) or 0
-        )
-        max_amt = int(
-            getattr(raw, "max_completion_betting_or_raising_to_amount", 0) or 0
-        )
+        min_amt = int(getattr(raw, "min_completion_betting_or_raising_to_amount", 0) or 0)
+        max_amt = int(getattr(raw, "max_completion_betting_or_raising_to_amount", 0) or 0)
         if max_amt > 0 and min_amt <= max_amt:
             if to_call <= 0:
                 tools.append(
@@ -116,7 +113,11 @@ def compute_legal_tool_set(state: CanonicalState, actor: int) -> LegalActionSet:
     # all_in as a convenience tool (available whenever the actor has chips + some
     # action is legal). The engine translates it into bet/raise_to(max) at apply time.
     stacks = getattr(raw, "stacks", ()) or ()
-    if 0 <= actor < len(stacks) and int(stacks[actor]) > 0 and (can_check_or_call or can_bet_or_raise):
+    if (
+        0 <= actor < len(stacks)
+        and int(stacks[actor]) > 0
+        and (can_check_or_call or can_bet_or_raise)
+    ):
         tools.append(ActionToolSpec(name="all_in", args={}))
 
     return LegalActionSet(tools=tuple(tools))
@@ -145,9 +146,7 @@ def validate_action(view: PlayerView, action: Action) -> ValidationResult:
         must be in the inclusive range advertised by the tool spec.
       - fold/check/call/all_in actions must have `args == {}`.
     """
-    legal_specs: dict[str, ActionToolSpec] = {
-        t.name: t for t in view.legal_actions.tools
-    }
+    legal_specs: dict[str, ActionToolSpec] = {t.name: t for t in view.legal_actions.tools}
     spec = legal_specs.get(action.tool_name)
     if spec is None:
         return ValidationResult(

@@ -8,6 +8,7 @@ conversion inside the 5000-iteration MC loop costs measurable overhead
 (~210K conversions per equity call). Future TreysBackend would force
 introducing a backend-internal Card adapter — refactor when actually needed.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -31,6 +32,7 @@ class Eval7Backend(EquityBackend):
 
     def evaluate(self, cards: tuple[eval7.Card, ...]) -> int:
         import eval7
+
         return int(eval7.evaluate(list(cards)))
 
 

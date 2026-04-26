@@ -11,6 +11,7 @@ I/O is injectable (via `input_stream` + `output_stream` constructor args)
 so unit tests can drive it deterministically. Production default is
 `sys.stdin` / `sys.stdout`.
 """
+
 from __future__ import annotations
 
 import sys
@@ -49,10 +50,13 @@ class HumanCLIAgent(Agent):
             final_action=action,
             total_tokens=TokenCounts.zero(),
             wall_time_ms=0,
-            api_retry_count=0, illegal_action_retry_count=0,
-            no_tool_retry_count=0, tool_usage_error_count=0,
+            api_retry_count=0,
+            illegal_action_retry_count=0,
+            no_tool_retry_count=0,
+            tool_usage_error_count=0,
             default_action_fallback=False,
-            api_error=None, turn_timeout_exceeded=False,
+            api_error=None,
+            turn_timeout_exceeded=False,
         )
 
     def _pick_action(self, view: PlayerView) -> Action:
@@ -62,15 +66,11 @@ class HumanCLIAgent(Agent):
             tool_name = self._prompt("Choose action: ").strip()
             if tool_name not in _VALID_ACTION_NAMES:
                 self._emit(
-                    f"'{tool_name}' is not a known action. "
-                    f"Valid: {sorted(_VALID_ACTION_NAMES)}\n"
+                    f"'{tool_name}' is not a known action. Valid: {sorted(_VALID_ACTION_NAMES)}\n"
                 )
                 continue
             if tool_name not in legal:
-                self._emit(
-                    f"'{tool_name}' is not in legal set this turn: "
-                    f"{sorted(legal)}\n"
-                )
+                self._emit(f"'{tool_name}' is not in legal set this turn: {sorted(legal)}\n")
                 continue
             if tool_name in ("bet", "raise_to"):
                 spec = next(t for t in view.legal_actions.tools if t.name == tool_name)
@@ -86,9 +86,7 @@ class HumanCLIAgent(Agent):
 
     def _prompt_amount(self, min_amt: int, max_amt: int) -> int:
         while True:
-            raw = self._prompt(
-                f"Amount (int in [{min_amt}, {max_amt}]): "
-            ).strip()
+            raw = self._prompt(f"Amount (int in [{min_amt}, {max_amt}]): ").strip()
             try:
                 amt = int(raw)
             except ValueError:
@@ -122,17 +120,14 @@ class HumanCLIAgent(Agent):
             if s.seat == my_seat:
                 continue
             self._emit(
-                f"  seat {s.seat} ({s.label}, {s.position_short}): "
-                f"{s.stack} chips, {s.status}\n"
+                f"  seat {s.seat} ({s.label}, {s.position_short}): {s.stack} chips, {s.status}\n"
             )
         self._emit("Legal actions this turn:\n")
         for t in view.legal_actions.tools:
             if t.name in ("bet", "raise_to"):
                 bounds = t.args.get("amount") if isinstance(t.args, dict) else None
                 if isinstance(bounds, dict):
-                    self._emit(
-                        f"  {t.name}  (amount in [{bounds['min']}, {bounds['max']}])\n"
-                    )
+                    self._emit(f"  {t.name}  (amount in [{bounds['min']}, {bounds['max']}])\n")
                 else:
                     self._emit(f"  {t.name}\n")
             else:

@@ -5,6 +5,7 @@ Asserts:
   - iterations data lands in agent_view_snapshots.jsonl
   - chip_pnl sums to zero (zero-sum game)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -28,11 +29,16 @@ from llm_poker_arena.session.session import Session
 
 def _fold_response(uid: str) -> LLMResponse:
     return LLMResponse(
-        provider="mock", model="m", stop_reason="tool_use",
+        provider="mock",
+        model="m",
+        stop_reason="tool_use",
         tool_calls=(ToolCall(name="fold", args={}, tool_use_id=uid),),
-        text_content="folding", tokens=TokenCounts(
-            input_tokens=50, output_tokens=10,
-            cache_read_input_tokens=0, cache_creation_input_tokens=0,
+        text_content="folding",
+        tokens=TokenCounts(
+            input_tokens=50,
+            output_tokens=10,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=0,
         ),
         raw_assistant_turn=AssistantTurn(provider="mock", blocks=()),
     )
@@ -50,15 +56,20 @@ class _AlwaysFolds(LLMAgent):
 
 def test_six_hand_session_with_mock_llm_agents_completes(tmp_path: Path) -> None:
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=6, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=6,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
         rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
     agents = [_AlwaysFolds() for _ in range(6)]
-    sess = Session(config=cfg, agents=agents, output_dir=tmp_path,
-                   session_id="llm_mock_test")
+    sess = Session(config=cfg, agents=agents, output_dir=tmp_path, session_id="llm_mock_test")
     asyncio.run(sess.run())
 
     # 6 hands written to canonical_private + public_replay.
@@ -87,20 +98,30 @@ def test_session_writes_provider_capabilities_to_meta(tmp_path: Path) -> None:
     from llm_poker_arena.agents.random_agent import RandomAgent
 
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=6, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=6,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
         rationale_required=False,
-        opponent_stats_min_samples=30, rng_seed=42,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
 
     def _legal_resp(name: str, tool_use_id: str) -> LLMResponse:
         return LLMResponse(
-            provider="mock", model="m1", stop_reason="tool_use",
+            provider="mock",
+            model="m1",
+            stop_reason="tool_use",
             tool_calls=(ToolCall(name=name, args={}, tool_use_id=tool_use_id),),
-            text_content="r", tokens=TokenCounts.zero(),
+            text_content="r",
+            tokens=TokenCounts.zero(),
             raw_assistant_turn=AssistantTurn(provider="mock", blocks=()),
         )
+
     # 200 is a generous buffer for this fold-script smoke test (LLMAgent
     # caps each decision at MAX_STEPS=5 internal iterations; this script
     # serves fold every time so retries shouldn't fire, but 200 absorbs
@@ -117,14 +138,13 @@ def test_session_writes_provider_capabilities_to_meta(tmp_path: Path) -> None:
     llm_b = LLMAgent(provider=provider_b, model="m2", temperature=0.7)
     agents = [
         RandomAgent(),  # seat 0
-        llm_a,          # seat 1
+        llm_a,  # seat 1
         RandomAgent(),  # seat 2
-        llm_b,          # seat 3
+        llm_b,  # seat 3
         RandomAgent(),  # seat 4
         RandomAgent(),  # seat 5
     ]
-    sess = Session(config=cfg, agents=agents, output_dir=tmp_path,
-                   session_id="capabilities_test")
+    sess = Session(config=cfg, agents=agents, output_dir=tmp_path, session_id="capabilities_test")
     asyncio.run(sess.run())
 
     meta = json.loads((tmp_path / "meta.json").read_text())

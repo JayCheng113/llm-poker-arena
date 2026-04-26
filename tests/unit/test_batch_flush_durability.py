@@ -1,4 +1,5 @@
 """Durability: BatchedJsonlWriter loses ≤ BATCH_SIZE entries on SIGKILL."""
+
 from __future__ import annotations
 
 import json
@@ -44,8 +45,7 @@ def test_sigkill_loses_at_most_batch_size_entries(tmp_path: Path) -> None:
     written = len(lines)
     lost = total - written
     assert 0 <= lost <= BatchedJsonlWriter.BATCH_SIZE, (
-        f"expected ≤ {BatchedJsonlWriter.BATCH_SIZE} lost, got lost={lost}, "
-        f"written={written}"
+        f"expected ≤ {BatchedJsonlWriter.BATCH_SIZE} lost, got lost={lost}, written={written}"
     )
     # Any written line must be valid JSON.
     for line in lines:

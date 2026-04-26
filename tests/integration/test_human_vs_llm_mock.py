@@ -4,6 +4,7 @@ Verifies the end-to-end wire: CLI argparse → build_agents (LLM specs) →
 Session.run → meta.json + JSONL artifacts. Uses MockLLMProvider so no
 real API calls.
 """
+
 from __future__ import annotations
 
 import io
@@ -16,7 +17,8 @@ from llm_poker_arena.cli.play import run_cli
 
 
 def test_human_plus_anthropic_mock_session_completes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """1 human (scripted stdin) + 1 mock anthropic + 4 bots; 6 hands; clean."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-mock")
@@ -38,19 +40,21 @@ def test_human_plus_anthropic_mock_session_completes(
 
     def _fold(uid: str) -> LLMResponse:
         return LLMResponse(
-            provider="anthropic", model="claude-haiku-4-5",
+            provider="anthropic",
+            model="claude-haiku-4-5",
             stop_reason="tool_use",
             tool_calls=(ToolCall(name="fold", args={}, tool_use_id=uid),),
             text_content="folding",
-            tokens=TokenCounts(input_tokens=50, output_tokens=10,
-                               cache_read_input_tokens=0,
-                               cache_creation_input_tokens=0),
+            tokens=TokenCounts(
+                input_tokens=50,
+                output_tokens=10,
+                cache_read_input_tokens=0,
+                cache_creation_input_tokens=0,
+            ),
             raw_assistant_turn=AssistantTurn(provider="anthropic", blocks=()),
         )
 
-    script = MockResponseScript(responses=tuple(
-        _fold(f"t{i}") for i in range(200)
-    ))
+    script = MockResponseScript(responses=tuple(_fold(f"t{i}") for i in range(200)))
 
     # Patch AnthropicProvider class within the cli.play module's _PROVIDER_TABLE.
     # The override MUST also have `provider_name() == "anthropic"` so that
@@ -67,9 +71,9 @@ def test_human_plus_anthropic_mock_session_completes(
             return "anthropic"
 
     monkeypatch.setitem(
-        play_mod._PROVIDER_TABLE, "anthropic",
-        ("ANTHROPIC_API_KEY",
-         lambda model, key: _MockAnthropic(model=model, api_key=key)),
+        play_mod._PROVIDER_TABLE,
+        "anthropic",
+        ("ANTHROPIC_API_KEY", lambda model, key: _MockAnthropic(model=model, api_key=key)),
     )
 
     # Cyclic stdin so human always has SOME legal action to pick.
@@ -77,9 +81,12 @@ def test_human_plus_anthropic_mock_session_completes(
     human_output = io.StringIO()
 
     rc = run_cli(
-        num_hands=6, my_seat=3, rng_seed=42,
+        num_hands=6,
+        my_seat=3,
+        rng_seed=42,
         output_root=tmp_path,
-        human_input=human_input, human_output=human_output,
+        human_input=human_input,
+        human_output=human_output,
         llm_specs=[("anthropic", "claude-haiku-4-5", 0)],
     )
     assert rc == 0

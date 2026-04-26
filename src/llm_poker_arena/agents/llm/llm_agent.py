@@ -14,6 +14,7 @@ Phase 3a constraints:
 
 Out of scope (3c+): utility tools, range parser, equity backend, HUD stats.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -76,6 +77,7 @@ class LLMAgent(Agent):
             from llm_poker_arena.agents.llm.prompt_profile import (
                 load_default_prompt_profile,
             )
+
             prompt_profile = load_default_prompt_profile()
         self._prompt_profile = prompt_profile
         self._tool_runner = tool_runner if tool_runner is not None else _default_tool_runner
@@ -99,8 +101,10 @@ class LLMAgent(Agent):
                 final_action=None,
                 total_tokens=TokenCounts.zero(),
                 wall_time_ms=int(self._total_turn_timeout * 1000),
-                api_retry_count=0, illegal_action_retry_count=0,
-                no_tool_retry_count=0, tool_usage_error_count=0,
+                api_retry_count=0,
+                illegal_action_retry_count=0,
+                no_tool_retry_count=0,
+                tool_usage_error_count=0,
                 default_action_fallback=False,
                 api_error=ApiErrorInfo(
                     type="TotalTurnTimeout",
@@ -111,6 +115,7 @@ class LLMAgent(Agent):
 
     async def _decide_inner(self, view: PlayerView) -> TurnDecisionResult:
         from llm_poker_arena.tools import ToolDispatchError, utility_tool_specs
+
         MAX_API_RETRY = 1
         MAX_ILLEGAL_RETRY = 1
         MAX_NO_TOOL_RETRY = 1
@@ -147,17 +152,16 @@ class LLMAgent(Agent):
             # budget is exhausted OR this is the last allowed step. This
             # denies the model the option to call more utilities — forces
             # commit pressure.
-            is_final_step = (
-                utility_count >= max_utility_calls
-                or step == MAX_STEPS - 1
-            )
+            is_final_step = utility_count >= max_utility_calls or step == MAX_STEPS - 1
             tools_this_step = action_tools if is_final_step else all_tools
             try:
                 response = await asyncio.wait_for(
                     self._provider.complete(
                         system=system_text,
-                        messages=messages, tools=tools_this_step,
-                        temperature=self._temperature, seed=self._seed,
+                        messages=messages,
+                        tools=tools_this_step,
+                        temperature=self._temperature,
+                        seed=self._seed,
                     ),
                     timeout=self._per_iter_timeout,
                 )
@@ -182,9 +186,14 @@ class LLMAgent(Agent):
                     await asyncio.sleep(0.5 + random.random() * 0.5)
                     continue
                 return self._fail_with_api_error(
-                    iterations, total_tokens, turn_start,
-                    api_retry, illegal_retry, no_tool_retry,
-                    err_type=err_type, detail=str(e),
+                    iterations,
+                    total_tokens,
+                    turn_start,
+                    api_retry,
+                    illegal_retry,
+                    no_tool_retry,
+                    err_type=err_type,
+                    detail=str(e),
                     tool_usage_error_count=tool_usage_error_count,
                 )
             except ProviderPermanentError as e:
@@ -199,9 +208,14 @@ class LLMAgent(Agent):
                 )
                 iterations.append(iter_record)
                 return self._fail_with_api_error(
-                    iterations, total_tokens, turn_start,
-                    api_retry, illegal_retry, no_tool_retry,
-                    err_type="ProviderPermanentError", detail=str(e),
+                    iterations,
+                    total_tokens,
+                    turn_start,
+                    api_retry,
+                    illegal_retry,
+                    no_tool_retry,
+                    err_type="ProviderPermanentError",
+                    detail=str(e),
                     tool_usage_error_count=tool_usage_error_count,
                 )
 
@@ -223,16 +237,21 @@ class LLMAgent(Agent):
                 iterations.append(iter_record)
                 if no_tool_retry < MAX_NO_TOOL_RETRY:
                     no_tool_retry += 1
+                    messages.append(self._provider.build_assistant_message_for_replay(response))
                     messages.append(
-                        self._provider.build_assistant_message_for_replay(response)
+                        self._provider.build_user_text_message(
+                            "You must call exactly one action tool. Try again."
+                        )
                     )
-                    messages.append(self._provider.build_user_text_message(
-                        "You must call exactly one action tool. Try again."
-                    ))
                     continue
                 return self._fallback_default_safe(
-                    view, iterations, total_tokens, turn_start,
-                    api_retry, illegal_retry, no_tool_retry,
+                    view,
+                    iterations,
+                    total_tokens,
+                    turn_start,
+                    api_retry,
+                    illegal_retry,
+                    no_tool_retry,
                     tool_usage_error_count=tool_usage_error_count,
                 )
 
@@ -254,9 +273,7 @@ class LLMAgent(Agent):
                 iterations.append(iter_record)
                 if tool_usage_retry < MAX_TOOL_USAGE_RETRY:
                     tool_usage_retry += 1
-                    messages.append(
-                        self._provider.build_assistant_message_for_replay(response)
-                    )
+                    messages.append(self._provider.build_assistant_message_for_replay(response))
                     # Provider-specific tool_result protocol (Anthropic: 1
                     # user message with N tool_result blocks; OpenAI: N
                     # role:tool messages). build_tool_result_messages hides
@@ -266,15 +283,22 @@ class LLMAgent(Agent):
                         f"allowed. Got {len(response.tool_calls)} calls; "
                         f"call exactly one action tool."
                     )
-                    messages.extend(self._provider.build_tool_result_messages(
-                        tool_calls=response.tool_calls,
-                        is_error=True,
-                        content=err_content,
-                    ))
+                    messages.extend(
+                        self._provider.build_tool_result_messages(
+                            tool_calls=response.tool_calls,
+                            is_error=True,
+                            content=err_content,
+                        )
+                    )
                     continue
                 return self._fallback_default_safe(
-                    view, iterations, total_tokens, turn_start,
-                    api_retry, illegal_retry, no_tool_retry,
+                    view,
+                    iterations,
+                    total_tokens,
+                    turn_start,
+                    api_retry,
+                    illegal_retry,
+                    no_tool_retry,
                     tool_usage_error_count=tool_usage_error_count,
                 )
 
@@ -306,27 +330,34 @@ class LLMAgent(Agent):
                     iterations.append(iter_record)
                     if no_tool_retry < MAX_NO_TOOL_RETRY:
                         no_tool_retry += 1
-                        messages.append(
-                            self._provider.build_assistant_message_for_replay(response)
+                        messages.append(self._provider.build_assistant_message_for_replay(response))
+                        messages.extend(
+                            self._provider.build_tool_result_messages(
+                                tool_calls=(tc_first,),
+                                is_error=True,
+                                content=(
+                                    "You have exhausted your utility-tool budget. "
+                                    "Call exactly one action tool now."
+                                ),
+                            )
                         )
-                        messages.extend(self._provider.build_tool_result_messages(
-                            tool_calls=(tc_first,),
-                            is_error=True,
-                            content=(
-                                "You have exhausted your utility-tool budget. "
-                                "Call exactly one action tool now."
-                            ),
-                        ))
                         continue
                     return self._fallback_default_safe(
-                        view, iterations, total_tokens, turn_start,
-                        api_retry, illegal_retry, no_tool_retry,
+                        view,
+                        iterations,
+                        total_tokens,
+                        turn_start,
+                        api_retry,
+                        illegal_retry,
+                        no_tool_retry,
                         tool_usage_error_count=tool_usage_error_count,
                     )
 
                 try:
                     tool_result = self._tool_runner(
-                        view, tc_first.name, dict(tc_first.args or {}),
+                        view,
+                        tc_first.name,
+                        dict(tc_first.args or {}),
                     )
                 except ToolDispatchError as e:
                     tool_result = {"error": str(e)}
@@ -351,14 +382,14 @@ class LLMAgent(Agent):
                 utility_count += 1
 
                 # Feed tool result back to the model and continue the loop.
-                messages.append(
-                    self._provider.build_assistant_message_for_replay(response)
+                messages.append(self._provider.build_assistant_message_for_replay(response))
+                messages.extend(
+                    self._provider.build_tool_result_messages(
+                        tool_calls=(tc_first,),
+                        is_error="error" in tool_result,
+                        content=json.dumps(tool_result),
+                    )
                 )
-                messages.extend(self._provider.build_tool_result_messages(
-                    tool_calls=(tc_first,),
-                    is_error="error" in tool_result,
-                    content=json.dumps(tool_result),
-                ))
                 continue
 
             # Phase 3d: rationale_required strict mode (spec §4.5).
@@ -369,9 +400,11 @@ class LLMAgent(Agent):
             # carry the rationale (e.g. DeepSeek-R1's reasoning_content,
             # Anthropic thinking blocks); accept those too. But ENCRYPTED /
             # REDACTED artifacts are opaque and MUST NOT count.
-            if (self._prompt_profile.rationale_required
-                    and not response.text_content.strip()
-                    and not _has_text_rationale_artifact(artifacts)):
+            if (
+                self._prompt_profile.rationale_required
+                and not response.text_content.strip()
+                and not _has_text_rationale_artifact(artifacts)
+            ):
                 tc = response.tool_calls[0]
                 iter_record = IterationRecord(
                     step=step + 1,
@@ -386,21 +419,26 @@ class LLMAgent(Agent):
                 iterations.append(iter_record)
                 if no_tool_retry < MAX_NO_TOOL_RETRY:
                     no_tool_retry += 1
-                    messages.append(
-                        self._provider.build_assistant_message_for_replay(response)
+                    messages.append(self._provider.build_assistant_message_for_replay(response))
+                    messages.extend(
+                        self._provider.build_tool_result_messages(
+                            tool_calls=(tc,),
+                            is_error=True,
+                            content=(
+                                "Reasoning required: write 1-3 short paragraphs "
+                                "of reasoning before calling the tool. Try again."
+                            ),
+                        )
                     )
-                    messages.extend(self._provider.build_tool_result_messages(
-                        tool_calls=(tc,),
-                        is_error=True,
-                        content=(
-                            "Reasoning required: write 1-3 short paragraphs "
-                            "of reasoning before calling the tool. Try again."
-                        ),
-                    ))
                     continue
                 return self._fallback_default_safe(
-                    view, iterations, total_tokens, turn_start,
-                    api_retry, illegal_retry, no_tool_retry,
+                    view,
+                    iterations,
+                    total_tokens,
+                    turn_start,
+                    api_retry,
+                    illegal_retry,
+                    no_tool_retry,
                     tool_usage_error_count=tool_usage_error_count,
                 )
 
@@ -435,34 +473,45 @@ class LLMAgent(Agent):
 
             if illegal_retry < MAX_ILLEGAL_RETRY:
                 illegal_retry += 1
-                messages.append(
-                    self._provider.build_assistant_message_for_replay(response)
+                messages.append(self._provider.build_assistant_message_for_replay(response))
+                messages.extend(
+                    self._provider.build_tool_result_messages(
+                        tool_calls=(tc,),
+                        is_error=True,
+                        content=(
+                            f"Illegal action: {v.reason}. Legal action tools: "
+                            f"{[t.name for t in view.legal_actions.tools]}. "
+                            f"Call exactly one of those next."
+                        ),
+                    )
                 )
-                messages.extend(self._provider.build_tool_result_messages(
-                    tool_calls=(tc,),
-                    is_error=True,
-                    content=(
-                        f"Illegal action: {v.reason}. Legal action tools: "
-                        f"{[t.name for t in view.legal_actions.tools]}. "
-                        f"Call exactly one of those next."
-                    ),
-                ))
                 continue
 
             return self._fallback_default_safe(
-                view, iterations, total_tokens, turn_start,
-                api_retry, illegal_retry, no_tool_retry,
+                view,
+                iterations,
+                total_tokens,
+                turn_start,
+                api_retry,
+                illegal_retry,
+                no_tool_retry,
                 tool_usage_error_count=tool_usage_error_count,
             )
 
         return self._fallback_default_safe(
-            view, iterations, total_tokens, turn_start,
-            api_retry, illegal_retry, no_tool_retry,
+            view,
+            iterations,
+            total_tokens,
+            turn_start,
+            api_retry,
+            illegal_retry,
+            no_tool_retry,
             tool_usage_error_count=tool_usage_error_count,
         )
 
     def _build_initial_state(
-        self, view: PlayerView,
+        self,
+        view: PlayerView,
     ) -> tuple[str, list[dict[str, Any]]]:
         """Returns (system_prompt, initial_messages). The system prompt is
         passed via LLMProvider.complete(system=...) so Anthropic prompt
@@ -470,7 +519,8 @@ class LLMAgent(Agent):
         params = view.immutable_session_params
         system_text = self._prompt_profile.render_system(
             num_players=params.num_players,
-            sb=params.sb, bb=params.bb,
+            sb=params.sb,
+            bb=params.bb,
             starting_stack=params.starting_stack,
             enable_math_tools=params.enable_math_tools,
             max_utility_calls=params.max_utility_calls,
@@ -501,8 +551,12 @@ class LLMAgent(Agent):
         iterations: list[IterationRecord],
         total_tokens: TokenCounts,
         turn_start: float,
-        api_retry: int, illegal_retry: int, no_tool_retry: int,
-        *, err_type: str, detail: str,
+        api_retry: int,
+        illegal_retry: int,
+        no_tool_retry: int,
+        *,
+        err_type: str,
+        detail: str,
         tool_usage_error_count: int = 0,
     ) -> TurnDecisionResult:
         return TurnDecisionResult(
@@ -525,8 +579,11 @@ class LLMAgent(Agent):
         iterations: list[IterationRecord],
         total_tokens: TokenCounts,
         turn_start: float,
-        api_retry: int, illegal_retry: int, no_tool_retry: int,
-        *, tool_usage_error_count: int = 0,
+        api_retry: int,
+        illegal_retry: int,
+        no_tool_retry: int,
+        *,
+        tool_usage_error_count: int = 0,
     ) -> TurnDecisionResult:
         return TurnDecisionResult(
             iterations=tuple(iterations),
@@ -544,6 +601,7 @@ class LLMAgent(Agent):
 
 
 # ---------- helpers ----------
+
 
 def _has_text_rationale_artifact(
     artifacts: tuple[ReasoningArtifact, ...],
@@ -564,10 +622,7 @@ def _has_text_rationale_artifact(
         ReasoningArtifactKind.SUMMARY,
         ReasoningArtifactKind.THINKING_BLOCK,
     }
-    return any(
-        a.kind in rationale_kinds and a.content and a.content.strip()
-        for a in artifacts
-    )
+    return any(a.kind in rationale_kinds and a.content and a.content.strip() for a in artifacts)
 
 
 def _digest_messages(messages: list[dict[str, Any]]) -> str:
@@ -582,8 +637,7 @@ def _action_tool_specs(view: PlayerView) -> list[dict[str, Any]]:
     for spec in view.legal_actions.tools:
         if spec.name in ("bet", "raise_to"):
             bounds = spec.args.get("amount") if isinstance(spec.args, dict) else None
-            if (not isinstance(bounds, dict)
-                    or "min" not in bounds or "max" not in bounds):
+            if not isinstance(bounds, dict) or "min" not in bounds or "max" not in bounds:
                 raise ValueError(
                     f"legal action spec for {spec.name!r} missing amount "
                     f"bounds: spec.args={spec.args!r}. This is an engine bug "
@@ -595,16 +649,15 @@ def _action_tool_specs(view: PlayerView) -> list[dict[str, Any]]:
                 "type": "object",
                 "properties": {
                     "amount": {
-                        "type": "integer", "minimum": mn, "maximum": mx,
+                        "type": "integer",
+                        "minimum": mn,
+                        "maximum": mx,
                     },
                 },
                 "required": ["amount"],
                 "additionalProperties": False,
             }
-            description = (
-                f"{spec.name.replace('_', ' ').capitalize()}: "
-                f"amount in [{mn}, {mx}]"
-            )
+            description = f"{spec.name.replace('_', ' ').capitalize()}: amount in [{mn}, {mx}]"
         else:
             schema = {
                 "type": "object",
@@ -612,11 +665,13 @@ def _action_tool_specs(view: PlayerView) -> list[dict[str, Any]]:
                 "additionalProperties": False,
             }
             description = spec.name.capitalize()
-        out.append({
-            "name": spec.name,
-            "description": description,
-            "input_schema": schema,
-        })
+        out.append(
+            {
+                "name": spec.name,
+                "description": description,
+                "input_schema": schema,
+            }
+        )
     return out
 
 

@@ -7,6 +7,7 @@ encodes it as an error tool_result message, increments tool_usage_error_count
 (analytics counter, NOT a retry budget), and continues until max_utility_calls
 or commit (spec §4.2 + §4.1 BR2-05 reading).
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -42,13 +43,13 @@ def _validate_int_arg(name: str, value: Any) -> None:
     a model passing `to_call=True` is almost certainly confused.
     """
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ToolDispatchError(
-            f"{name} must be an integer; got {type(value).__name__}={value!r}"
-        )
+        raise ToolDispatchError(f"{name} must be an integer; got {type(value).__name__}={value!r}")
 
 
 def run_utility_tool(
-    view: PlayerView, name: str, args: dict[str, Any],
+    view: PlayerView,
+    name: str,
+    args: dict[str, Any],
 ) -> dict[str, Any]:
     """Dispatch to the registered utility tool. Returns `{"value": float}` for
     pot_odds/spr; richer dicts (EquityResult.model_dump()) for equity tools.
@@ -74,8 +75,7 @@ def run_utility_tool(
     extra = set(args) - allowed
     if extra:
         raise ToolDispatchError(
-            f"{name} received unexpected args {sorted(extra)}; "
-            f"allowed: {sorted(allowed)}"
+            f"{name} received unexpected args {sorted(extra)}; allowed: {sorted(allowed)}"
         )
 
     if name == "pot_odds":

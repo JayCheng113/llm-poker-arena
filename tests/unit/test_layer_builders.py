@@ -1,4 +1,5 @@
 """Tests for layer builders (canonical_private / public_replay / agent_view_snapshots)."""
+
 from __future__ import annotations
 
 from llm_poker_arena.engine._internal.poker_state import CanonicalState
@@ -34,17 +35,26 @@ from llm_poker_arena.storage.schemas import (
 
 def _cfg() -> SessionConfig:
     return SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=60, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=42,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=60,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=42,
     )
 
 
 def _state(button: int = 0) -> CanonicalState:
     cfg = _cfg()
     ctx = HandContext(
-        hand_id=0, deck_seed=42_000, button_seat=button,
+        hand_id=0,
+        deck_seed=42_000,
+        button_seat=button,
         initial_stacks=(10_000,) * 6,
     )
     return CanonicalState(cfg, ctx)
@@ -62,7 +72,9 @@ def test_public_hand_started_carries_button_and_blinds() -> None:
 
 def test_public_action_event_records_seat_street_action() -> None:
     e = build_public_action_event(
-        hand_id=0, seat=3, street=Street.PREFLOP,
+        hand_id=0,
+        seat=3,
+        street=Street.PREFLOP,
         action=Action(tool_name="raise_to", args={"amount": 300}),
     )
     assert isinstance(e, PublicAction)
@@ -90,7 +102,9 @@ def test_public_showdown_event_only_reveals_showdown_seats() -> None:
     s = _state(button=0)
     all_holes = s.hole_cards()  # dict[int, tuple[str, str]]
     e = build_public_showdown_event(
-        hand_id=0, showdown_seats={1, 3, 5}, hole_cards=all_holes,
+        hand_id=0,
+        showdown_seats={1, 3, 5},
+        hole_cards=all_holes,
     )
     assert isinstance(e, PublicShowdown)
     # Only the 3 revealed seats appear in the map.
@@ -114,7 +128,9 @@ def test_public_showdown_event_reveals_losers_too_not_just_winners() -> None:
     # mucked (to prove the builder uses the passed dict, not re-reads state).
     snapshot_with_all = dict(pre_settlement_holes)
     e = build_public_showdown_event(
-        hand_id=0, showdown_seats={2, 4}, hole_cards=snapshot_with_all,
+        hand_id=0,
+        showdown_seats={2, 4},
+        hole_cards=snapshot_with_all,
     )
     # Both seats revealed, even though "in a real hand-end state" seat 4 might
     # be a loser whose cards were mucked.
@@ -125,7 +141,8 @@ def test_public_showdown_event_reveals_losers_too_not_just_winners() -> None:
 
 def test_public_hand_ended_event_has_per_seat_winnings() -> None:
     e = build_public_hand_ended_event(
-        hand_id=0, winnings={1: -50, 2: 150, 3: -100, 4: 0, 5: 0, 0: 0},
+        hand_id=0,
+        winnings={1: -50, 2: 150, 3: -100, 4: 0, 5: 0, 0: 0},
     )
     assert isinstance(e, PublicHandEnded)
     assert e.winnings == {"1": -50, "2": 150, "3": -100, "4": 0, "5": 0, "0": 0}
@@ -134,8 +151,7 @@ def test_public_hand_ended_event_has_per_seat_winnings() -> None:
 def test_build_public_hand_record_wraps_events_in_hand_shape() -> None:
     """spec §7.3: one hand per line, events in a tuple."""
     events = (
-        build_public_hand_started_event(hand_id=7, state=_state(button=2),
-                                        sb=50, bb=100),
+        build_public_hand_started_event(hand_id=7, state=_state(button=2), sb=50, bb=100),
         build_public_hole_dealt_event(hand_id=7),
         build_public_hand_ended_event(hand_id=7, winnings={0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0}),
     )
@@ -154,21 +170,35 @@ def test_canonical_private_hand_has_full_hole_cards_and_actions() -> None:
     for turn_idx, actor in enumerate((3, 4, 5, 0, 1)):
         r = apply_action(s, actor, Action(tool_name="call", args={}))
         assert r.is_valid
-        action_records.append(ActionRecordPrivate(
-            seat=actor, street="preflop", action_type="call",
-            amount=None, is_forced_blind=False, turn_index=turn_idx,
-        ))
+        action_records.append(
+            ActionRecordPrivate(
+                seat=actor,
+                street="preflop",
+                action_type="call",
+                amount=None,
+                is_forced_blind=False,
+                turn_index=turn_idx,
+            )
+        )
     r = apply_action(s, 2, Action(tool_name="check", args={}))
     assert r.is_valid
-    action_records.append(ActionRecordPrivate(
-        seat=2, street="preflop", action_type="check",
-        amount=None, is_forced_blind=False, turn_index=5,
-    ))
+    action_records.append(
+        ActionRecordPrivate(
+            seat=2,
+            street="preflop",
+            action_type="check",
+            amount=None,
+            is_forced_blind=False,
+            turn_index=5,
+        )
+    )
 
     # Snapshot hole_cards BEFORE any fold (here: no folds, so either works).
     pre_settlement_holes = s.hole_cards()
     rec = build_canonical_private_hand(
-        hand_id=0, state=s, started_at="2026-04-24T00:00:00Z",
+        hand_id=0,
+        state=s,
+        started_at="2026-04-24T00:00:00Z",
         ended_at="2026-04-24T00:00:05Z",
         actions=tuple(action_records),
         hole_cards=pre_settlement_holes,
@@ -186,12 +216,17 @@ def test_agent_view_snapshot_records_mock_agent_action() -> None:
     actor = 3  # UTG on button=0
     view = build_player_view(s, actor, turn_seed=42)
     snap = build_agent_view_snapshot(
-        hand_id=0, session_id="sess_test", seat=actor,
-        street=Street.PREFLOP, timestamp="2026-04-24T00:00:00Z",
+        hand_id=0,
+        session_id="sess_test",
+        seat=actor,
+        street=Street.PREFLOP,
+        timestamp="2026-04-24T00:00:00Z",
         view=view,
         action=Action(tool_name="fold", args={}),
         turn_index=0,
-        agent_provider="random", agent_model="uniform", agent_version="phase1",
+        agent_provider="random",
+        agent_model="uniform",
+        agent_version="phase1",
         default_action_fallback=False,
     )
     assert isinstance(snap, AgentViewSnapshot)

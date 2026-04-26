@@ -14,6 +14,7 @@ Tests verify:
   6. 3-way all-tie hero share = 1/3 (BLOCKER B2 regression)
   7. Empty villain pool (max_attempts trips) → graceful (0.0, 0.0, 0)
 """
+
 from __future__ import annotations
 
 import eval7
@@ -33,8 +34,9 @@ def test_multi_way_mc_equity_in_unit_interval() -> None:
     board: tuple[eval7.Card, ...] = ()
     villain_pools = [tuple(eval7.HandRange("QQ+").hands)]
     backend = Eval7Backend()
-    eq, var, valid = _multi_way_equity_mc(hero, board, villain_pools, backend,
-                                            n_samples=1000, seed=42)
+    eq, var, valid = _multi_way_equity_mc(
+        hero, board, villain_pools, backend, n_samples=1000, seed=42
+    )
     assert 0.0 <= eq <= 1.0
     assert var >= 0.0  # variance non-negative
     assert valid == 1000  # rejection sampling converges to target
@@ -46,10 +48,8 @@ def test_multi_way_mc_deterministic_with_seed() -> None:
     board: tuple[eval7.Card, ...] = ()
     villain_pools = [tuple(eval7.HandRange("QQ+, AKs").hands)]
     backend = Eval7Backend()
-    eq_a, _, _ = _multi_way_equity_mc(hero, board, villain_pools, backend,
-                                       n_samples=2000, seed=42)
-    eq_b, _, _ = _multi_way_equity_mc(hero, board, villain_pools, backend,
-                                       n_samples=2000, seed=42)
+    eq_a, _, _ = _multi_way_equity_mc(hero, board, villain_pools, backend, n_samples=2000, seed=42)
+    eq_b, _, _ = _multi_way_equity_mc(hero, board, villain_pools, backend, n_samples=2000, seed=42)
     assert eq_a == eq_b
 
 
@@ -59,10 +59,8 @@ def test_multi_way_mc_different_seeds_differ() -> None:
     board: tuple[eval7.Card, ...] = ()
     villain_pools = [tuple(eval7.HandRange("QQ+").hands)]
     backend = Eval7Backend()
-    eq_a, _, _ = _multi_way_equity_mc(hero, board, villain_pools, backend,
-                                       n_samples=500, seed=1)
-    eq_b, _, _ = _multi_way_equity_mc(hero, board, villain_pools, backend,
-                                       n_samples=500, seed=2)
+    eq_a, _, _ = _multi_way_equity_mc(hero, board, villain_pools, backend, n_samples=500, seed=1)
+    eq_b, _, _ = _multi_way_equity_mc(hero, board, villain_pools, backend, n_samples=500, seed=2)
     # MC noise at N=500 ≈ 2.2% SE; two seeds should differ noticeably.
     assert abs(eq_a - eq_b) > 0.001
 
@@ -73,15 +71,19 @@ def test_multi_way_mc_hu_matches_eval7_native_within_mc_noise() -> None:
     hero_eval7 = list(_cards("As", "Ks"))
     villain_range = eval7.HandRange("QQ+")
     eval7_eq = eval7.py_hand_vs_range_monte_carlo(
-        hero_eval7, villain_range, [], 10000,
+        hero_eval7,
+        villain_range,
+        [],
+        10000,
     )
 
     hero = tuple(hero_eval7)
     board: tuple[eval7.Card, ...] = ()
     villain_pools = [tuple(villain_range.hands)]
     backend = Eval7Backend()
-    our_eq, _, _ = _multi_way_equity_mc(hero, board, villain_pools, backend,
-                                         n_samples=10000, seed=42)
+    our_eq, _, _ = _multi_way_equity_mc(
+        hero, board, villain_pools, backend, n_samples=10000, seed=42
+    )
     # Two independent MC samples of same true equity; difference < ±2%
     # (loose bound — the eval7 native MC has its own seed we can't control).
     assert abs(our_eq - eval7_eq) < 0.02
@@ -102,16 +104,18 @@ def test_multi_way_mc_seat_order_invariant() -> None:
     # Same ranges, different seat order:
     #   - order A: villain1=QQ+, villain2=AKs/o
     #   - order B: villain1=AKs/o, villain2=QQ+
-    eq_a, _, _ = _multi_way_equity_mc(hero, board, [pool_qq, pool_aks], backend,
-                                       n_samples=10000, seed=42)
-    eq_b, _, _ = _multi_way_equity_mc(hero, board, [pool_aks, pool_qq], backend,
-                                       n_samples=10000, seed=42)
+    eq_a, _, _ = _multi_way_equity_mc(
+        hero, board, [pool_qq, pool_aks], backend, n_samples=10000, seed=42
+    )
+    eq_b, _, _ = _multi_way_equity_mc(
+        hero, board, [pool_aks, pool_qq], backend, n_samples=10000, seed=42
+    )
     # SE at N=10000 ≈ 0.005 → 95% CI ≈ ±0.01. Two independent seeds give
     # different MC noise; assert difference < 0.015 (loose 3-SE bound).
     # Old sequential algorithm gave ~0.022 difference (codex repro).
     assert abs(eq_a - eq_b) < 0.015, (
         f"order-dependent bias detected: eq_a={eq_a:.4f}, eq_b={eq_b:.4f} "
-        f"(diff={abs(eq_a-eq_b):.4f}). rejection sampling should be invariant "
+        f"(diff={abs(eq_a - eq_b):.4f}). rejection sampling should be invariant "
         f"to seat ordering."
     )
 
@@ -133,8 +137,12 @@ def test_multi_way_mc_three_way_tie_assigns_one_third_share() -> None:
     pool_v1 = (((eval7.Card("3c"), eval7.Card("3d")), 1.0),)
     pool_v2 = (((eval7.Card("4c"), eval7.Card("4d")), 1.0),)
     eq, _, valid = _multi_way_equity_mc(
-        hero, board, [pool_v1, pool_v2], backend,
-        n_samples=200, seed=42,
+        hero,
+        board,
+        [pool_v1, pool_v2],
+        backend,
+        n_samples=200,
+        seed=42,
     )
     assert valid > 0
     # All 3 players use the royal on board → 3-way tie every iteration.
@@ -151,8 +159,7 @@ def test_multi_way_mc_skips_iterations_when_villain_pool_empty() -> None:
     # Villain range with ONLY AsKs combo, which hero blocks.
     villain_pools = [tuple(eval7.HandRange("AsKs").hands)]
     backend = Eval7Backend()
-    eq, _, valid = _multi_way_equity_mc(hero, board, villain_pools, backend,
-                                         n_samples=100, seed=42)
+    eq, _, valid = _multi_way_equity_mc(hero, board, villain_pools, backend, n_samples=100, seed=42)
     # No villain combo survivable → max_attempts trips without producing
     # any valid sample → returns (0.0, 0.0, 0). Caller (hand_equity_vs_ranges)
     # surfaces as ToolDispatchError; here we just verify the algo returns

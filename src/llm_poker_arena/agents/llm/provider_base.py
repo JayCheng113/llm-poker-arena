@@ -2,6 +2,7 @@
 `complete()` and `provider_name()` get implemented. The other abstract
 methods raise NotImplementedError in 3a and are flesh-filled in 3b.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -59,7 +60,8 @@ class LLMProvider(ABC):
 
     @abstractmethod
     def build_assistant_message_for_replay(
-        self, response: LLMResponse,
+        self,
+        response: LLMResponse,
     ) -> dict[str, Any]:
         """Reconstruct the assistant turn (in this provider's wire format) so
         it can be appended to `messages` for the next ReAct iteration. For
@@ -105,7 +107,8 @@ class LLMProvider(ABC):
 
     @abstractmethod
     def extract_reasoning_artifact(
-        self, response: LLMResponse,
+        self,
+        response: LLMResponse,
     ) -> tuple[ReasoningArtifact, ...]:
         """spec §4.6: extract provider-specific reasoning artifacts (Anthropic
         thinking blocks, DeepSeek `reasoning_content`, OpenAI summary). Return

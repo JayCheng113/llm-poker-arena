@@ -5,6 +5,7 @@ Phase 3 fills retry counters, provider_capabilities, estimated_cost_breakdown.
 Schema is forward-compatible — Phase 2a omits nothing; unpopulated fields
 degenerate to zeros / empty dicts for clean analyst consumption.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -18,7 +19,10 @@ def _git_commit() -> str:
     try:
         out = subprocess.run(
             ["git", "rev-parse", "HEAD"],
-            check=True, capture_output=True, text=True, timeout=2,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
         )
         return out.stdout.strip()
     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
@@ -54,17 +58,11 @@ def build_session_meta(
         "prompt_profile_version": "default-v2",
         "provider_capabilities": (provider_capabilities or {}),
         "chip_pnl": {str(s): int(v) for s, v in chip_pnl.items()},
-        "retry_summary_per_seat": (
-            {str(s): v for s, v in (retry_summary_per_seat or {}).items()}
-        ),
-        "tool_usage_summary": (
-            {str(s): v for s, v in (tool_usage_summary or {}).items()}
-        ),
+        "retry_summary_per_seat": ({str(s): v for s, v in (retry_summary_per_seat or {}).items()}),
+        "tool_usage_summary": ({str(s): v for s, v in (tool_usage_summary or {}).items()}),
         "censored_hands_count": 0,
         "censored_hand_ids": [],
-        "total_tokens": (
-            {str(s): v for s, v in (total_tokens_per_seat or {}).items()}
-        ),
+        "total_tokens": ({str(s): v for s, v in (total_tokens_per_seat or {}).items()}),
         "estimated_cost_breakdown": {},
         "session_wall_time_sec": int(session_wall_time_sec),
         "stop_reason": stop_reason,

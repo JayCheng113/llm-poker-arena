@@ -2,6 +2,7 @@
 
 Unit tests monkeypatch `anthropic.AsyncAnthropic` so no network calls happen.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -19,8 +20,11 @@ from llm_poker_arena.agents.llm.providers.anthropic_provider import (
 
 
 def _fake_anthropic_response(
-    *, stop_reason: str = "tool_use", content_blocks: list[Any] | None = None,
-    input_tokens: int = 100, output_tokens: int = 25,
+    *,
+    stop_reason: str = "tool_use",
+    content_blocks: list[Any] | None = None,
+    input_tokens: int = 100,
+    output_tokens: int = 25,
 ) -> MagicMock:
     """Build a MagicMock that quacks like anthropic.types.Message."""
     msg = MagicMock()
@@ -45,7 +49,12 @@ async def test_anthropic_provider_normalizes_tool_use_response(
     tool_block.name = "fold"
     tool_block.input = {}
     tool_block.id = "toolu_01abc"
-    tool_block.model_dump = lambda: {"type": "tool_use", "name": "fold", "input": {}, "id": "toolu_01abc"}
+    tool_block.model_dump = lambda: {
+        "type": "tool_use",
+        "name": "fold",
+        "input": {},
+        "id": "toolu_01abc",
+    }
     fake = _fake_anthropic_response(content_blocks=[tool_block])
 
     fake_client = MagicMock()
@@ -59,7 +68,8 @@ async def test_anthropic_provider_normalizes_tool_use_response(
     resp = await p.complete(
         messages=[{"role": "user", "content": "play"}],
         tools=[{"name": "fold", "description": "fold", "input_schema": {"type": "object"}}],
-        temperature=0.7, seed=None,
+        temperature=0.7,
+        seed=None,
     )
     assert resp.provider == "anthropic"
     assert resp.stop_reason == "tool_use"
@@ -91,7 +101,8 @@ async def test_anthropic_provider_normalizes_text_only_response(
     resp = await p.complete(
         messages=[{"role": "user", "content": "play"}],
         tools=[],
-        temperature=0.7, seed=None,
+        temperature=0.7,
+        seed=None,
     )
     assert resp.stop_reason == "end_turn"
     assert resp.tool_calls == ()
@@ -175,7 +186,9 @@ async def test_anthropic_provider_threads_system_param_to_sdk(
     await p.complete(
         system="You are a poker bot.",
         messages=[{"role": "user", "content": "play"}],
-        tools=[], temperature=0.7, seed=None,
+        tools=[],
+        temperature=0.7,
+        seed=None,
     )
     assert captured["system"] == "You are a poker bot."
 
@@ -202,6 +215,8 @@ async def test_anthropic_provider_omits_system_when_none(
     await p.complete(
         system=None,
         messages=[{"role": "user", "content": "play"}],
-        tools=[], temperature=0.7, seed=None,
+        tools=[],
+        temperature=0.7,
+        seed=None,
     )
     assert "system" not in captured

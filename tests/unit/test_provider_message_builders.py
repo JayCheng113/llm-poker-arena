@@ -1,4 +1,5 @@
 """Provider must own the message-format wire details. Test contract per provider."""
+
 from __future__ import annotations
 
 from llm_poker_arena.agents.llm.providers.anthropic_provider import (
@@ -18,22 +19,27 @@ from llm_poker_arena.agents.llm.types import (
 
 def _resp_with_text_and_tool() -> LLMResponse:
     return LLMResponse(
-        provider="anthropic", model="claude-haiku-4-5",
+        provider="anthropic",
+        model="claude-haiku-4-5",
         stop_reason="tool_use",
-        tool_calls=(
-            ToolCall(name="raise_to", args={"amount": 300},
-                     tool_use_id="toolu_abc"),
-        ),
+        tool_calls=(ToolCall(name="raise_to", args={"amount": 300}, tool_use_id="toolu_abc"),),
         text_content="Reasoning: I have AKs and good fold equity.",
-        tokens=TokenCounts(input_tokens=10, output_tokens=5,
-                           cache_read_input_tokens=0,
-                           cache_creation_input_tokens=0),
+        tokens=TokenCounts(
+            input_tokens=10,
+            output_tokens=5,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=0,
+        ),
         raw_assistant_turn=AssistantTurn(
             provider="anthropic",
             blocks=(
                 {"type": "text", "text": "Reasoning: I have AKs and good fold equity."},
-                {"type": "tool_use", "id": "toolu_abc",
-                 "name": "raise_to", "input": {"amount": 300}},
+                {
+                    "type": "tool_use",
+                    "id": "toolu_abc",
+                    "name": "raise_to",
+                    "input": {"amount": 300},
+                },
             ),
         ),
     )
@@ -51,11 +57,11 @@ def test_anthropic_build_assistant_message_for_replay_uses_raw_blocks() -> None:
 
 def test_anthropic_build_tool_result_messages_returns_single_user_message() -> None:
     provider = AnthropicProvider(model="claude-haiku-4-5", api_key="sk-test")
-    tcs = (
-        ToolCall(name="raise_to", args={"amount": 300}, tool_use_id="toolu_abc"),
-    )
+    tcs = (ToolCall(name="raise_to", args={"amount": 300}, tool_use_id="toolu_abc"),)
     msgs = provider.build_tool_result_messages(
-        tool_calls=tcs, is_error=True, content="Illegal: not in legal set",
+        tool_calls=tcs,
+        is_error=True,
+        content="Illegal: not in legal set",
     )
     assert len(msgs) == 1
     msg = msgs[0]
@@ -76,7 +82,8 @@ def test_anthropic_build_tool_result_messages_covers_every_tool_use_id() -> None
         ToolCall(name="raise_to", args={"amount": 300}, tool_use_id="toolu_bbb"),
     )
     msgs = provider.build_tool_result_messages(
-        tool_calls=tcs, is_error=True,
+        tool_calls=tcs,
+        is_error=True,
         content="Multi-tool calls not allowed; pick one.",
     )
     assert len(msgs) == 1
@@ -87,8 +94,7 @@ def test_anthropic_build_tool_result_messages_covers_every_tool_use_id() -> None
 def test_anthropic_build_user_text_message_returns_plain_user() -> None:
     provider = AnthropicProvider(model="claude-haiku-4-5", api_key="sk-test")
     msg = provider.build_user_text_message("You must call exactly one tool.")
-    assert msg == {"role": "user",
-                   "content": "You must call exactly one tool."}
+    assert msg == {"role": "user", "content": "You must call exactly one tool."}
 
 
 def test_mock_provider_implements_same_3_builders() -> None:

@@ -1,4 +1,5 @@
 """Tests for MockLLMProvider — preset-driven LLM stub for ReAct loop tests."""
+
 from __future__ import annotations
 
 import pytest
@@ -21,20 +22,28 @@ from llm_poker_arena.agents.llm.types import (
 
 @pytest.mark.asyncio
 async def test_mock_provider_returns_scripted_responses_in_order() -> None:
-    script = MockResponseScript(responses=(
-        LLMResponse(
-            provider="mock", model="m1", stop_reason="tool_use",
-            tool_calls=(ToolCall(name="fold", args={}, tool_use_id="t1"),),
-            text_content="", tokens=TokenCounts.zero(),
-            raw_assistant_turn=AssistantTurn(provider="mock", blocks=()),
-        ),
-        LLMResponse(
-            provider="mock", model="m1", stop_reason="tool_use",
-            tool_calls=(ToolCall(name="check", args={}, tool_use_id="t2"),),
-            text_content="", tokens=TokenCounts.zero(),
-            raw_assistant_turn=AssistantTurn(provider="mock", blocks=()),
-        ),
-    ))
+    script = MockResponseScript(
+        responses=(
+            LLMResponse(
+                provider="mock",
+                model="m1",
+                stop_reason="tool_use",
+                tool_calls=(ToolCall(name="fold", args={}, tool_use_id="t1"),),
+                text_content="",
+                tokens=TokenCounts.zero(),
+                raw_assistant_turn=AssistantTurn(provider="mock", blocks=()),
+            ),
+            LLMResponse(
+                provider="mock",
+                model="m1",
+                stop_reason="tool_use",
+                tool_calls=(ToolCall(name="check", args={}, tool_use_id="t2"),),
+                text_content="",
+                tokens=TokenCounts.zero(),
+                raw_assistant_turn=AssistantTurn(provider="mock", blocks=()),
+            ),
+        )
+    )
     p = MockLLMProvider(script=script)
     r1 = await p.complete(messages=[], tools=[], temperature=0.7, seed=None)
     r2 = await p.complete(messages=[], tools=[], temperature=0.7, seed=None)

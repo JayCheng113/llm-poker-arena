@@ -17,7 +17,6 @@ so no agent_view_snapshot exists for blind posts). The filter remains
 load-bearing for Phase 3+ if/when agent-driven blind posts are recorded.
 """
 
-
 VPIP_SQL_TEMPLATE: str = """
 -- VPIP: per-seat fraction of hands where player voluntarily put money in
 -- pot preflop. "Voluntary" excludes forced blind posts.

@@ -6,6 +6,7 @@ Path. Phase 2a session_id is pulled from meta.json for subtitle annotations.
 Risk 11: `matplotlib.use("Agg")` MUST run before `pyplot` is imported so
 tests never try to open a GUI backend.
 """
+
 from __future__ import annotations
 
 import json
@@ -109,20 +110,30 @@ def plot_action_distribution(session_dir: Path) -> Path:
     seats = sorted({k[0] for k in agg})
     action_types = ("fold", "check", "call", "bet", "raise_to", "all_in")
     color_map = {
-        "fold": "#999999", "check": "#a6cee3", "call": "#1f78b4",
-        "bet": "#b2df8a", "raise_to": "#e31a1c", "all_in": "#ff7f00",
+        "fold": "#999999",
+        "check": "#a6cee3",
+        "call": "#1f78b4",
+        "bet": "#b2df8a",
+        "raise_to": "#e31a1c",
+        "all_in": "#ff7f00",
     }
 
     fig, axes = plt.subplots(
-        1, len(streets), figsize=(14, 4), sharey=True,
+        1,
+        len(streets),
+        figsize=(14, 4),
+        sharey=True,
     )
     for ax, street in zip(axes, streets, strict=True):
         bottoms = [0.0] * len(seats)
         for at in action_types:
             rates = [agg.get((s, street), {}).get(at, 0.0) for s in seats]
             ax.bar(
-                [str(s) for s in seats], rates,
-                bottom=bottoms, label=at, color=color_map[at],
+                [str(s) for s in seats],
+                rates,
+                bottom=bottoms,
+                label=at,
+                color=color_map[at],
             )
             bottoms = [b + r for b, r in zip(bottoms, rates, strict=True)]
         ax.set_title(street)

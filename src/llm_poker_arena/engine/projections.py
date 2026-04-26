@@ -16,6 +16,7 @@ plumbing lands in a later task (Phase 2 / MVP 6-7).
 All sequence fields are built as tuples to match `views.py`'s
 deep-immutability convention.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -116,9 +117,7 @@ def _infer_street(state: CanonicalState) -> Street:
     return Street.RIVER
 
 
-def build_player_view(
-    state: CanonicalState, actor: int, *, turn_seed: int
-) -> PlayerView:
+def build_player_view(state: CanonicalState, actor: int, *, turn_seed: int) -> PlayerView:
     """Project CanonicalState into a seat-scoped PlayerView DTO.
 
     P2 invariant: the returned DTO carries only `actor`'s hole cards and
@@ -146,9 +145,7 @@ def build_player_view(
     pot_total = int(getattr(raw, "total_pot_amount", 0) or 0)
     street = _infer_street(state)
     to_call = max(0, max_bet - my_invested_round)
-    pot_odds_required: float | None = (
-        to_call / (pot_total + to_call) if to_call > 0 else None
-    )
+    pot_odds_required: float | None = to_call / (pot_total + to_call) if to_call > 0 else None
     # Effective stack: capped by deepest non-folded opponent. With no opps left
     # the heads-up notion degenerates to my own stack.
     opp_stacks = [seats[i].stack for i in opp_in_hand]
@@ -170,7 +167,9 @@ def build_player_view(
         seats_public=seats,
         opponent_seats_in_hand=tuple(opp_in_hand),
         action_order_this_street=_canonical_street_action_order(
-            button=state.button_seat, n=state.num_players, street=street,
+            button=state.button_seat,
+            n=state.num_players,
+            street=street,
         ),
         seats_yet_to_act_after_me=_seats_yet_to_act_after_me(state, actor),
         already_acted_this_street=(),  # TODO(phase2): thread street-history plumbing
@@ -186,7 +185,10 @@ def build_player_view(
 
 
 def _canonical_street_action_order(
-    *, button: int, n: int, street: Street,
+    *,
+    button: int,
+    n: int,
+    street: Street,
 ) -> tuple[int, ...]:
     """The canonical seat-order for a street, full N seats including folded.
 

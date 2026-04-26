@@ -1,4 +1,5 @@
 """Property P2: public_replay.jsonl never leaks hole cards of non-showdown seats."""
+
 from __future__ import annotations
 
 import asyncio
@@ -20,31 +21,45 @@ from llm_poker_arena.session.session import Session
 )
 @settings(max_examples=30, deadline=None)
 def test_public_replay_has_no_non_showdown_hole_leak(
-    rng_seed: int, num_hands: int, tmp_path_factory: object,
+    rng_seed: int,
+    num_hands: int,
+    tmp_path_factory: object,
 ) -> None:
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=num_hands, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=rng_seed,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=num_hands,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=rng_seed,
     )
     # tmp_path_factory is pytest's session-scoped factory; mktemp gives a
     # fresh dir per hypothesis example.
     out_dir = tmp_path_factory.mktemp("sess_leakcheck")  # type: ignore[attr-defined]
     agents = [RandomAgent() for _ in range(6)]
-    sess = Session(config=cfg, agents=agents, output_dir=Path(out_dir),
-                   session_id="leaktest")
+    sess = Session(config=cfg, agents=agents, output_dir=Path(out_dir), session_id="leaktest")
     asyncio.run(sess.run())
 
     # For each hand in canonical_private, compare its hole_cards against the
     # cards revealed (or absent) in public_replay. Both files are one hand
     # per line (spec §7.2 / §7.3 shape).
-    private = [json.loads(line) for line in
-               (Path(out_dir) / "canonical_private.jsonl").read_text().splitlines() if line.strip()]
+    private = [
+        json.loads(line)
+        for line in (Path(out_dir) / "canonical_private.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
     public_by_hand: dict[int, dict[str, Any]] = {
         rec["hand_id"]: rec
-        for rec in (json.loads(line) for line in
-                    (Path(out_dir) / "public_replay.jsonl").read_text().splitlines() if line.strip())
+        for rec in (
+            json.loads(line)
+            for line in (Path(out_dir) / "public_replay.jsonl").read_text().splitlines()
+            if line.strip()
+        )
     }
 
     for hand in private:

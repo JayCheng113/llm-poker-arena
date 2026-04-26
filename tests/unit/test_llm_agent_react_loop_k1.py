@@ -6,6 +6,7 @@ forced action commit. These tests use MockLLMProvider to drive
 deterministic [utility, utility, action] sequences and assert the
 IterationRecord chain populates tool_result correctly.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -35,45 +36,73 @@ from llm_poker_arena.engine.views import (
 
 def _params(*, max_utility_calls: int = 5) -> SessionParamsView:
     return SessionParamsView(
-        num_players=6, sb=50, bb=100, starting_stack=10_000,
-        max_utility_calls=max_utility_calls, rationale_required=True,
-        enable_math_tools=True, enable_hud_tool=False,
+        num_players=6,
+        sb=50,
+        bb=100,
+        starting_stack=10_000,
+        max_utility_calls=max_utility_calls,
+        rationale_required=True,
+        enable_math_tools=True,
+        enable_hud_tool=False,
         opponent_stats_min_samples=30,
     )
 
 
-def _view(legal: LegalActionSet,
-          params: SessionParamsView | None = None) -> PlayerView:
+def _view(legal: LegalActionSet, params: SessionParamsView | None = None) -> PlayerView:
     return PlayerView(
-        my_seat=3, my_hole_cards=("As", "Kd"), community=(),
-        pot=250, sidepots=(), my_stack=9_750,
-        my_invested_this_hand=0, my_invested_this_round=0,
+        my_seat=3,
+        my_hole_cards=("As", "Kd"),
+        community=(),
+        pot=250,
+        sidepots=(),
+        my_stack=9_750,
+        my_invested_this_hand=0,
+        my_invested_this_round=0,
         current_bet_to_match=100,
-        to_call=100, pot_odds_required=100 / 350,
+        to_call=100,
+        pot_odds_required=100 / 350,
         effective_stack=9_750,
         seats_public=tuple(
-            SeatPublicInfo(seat=i, label=f"P{i}", position_short="UTG",
-                           position_full="x", stack=10_000,
-                           invested_this_hand=0, invested_this_round=0,
-                           status="in_hand") for i in range(6)
+            SeatPublicInfo(
+                seat=i,
+                label=f"P{i}",
+                position_short="UTG",
+                position_full="x",
+                stack=10_000,
+                invested_this_hand=0,
+                invested_this_round=0,
+                status="in_hand",
+            )
+            for i in range(6)
         ),
         opponent_seats_in_hand=(0, 1, 2, 4, 5),
         action_order_this_street=(3, 4, 5, 0, 1, 2),
         seats_yet_to_act_after_me=(4, 5, 0, 1, 2),
-        already_acted_this_street=(), hand_history=(),
-        legal_actions=legal, opponent_stats={},
-        hand_id=1, street=Street.PREFLOP, button_seat=0,
-        turn_seed=42, immutable_session_params=params or _params(),
+        already_acted_this_street=(),
+        hand_history=(),
+        legal_actions=legal,
+        opponent_stats={},
+        hand_id=1,
+        street=Street.PREFLOP,
+        button_seat=0,
+        turn_seed=42,
+        immutable_session_params=params or _params(),
     )
 
 
 def _resp(*tool_calls: ToolCall, text: str = "rationale") -> LLMResponse:
     return LLMResponse(
-        provider="mock", model="m1", stop_reason="tool_use",
-        tool_calls=tuple(tool_calls), text_content=text,
-        tokens=TokenCounts(input_tokens=10, output_tokens=5,
-                           cache_read_input_tokens=0,
-                           cache_creation_input_tokens=0),
+        provider="mock",
+        model="m1",
+        stop_reason="tool_use",
+        tool_calls=tuple(tool_calls),
+        text_content=text,
+        tokens=TokenCounts(
+            input_tokens=10,
+            output_tokens=5,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=0,
+        ),
         raw_assistant_turn=AssistantTurn(provider="mock", blocks=()),
     )
 
@@ -83,10 +112,12 @@ def test_k1_happy_utility_then_action() -> None:
     2 entries: first with tool_call.name='pot_odds' + tool_result, second
     with tool_call.name='fold' + tool_result=None."""
     legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
-    script = MockResponseScript(responses=(
-        _resp(ToolCall(name="pot_odds", args={}, tool_use_id="tu1")),
-        _resp(ToolCall(name="fold", args={}, tool_use_id="tu2")),
-    ))
+    script = MockResponseScript(
+        responses=(
+            _resp(ToolCall(name="pot_odds", args={}, tool_use_id="tu1")),
+            _resp(ToolCall(name="fold", args={}, tool_use_id="tu2")),
+        )
+    )
     provider = MockLLMProvider(script=script)
     agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
     result = asyncio.run(agent.decide(_view(legal)))
@@ -104,16 +135,19 @@ def test_k1_happy_utility_then_action() -> None:
 
 def test_k1_two_utility_then_action() -> None:
     """LLM chains pot_odds → spr → action_call."""
-    legal = LegalActionSet(tools=(
-        ActionToolSpec(name="fold", args={}),
-        ActionToolSpec(name="call", args={}),
-    ))
-    script = MockResponseScript(responses=(
-        _resp(ToolCall(name="pot_odds", args={"to_call": 600, "pot": 850},
-                       tool_use_id="tu1")),
-        _resp(ToolCall(name="spr", args={}, tool_use_id="tu2")),
-        _resp(ToolCall(name="call", args={}, tool_use_id="tu3")),
-    ))
+    legal = LegalActionSet(
+        tools=(
+            ActionToolSpec(name="fold", args={}),
+            ActionToolSpec(name="call", args={}),
+        )
+    )
+    script = MockResponseScript(
+        responses=(
+            _resp(ToolCall(name="pot_odds", args={"to_call": 600, "pot": 850}, tool_use_id="tu1")),
+            _resp(ToolCall(name="spr", args={}, tool_use_id="tu2")),
+            _resp(ToolCall(name="call", args={}, tool_use_id="tu3")),
+        )
+    )
     provider = MockLLMProvider(script=script)
     agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
     result = asyncio.run(agent.decide(_view(legal)))
@@ -130,13 +164,14 @@ def test_k1_utility_with_bad_args_increments_error_count() -> None:
     sees error tool_result and recovers on next iteration. Spec §4.2 lines
     1019-1021. Does NOT consume any retry budget (Q4 brainstorming decision)."""
     legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
-    script = MockResponseScript(responses=(
-        # Bad args first.
-        _resp(ToolCall(name="pot_odds", args={"to_call": -50},
-                       tool_use_id="tu_bad")),
-        # Then commit.
-        _resp(ToolCall(name="fold", args={}, tool_use_id="tu2")),
-    ))
+    script = MockResponseScript(
+        responses=(
+            # Bad args first.
+            _resp(ToolCall(name="pot_odds", args={"to_call": -50}, tool_use_id="tu_bad")),
+            # Then commit.
+            _resp(ToolCall(name="fold", args={}, tool_use_id="tu2")),
+        )
+    )
     provider = MockLLMProvider(script=script)
     agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
     result = asyncio.run(agent.decide(_view(legal)))
@@ -158,11 +193,14 @@ def test_k1_unknown_tool_name_consumes_illegal_retry() -> None:
     per spec §4.2 line 1027 (codex audit IMPORTANT-1 fix). Consumes
     illegal_action_retry budget, NOT tool_usage_error_count."""
     legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
-    script = MockResponseScript(responses=(
-        _resp(ToolCall(name="hallucinated_equity", args={"villain": "AKs"},
-                       tool_use_id="tu_h")),
-        _resp(ToolCall(name="fold", args={}, tool_use_id="tu2")),
-    ))
+    script = MockResponseScript(
+        responses=(
+            _resp(
+                ToolCall(name="hallucinated_equity", args={"villain": "AKs"}, tool_use_id="tu_h")
+            ),
+            _resp(ToolCall(name="fold", args={}, tool_use_id="tu2")),
+        )
+    )
     provider = MockLLMProvider(script=script)
     agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
     result = asyncio.run(agent.decide(_view(legal)))
@@ -182,15 +220,17 @@ def test_k1_mixed_utility_and_action_in_one_response_is_misuse() -> None:
     no action is accepted from it; tool_usage_error_count increments and
     tool_usage_retry budget is consumed."""
     legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
-    script = MockResponseScript(responses=(
-        # Bad multi-call: pot_odds + fold in one response.
-        _resp(
-            ToolCall(name="pot_odds", args={}, tool_use_id="tu_p"),
-            ToolCall(name="fold", args={}, tool_use_id="tu_f"),
-        ),
-        # Recovery response with single tool_call.
-        _resp(ToolCall(name="fold", args={}, tool_use_id="tu_recover")),
-    ))
+    script = MockResponseScript(
+        responses=(
+            # Bad multi-call: pot_odds + fold in one response.
+            _resp(
+                ToolCall(name="pot_odds", args={}, tool_use_id="tu_p"),
+                ToolCall(name="fold", args={}, tool_use_id="tu_f"),
+            ),
+            # Recovery response with single tool_call.
+            _resp(ToolCall(name="fold", args={}, tool_use_id="tu_recover")),
+        )
+    )
     provider = MockLLMProvider(script=script)
     agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
     result = asyncio.run(agent.decide(_view(legal)))
@@ -216,13 +256,15 @@ def test_k1_final_step_excludes_utility_specs() -> None:
             captured_tools.append(list(kw["tools"]))
             return await super().complete(**kw)
 
-    script = MockResponseScript(responses=(
-        # Step 1: utility call (uses up the only budget).
-        _resp(ToolCall(name="pot_odds", args={}, tool_use_id="tu1")),
-        # Step 2: action commit (mock doesn't choose tools, but the spec
-        # list at this step should not include pot_odds anymore).
-        _resp(ToolCall(name="fold", args={}, tool_use_id="tu2")),
-    ))
+    script = MockResponseScript(
+        responses=(
+            # Step 1: utility call (uses up the only budget).
+            _resp(ToolCall(name="pot_odds", args={}, tool_use_id="tu1")),
+            # Step 2: action commit (mock doesn't choose tools, but the spec
+            # list at this step should not include pot_odds anymore).
+            _resp(ToolCall(name="fold", args={}, tool_use_id="tu2")),
+        )
+    )
     provider = CapturingMock(script=script)
     agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
     asyncio.run(agent.decide(_view(legal, params=params)))
@@ -257,11 +299,13 @@ def test_k1_action_only_after_two_utility_calls_exhausts_budget() -> None:
             return await super().complete(**kw)
 
     # Use up both utility budget calls then commit.
-    script = MockResponseScript(responses=(
-        _resp(ToolCall(name="pot_odds", args={}, tool_use_id="t1")),
-        _resp(ToolCall(name="spr", args={}, tool_use_id="t2")),
-        _resp(ToolCall(name="fold", args={}, tool_use_id="t3")),
-    ))
+    script = MockResponseScript(
+        responses=(
+            _resp(ToolCall(name="pot_odds", args={}, tool_use_id="t1")),
+            _resp(ToolCall(name="spr", args={}, tool_use_id="t2")),
+            _resp(ToolCall(name="fold", args={}, tool_use_id="t3")),
+        )
+    )
     provider = CapturingMock(script=script)
     agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
     asyncio.run(agent.decide(_view(legal, params=params)))
@@ -276,16 +320,18 @@ def test_k1_final_step_utility_call_after_exhaustion_short_circuits_to_fallback(
     then fallback if exhausted. Mirrors spec §4.2 lines 994-1015."""
     legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
     params = _params(max_utility_calls=1)
-    script = MockResponseScript(responses=(
-        # Step 1: utility (uses budget).
-        _resp(ToolCall(name="pot_odds", args={}, tool_use_id="t1")),
-        # Step 2: hallucinated utility despite action-only tool list. This
-        # should consume no_tool_retry (interpretation: model defied the
-        # tool list = didn't follow protocol).
-        _resp(ToolCall(name="pot_odds", args={}, tool_use_id="t2")),
-        # Step 3: still hallucinated utility → fallback.
-        _resp(ToolCall(name="pot_odds", args={}, tool_use_id="t3")),
-    ))
+    script = MockResponseScript(
+        responses=(
+            # Step 1: utility (uses budget).
+            _resp(ToolCall(name="pot_odds", args={}, tool_use_id="t1")),
+            # Step 2: hallucinated utility despite action-only tool list. This
+            # should consume no_tool_retry (interpretation: model defied the
+            # tool list = didn't follow protocol).
+            _resp(ToolCall(name="pot_odds", args={}, tool_use_id="t2")),
+            # Step 3: still hallucinated utility → fallback.
+            _resp(ToolCall(name="pot_odds", args={}, tool_use_id="t3")),
+        )
+    )
     provider = MockLLMProvider(script=script)
     agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
     result = asyncio.run(agent.decide(_view(legal, params=params)))
@@ -299,8 +345,7 @@ def test_k1_max_utility_calls_exhaustion_falls_back() -> None:
     # max_utility_calls=2; LLM tries pot_odds 3 times.
     params = _params(max_utility_calls=2)
     responses = tuple(
-        _resp(ToolCall(name="pot_odds", args={}, tool_use_id=f"tu{i}"))
-        for i in range(10)
+        _resp(ToolCall(name="pot_odds", args={}, tool_use_id=f"tu{i}")) for i in range(10)
     )
     script = MockResponseScript(responses=responses)
     provider = MockLLMProvider(script=script)
@@ -312,7 +357,8 @@ def test_k1_max_utility_calls_exhaustion_falls_back() -> None:
     assert result.default_action_fallback is True
     # At least 2 utility iterations happened.
     util_count = sum(
-        1 for it in result.iterations
+        1
+        for it in result.iterations
         if it.tool_call is not None and it.tool_call.name == "pot_odds"
     )
     assert util_count >= 2
@@ -326,34 +372,57 @@ def test_k1_equity_call_then_action() -> None:
     # Build a HU-ish view: opponent_seats=(0,) only
     params = _params(max_utility_calls=5)
     hu_view = PlayerView(
-        my_seat=3, my_hole_cards=("As", "Ks"), community=(),
-        pot=250, sidepots=(), my_stack=9_750,
-        my_invested_this_hand=0, my_invested_this_round=0,
+        my_seat=3,
+        my_hole_cards=("As", "Ks"),
+        community=(),
+        pot=250,
+        sidepots=(),
+        my_stack=9_750,
+        my_invested_this_hand=0,
+        my_invested_this_round=0,
         current_bet_to_match=100,
-        to_call=100, pot_odds_required=100/350, effective_stack=9_750,
+        to_call=100,
+        pot_odds_required=100 / 350,
+        effective_stack=9_750,
         seats_public=tuple(
-            SeatPublicInfo(seat=i, label=f"P{i}", position_short="UTG",
-                           position_full="x", stack=10_000,
-                           invested_this_hand=0, invested_this_round=0,
-                           status="in_hand") for i in range(6)
+            SeatPublicInfo(
+                seat=i,
+                label=f"P{i}",
+                position_short="UTG",
+                position_full="x",
+                stack=10_000,
+                invested_this_hand=0,
+                invested_this_round=0,
+                status="in_hand",
+            )
+            for i in range(6)
         ),
         opponent_seats_in_hand=(0,),
         action_order_this_street=(3, 0),
         seats_yet_to_act_after_me=(0,),
-        already_acted_this_street=(), hand_history=(),
-        legal_actions=legal, opponent_stats={},
-        hand_id=1, street=Street.PREFLOP, button_seat=0,
-        turn_seed=42, immutable_session_params=params,
+        already_acted_this_street=(),
+        hand_history=(),
+        legal_actions=legal,
+        opponent_stats={},
+        hand_id=1,
+        street=Street.PREFLOP,
+        button_seat=0,
+        turn_seed=42,
+        immutable_session_params=params,
     )
 
-    script = MockResponseScript(responses=(
-        _resp(ToolCall(
-            name="hand_equity_vs_ranges",
-            args={"range_by_seat": {0: "QQ+, AKs"}},
-            tool_use_id="tu_eq",
-        )),
-        _resp(ToolCall(name="fold", args={}, tool_use_id="tu_fold")),
-    ))
+    script = MockResponseScript(
+        responses=(
+            _resp(
+                ToolCall(
+                    name="hand_equity_vs_ranges",
+                    args={"range_by_seat": {0: "QQ+, AKs"}},
+                    tool_use_id="tu_eq",
+                )
+            ),
+            _resp(ToolCall(name="fold", args={}, tool_use_id="tu_fold")),
+        )
+    )
     provider = MockLLMProvider(script=script)
     agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
     result = asyncio.run(agent.decide(hu_view))

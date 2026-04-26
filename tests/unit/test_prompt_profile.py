@@ -1,4 +1,5 @@
 """Tests for PromptProfile (Phase 3d Task 1)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,7 +21,10 @@ def test_default_profile_loads_and_has_expected_fields() -> None:
 def test_render_system_prompt_substitutes_session_params() -> None:
     p = load_default_prompt_profile()
     text = p.render_system(
-        num_players=6, sb=50, bb=100, starting_stack=10_000,
+        num_players=6,
+        sb=50,
+        bb=100,
+        starting_stack=10_000,
     )
     assert "100 BB" in text
     assert "50/100" in text
@@ -37,18 +41,21 @@ def test_render_system_prompt_omits_rationale_when_disabled(
         'language = "en"\n'
         'persona = ""\n'
         'reasoning_prompt = "light"\n'
-        'rationale_required = false\n'
-        'stats_min_samples = 30\n'
+        "rationale_required = false\n"
+        "stats_min_samples = 30\n"
         'card_format = "Ah Kh"\n'
         'player_label_format = "Player_{seat}"\n'
         'position_label_format = "{short} ({full})"\n'
-        '[templates]\n'
+        "[templates]\n"
         'system = "system.j2"\n'
         'user = "user.j2"\n'
     )
     p = PromptProfile.from_toml(custom_toml)
     text = p.render_system(
-        num_players=6, sb=50, bb=100, starting_stack=10_000,
+        num_players=6,
+        sb=50,
+        bb=100,
+        starting_stack=10_000,
     )
     assert "First write reasoning" not in text
     assert "may optionally write brief reasoning" in text
@@ -59,14 +66,18 @@ def test_render_user_prompt_includes_my_position_short() -> None:
     prompt must now spell out my_position_short directly."""
     p = load_default_prompt_profile()
     text = p.render_user(
-        hand_id=0, street="preflop",
+        hand_id=0,
+        street="preflop",
         my_seat=3,
         my_position_short="UTG",
         my_position_full="Under the Gun",
         my_hole_cards=("9c", "5h"),
         community=(),
-        pot=150, my_stack=10_000, to_call=100,
-        pot_odds_required=0.4, effective_stack=10_000,
+        pot=150,
+        my_stack=10_000,
+        to_call=100,
+        pot_odds_required=0.4,
+        effective_stack=10_000,
         button_seat=0,
         opponent_seats_in_hand=(0, 1, 2, 4, 5),
         seats_yet_to_act_after_me=(4, 5, 0, 1, 2),
@@ -83,9 +94,11 @@ def test_render_user_prompt_includes_my_position_short() -> None:
 
 def test_render_user_prompt_includes_seats_table() -> None:
     from llm_poker_arena.engine.views import SeatPublicInfo
+
     seats = tuple(
         SeatPublicInfo(
-            seat=i, label=f"P{i}",
+            seat=i,
+            label=f"P{i}",
             position_short=("BTN", "SB", "BB", "UTG", "HJ", "CO")[i],
             position_full="x",
             stack=10_000 - (50 if i == 1 else 100 if i == 2 else 0),
@@ -97,11 +110,19 @@ def test_render_user_prompt_includes_seats_table() -> None:
     )
     p = load_default_prompt_profile()
     text = p.render_user(
-        hand_id=0, street="preflop", my_seat=3,
-        my_position_short="UTG", my_position_full="Under the Gun",
-        my_hole_cards=("As", "Kd"), community=(), pot=150,
-        my_stack=10_000, to_call=100, pot_odds_required=0.4,
-        effective_stack=10_000, button_seat=0,
+        hand_id=0,
+        street="preflop",
+        my_seat=3,
+        my_position_short="UTG",
+        my_position_full="Under the Gun",
+        my_hole_cards=("As", "Kd"),
+        community=(),
+        pot=150,
+        my_stack=10_000,
+        to_call=100,
+        pot_odds_required=0.4,
+        effective_stack=10_000,
+        button_seat=0,
         opponent_seats_in_hand=(0, 1, 2, 4, 5),
         seats_yet_to_act_after_me=(4, 5, 0, 1, 2),
         seats_public=seats,

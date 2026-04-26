@@ -1,4 +1,5 @@
 """poker-play CLI accepts --llm-seat / --llm-provider / --llm-model triplets (Phase 4 Task 4)."""
+
 from __future__ import annotations
 
 import io
@@ -15,13 +16,16 @@ def test_build_agents_with_one_llm_seat(monkeypatch: pytest.MonkeyPatch) -> None
     inp = io.StringIO()
     out = io.StringIO()
     agents = build_agents(
-        num_players=6, my_seat=3,
-        human_input=inp, human_output=out,
+        num_players=6,
+        my_seat=3,
+        human_input=inp,
+        human_output=out,
         llm_specs=[("anthropic", "claude-haiku-4-5", 0)],
     )
     assert isinstance(agents[0], LLMAgent)
     # seat 3 is HumanCLI (always); other seats are bots or LLMs.
     from llm_poker_arena.agents.human_cli import HumanCLIAgent
+
     assert isinstance(agents[3], HumanCLIAgent)
 
 
@@ -30,8 +34,10 @@ def test_build_agents_with_two_llm_seats(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-ds-test")
     agents = build_agents(
-        num_players=6, my_seat=3,
-        human_input=io.StringIO(), human_output=io.StringIO(),
+        num_players=6,
+        my_seat=3,
+        human_input=io.StringIO(),
+        human_output=io.StringIO(),
         llm_specs=[
             ("anthropic", "claude-haiku-4-5", 0),
             ("deepseek", "deepseek-chat", 1),
@@ -49,8 +55,10 @@ def test_build_agents_missing_api_key_raises(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
         build_agents(
-            num_players=6, my_seat=3,
-            human_input=io.StringIO(), human_output=io.StringIO(),
+            num_players=6,
+            my_seat=3,
+            human_input=io.StringIO(),
+            human_output=io.StringIO(),
             llm_specs=[("anthropic", "claude-haiku-4-5", 0)],
         )
 
@@ -62,7 +70,9 @@ def test_build_agents_llm_seat_collides_with_human_seat_raises(
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     with pytest.raises(ValueError, match="cannot equal"):
         build_agents(
-            num_players=6, my_seat=3,
-            human_input=io.StringIO(), human_output=io.StringIO(),
+            num_players=6,
+            my_seat=3,
+            human_input=io.StringIO(),
+            human_output=io.StringIO(),
             llm_specs=[("anthropic", "claude-haiku-4-5", 3)],  # seat 3 is human!
         )

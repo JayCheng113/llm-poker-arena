@@ -1,4 +1,5 @@
 """PromptProfile: TOML-defined Jinja prompt config for LLMAgent (spec §6.3)."""
+
 from __future__ import annotations
 
 import tomllib
@@ -58,14 +59,21 @@ class PromptProfile:
         )
 
     def render_system(
-        self, *, num_players: int, sb: int, bb: int, starting_stack: int,
+        self,
+        *,
+        num_players: int,
+        sb: int,
+        bb: int,
+        starting_stack: int,
         enable_math_tools: bool = False,
         max_utility_calls: int = 5,
     ) -> str:
         tpl = self._env.get_template(self.system_template)
         return tpl.render(
             num_players=num_players,
-            sb=sb, bb=bb, starting_stack=starting_stack,
+            sb=sb,
+            bb=bb,
+            starting_stack=starting_stack,
             rationale_required=self.rationale_required,
             language=self.language,
             enable_math_tools=enable_math_tools,
@@ -75,11 +83,16 @@ class PromptProfile:
     def render_user(
         self,
         *,
-        hand_id: int, street: str,
-        my_seat: int, my_position_short: str, my_position_full: str,
+        hand_id: int,
+        street: str,
+        my_seat: int,
+        my_position_short: str,
+        my_position_full: str,
         my_hole_cards: tuple[str, str],
         community: Iterable[str],
-        pot: int, my_stack: int, to_call: int,
+        pot: int,
+        my_stack: int,
+        to_call: int,
         pot_odds_required: float | None,
         effective_stack: int,
         button_seat: int,
@@ -89,13 +102,16 @@ class PromptProfile:
     ) -> str:
         tpl = self._env.get_template(self.user_template)
         return tpl.render(
-            hand_id=hand_id, street=street,
+            hand_id=hand_id,
+            street=street,
             my_seat=my_seat,
             my_position_short=my_position_short,
             my_position_full=my_position_full,
             my_hole_cards=tuple(my_hole_cards),
             community=tuple(community),
-            pot=pot, my_stack=my_stack, to_call=to_call,
+            pot=pot,
+            my_stack=my_stack,
+            to_call=to_call,
             pot_odds_required=pot_odds_required,
             effective_stack=effective_stack,
             button_seat=button_seat,

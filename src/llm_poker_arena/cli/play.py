@@ -6,6 +6,7 @@ LLM agents alongside the human seat. API keys come from env vars only
 (ANTHROPIC_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY); fail-fast if a
 required key is missing.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -41,13 +42,17 @@ _PROVIDER_TABLE: dict[str, tuple[str, Any]] = {
     "openai": (
         "OPENAI_API_KEY",
         lambda model, key: OpenAICompatibleProvider(
-            provider_name_value="openai", model=model, api_key=key,
+            provider_name_value="openai",
+            model=model,
+            api_key=key,
         ),
     ),
     "deepseek": (
         "DEEPSEEK_API_KEY",
         lambda model, key: OpenAICompatibleProvider(
-            provider_name_value="deepseek", model=model, api_key=key,
+            provider_name_value="deepseek",
+            model=model,
+            api_key=key,
             base_url="https://api.deepseek.com/v1",
         ),
     ),
@@ -74,53 +79,44 @@ def build_agents(
     by seat parity.
     """
     if not 0 <= my_seat < num_players:
-        raise ValueError(
-            f"my_seat must be in [0, {num_players}), got {my_seat}"
-        )
+        raise ValueError(f"my_seat must be in [0, {num_players}), got {my_seat}")
     llm_specs = llm_specs or []
     llm_seats: dict[int, tuple[str, str]] = {}
     for provider_tag, model, seat in llm_specs:
         if not 0 <= seat < num_players:
-            raise ValueError(
-                f"--llm-seat {seat} out of range [0, {num_players})"
-            )
+            raise ValueError(f"--llm-seat {seat} out of range [0, {num_players})")
         if seat == my_seat:
             raise ValueError(
                 f"--llm-seat {seat} cannot equal --my-seat {my_seat} "
                 f"(human seat is reserved for HumanCLIAgent)"
             )
         if seat in llm_seats:
-            raise ValueError(
-                f"duplicate --llm-seat {seat}; pass each seat at most once"
-            )
+            raise ValueError(f"duplicate --llm-seat {seat}; pass each seat at most once")
         if provider_tag not in _PROVIDER_TABLE:
             raise ValueError(
-                f"unknown --llm-provider {provider_tag!r}; "
-                f"supported: {sorted(_PROVIDER_TABLE)}"
+                f"unknown --llm-provider {provider_tag!r}; supported: {sorted(_PROVIDER_TABLE)}"
             )
         env_name, _factory = _PROVIDER_TABLE[provider_tag]
         if not os.environ.get(env_name):
-            raise ValueError(
-                f"--llm-provider {provider_tag} requires {env_name} env "
-                f"var to be set"
-            )
+            raise ValueError(f"--llm-provider {provider_tag} requires {env_name} env var to be set")
         llm_seats[seat] = (provider_tag, model)
 
     agents: list[Agent] = []
     for i in range(num_players):
         if i == my_seat:
-            agents.append(
-                HumanCLIAgent(input_stream=human_input, output_stream=human_output)
-            )
+            agents.append(HumanCLIAgent(input_stream=human_input, output_stream=human_output))
         elif i in llm_seats:
             provider_tag, model = llm_seats[i]
             env_name, factory = _PROVIDER_TABLE[provider_tag]
             api_key = os.environ[env_name]
             provider = factory(model, api_key)
-            agents.append(LLMAgent(
-                provider=provider, model=model,
-                temperature=0.7,
-            ))
+            agents.append(
+                LLMAgent(
+                    provider=provider,
+                    model=model,
+                    temperature=0.7,
+                )
+            )
         elif i % 2 == 0:
             agents.append(RandomAgent())
         else:
@@ -137,7 +133,9 @@ def _session_dir_name(rng_seed: int) -> str:
 
 
 def _print_session_summary(
-    session_dir: Path, my_seat: int, output_stream: TextIO,
+    session_dir: Path,
+    my_seat: int,
+    output_stream: TextIO,
 ) -> None:
     """Emit a terse session-level summary after the Session finishes."""
     meta = json.loads((session_dir / "meta.json").read_text())
@@ -152,9 +150,7 @@ def _print_session_summary(
     output_stream.write("All seats:\n")
     for seat in sorted(chip_pnl, key=int):
         marker = " ← YOU" if int(seat) == my_seat else ""
-        output_stream.write(
-            f"  seat {seat}: {int(chip_pnl[seat]):+d}{marker}\n"
-        )
+        output_stream.write(f"  seat {seat}: {int(chip_pnl[seat]):+d}{marker}\n")
     output_stream.write(f"Session artifacts at: {session_dir}\n")
     output_stream.flush()
 
@@ -182,15 +178,23 @@ def run_cli(
     # Phase 4: enable_math_tools auto-True if any LLM seat is configured.
     has_llm = bool(llm_specs)
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=num_hands, max_utility_calls=5,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=num_hands,
+        max_utility_calls=5,
         enable_math_tools=has_llm,
-        enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=rng_seed,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=rng_seed,
     )
     agents = build_agents(
-        num_players=6, my_seat=my_seat,
-        human_input=human_input, human_output=human_output,
+        num_players=6,
+        my_seat=my_seat,
+        human_input=human_input,
+        human_output=human_output,
         llm_specs=llm_specs,
     )
 
@@ -202,7 +206,9 @@ def run_cli(
         )
         return 1
     sess = Session(
-        config=cfg, agents=agents, output_dir=session_dir,
+        config=cfg,
+        agents=agents,
+        output_dir=session_dir,
         session_id=session_dir.name,
     )
     asyncio.run(sess.run())
@@ -224,22 +230,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--my-seat", type=int, default=3)
     parser.add_argument("--rng-seed", type=int, default=42)
     parser.add_argument(
-        "--output-root", type=Path, default=Path("runs").resolve(),
+        "--output-root",
+        type=Path,
+        default=Path("runs").resolve(),
         help="Where to write session artefacts (default: ./runs/).",
     )
     parser.add_argument(
-        "--llm-seat", type=int, action="append", default=[],
+        "--llm-seat",
+        type=int,
+        action="append",
+        default=[],
         help="Seat to assign an LLM agent. Repeat for multiple LLMs.",
     )
     parser.add_argument(
-        "--llm-provider", action="append", default=[],
+        "--llm-provider",
+        action="append",
+        default=[],
         choices=["anthropic", "openai", "deepseek"],
         help="Provider for the corresponding --llm-seat (must repeat in tandem).",
     )
     parser.add_argument(
-        "--llm-model", action="append", default=[],
-        help="Model name for the corresponding --llm-seat "
-             "(e.g. claude-haiku-4-5, deepseek-chat).",
+        "--llm-model",
+        action="append",
+        default=[],
+        help="Model name for the corresponding --llm-seat (e.g. claude-haiku-4-5, deepseek-chat).",
     )
     args = parser.parse_args(argv)
 
@@ -250,8 +264,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"{len(args.llm_provider)} / {len(args.llm_model)})"
         )
 
-    llm_specs = list(zip(args.llm_provider, args.llm_model, args.llm_seat,
-                         strict=True))
+    llm_specs = list(zip(args.llm_provider, args.llm_model, args.llm_seat, strict=True))
 
     args.output_root.mkdir(parents=True, exist_ok=True)
     return run_cli(

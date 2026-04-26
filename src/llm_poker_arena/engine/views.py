@@ -19,6 +19,7 @@ canonical action log (§P4) and the attack surface would require an agent
 substituting into the dict after the view is built, which our ReAct loop does
 not expose. Revisit when the HUD tool lands.
 """
+
 from __future__ import annotations
 
 from typing import Any, Literal, Self
@@ -33,6 +34,7 @@ def _frozen() -> ConfigDict:
 
 
 # --------------------------------------------------------------------- session
+
 
 class SessionParamsView(BaseModel):
     """Read-only subset of SessionConfig that agents + tools may see."""
@@ -51,6 +53,7 @@ class SessionParamsView(BaseModel):
 
 
 # --------------------------------------------------------------------- tools
+
 
 class ActionToolSpec(BaseModel):
     """Legal action tool descriptor for a specific turn."""
@@ -87,6 +90,7 @@ class SeatPublicInfo(BaseModel):
 
 # --------------------------------------------------------------------- history
 
+
 class ActionRecord(BaseModel):
     """Canonical description of a committed action (post-apply)."""
 
@@ -116,6 +120,7 @@ class SidePotInfo(BaseModel):
 
 # --------------------------------------------------------------------- stats
 
+
 class OpponentStatsOrInsufficient(BaseModel):
     """Either an 'insufficient sample' sentinel or a full stats bundle.
 
@@ -143,6 +148,7 @@ class OpponentStatsOrInsufficient(BaseModel):
 
 
 # --------------------------------------------------------------------- PlayerView
+
 
 class PlayerView(BaseModel):
     """What seat `my_seat` is allowed to see.
@@ -183,6 +189,7 @@ class PlayerView(BaseModel):
 
 # --------------------------------------------------------------------- PublicView
 
+
 class PublicView(BaseModel):
     """No hidden information; safe for spectator UI and open-dataset publish.
 
@@ -201,6 +208,7 @@ class PublicView(BaseModel):
 
 
 # --------------------------------------------------------------------- AgentSnapshot
+
 
 class AgentSnapshot(BaseModel):
     """Envelope written to agent_view_snapshots.jsonl (one per turn per seat)."""

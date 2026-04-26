@@ -1,4 +1,5 @@
 """Tests for compute_vpip (spec §8.3)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -14,24 +15,31 @@ from llm_poker_arena.storage.access_control import PRIVATE_ACCESS_TOKEN
 
 def _run_b1(tmp_path: Path, num_hands: int = 12) -> Path:
     cfg = SessionConfig(
-        num_players=6, starting_stack=10_000, sb=50, bb=100,
-        num_hands=num_hands, max_utility_calls=5,
-        enable_math_tools=False, enable_hud_tool=False, rationale_required=True,
-        opponent_stats_min_samples=30, rng_seed=17,
+        num_players=6,
+        starting_stack=10_000,
+        sb=50,
+        bb=100,
+        num_hands=num_hands,
+        max_utility_calls=5,
+        enable_math_tools=False,
+        enable_hud_tool=False,
+        rationale_required=True,
+        opponent_stats_min_samples=30,
+        rng_seed=17,
     )
     sess_dir = tmp_path / "b1"
-    sess = Session(config=cfg, agents=[RandomAgent() for _ in range(6)],
-                   output_dir=sess_dir, session_id="b1")
+    sess = Session(
+        config=cfg, agents=[RandomAgent() for _ in range(6)], output_dir=sess_dir, session_id="b1"
+    )
     asyncio.run(sess.run())
     return sess_dir
 
 
 def test_compute_vpip_returns_one_row_per_seat(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve()
-    )
+    monkeypatch.setattr("llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve())
     from llm_poker_arena.analysis.metrics import compute_vpip
     from llm_poker_arena.storage.duckdb_query import open_session
 
@@ -59,7 +67,8 @@ def test_compute_vpip_returns_one_row_per_seat(
 
 
 def test_compute_vpip_counts_voluntary_actions_not_folds(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A seat that folds every preflop has vpip_rate == 0.
 
@@ -68,9 +77,7 @@ def test_compute_vpip_counts_voluntary_actions_not_folds(
     definition by sampling one seat and verifying manually against the
     snapshots.
     """
-    monkeypatch.setattr(
-        "llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve()
-    )
+    monkeypatch.setattr("llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve())
     from llm_poker_arena.analysis.metrics import compute_vpip
     from llm_poker_arena.storage.duckdb_query import open_session
 
@@ -92,7 +99,8 @@ def test_compute_vpip_counts_voluntary_actions_not_folds(
 
 
 def test_compute_vpip_denominator_uses_hands_not_actions_on_walks(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Regression (Risk 14): a seat that had walks (BB wins without acting)
     still gets VPIP denominator = total hands dealt, NOT the snapshot count.
@@ -103,9 +111,7 @@ def test_compute_vpip_denominator_uses_hands_not_actions_on_walks(
     """
     import json
 
-    monkeypatch.setattr(
-        "llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve()
-    )
+    monkeypatch.setattr("llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve())
     from llm_poker_arena.analysis.metrics import compute_vpip
     from llm_poker_arena.storage.duckdb_query import open_session
 
@@ -115,13 +121,21 @@ def test_compute_vpip_denominator_uses_hands_not_actions_on_walks(
     # canonical_private.jsonl — 3 hands, all 6 seats dealt every hand.
     hands_data = [
         {
-            "hand_id": i, "started_at": "t0", "ended_at": "t1",
-            "button_seat": 0, "sb_seat": 1, "bb_seat": 2, "deck_seed": i,
+            "hand_id": i,
+            "started_at": "t0",
+            "ended_at": "t1",
+            "button_seat": 0,
+            "sb_seat": 1,
+            "bb_seat": 2,
+            "deck_seed": i,
             "starting_stacks": {str(s): 10000 for s in range(6)},
             "hole_cards": {str(s): ["As", "Kd"] for s in range(6)},
-            "community": [], "actions": [],
+            "community": [],
+            "actions": [],
             "result": {
-                "showdown": False, "winners": [], "side_pots": [],
+                "showdown": False,
+                "winners": [],
+                "side_pots": [],
                 "final_invested": {},
                 "net_pnl": {str(s): 0 for s in range(6)},
             },
@@ -137,31 +151,41 @@ def test_compute_vpip_denominator_uses_hands_not_actions_on_walks(
     for hand_id in range(3):
         seats_here = range(6) if hand_id != 2 else range(5)
         for seat in seats_here:
-            snaps.append({
-                "hand_id": hand_id, "turn_id": f"{hand_id}-preflop-{seat}",
-                "session_id": "synth", "seat": seat, "street": "preflop",
-                "timestamp": "t0", "view_at_turn_start": {},
-                "iterations": [],
-                "final_action": {"type": "fold"},
-                "is_forced_blind": False, "total_utility_calls": 0,
-                "api_retry_count": 0, "illegal_action_retry_count": 0,
-                "no_tool_retry_count": 0, "tool_usage_error_count": 0,
-                "default_action_fallback": False,
-                "api_error": None, "turn_timeout_exceeded": False,
-                "total_tokens": {}, "wall_time_ms": 0,
-                "agent": {
-                    "provider": "synth", "model": "x", "version": "1",
-                    "temperature": None, "seed": None,
-                },
-            })
-    (sess / "agent_view_snapshots.jsonl").write_text(
-        "\n".join(json.dumps(s) for s in snaps) + "\n"
-    )
+            snaps.append(
+                {
+                    "hand_id": hand_id,
+                    "turn_id": f"{hand_id}-preflop-{seat}",
+                    "session_id": "synth",
+                    "seat": seat,
+                    "street": "preflop",
+                    "timestamp": "t0",
+                    "view_at_turn_start": {},
+                    "iterations": [],
+                    "final_action": {"type": "fold"},
+                    "is_forced_blind": False,
+                    "total_utility_calls": 0,
+                    "api_retry_count": 0,
+                    "illegal_action_retry_count": 0,
+                    "no_tool_retry_count": 0,
+                    "tool_usage_error_count": 0,
+                    "default_action_fallback": False,
+                    "api_error": None,
+                    "turn_timeout_exceeded": False,
+                    "total_tokens": {},
+                    "wall_time_ms": 0,
+                    "agent": {
+                        "provider": "synth",
+                        "model": "x",
+                        "version": "1",
+                        "temperature": None,
+                        "seed": None,
+                    },
+                }
+            )
+    (sess / "agent_view_snapshots.jsonl").write_text("\n".join(json.dumps(s) for s in snaps) + "\n")
 
     # public_replay.jsonl — minimal stub (required by open_session).
-    (sess / "public_replay.jsonl").write_text(
-        '{"hand_id": 0, "street_events": []}\n'
-    )
+    (sess / "public_replay.jsonl").write_text('{"hand_id": 0, "street_events": []}\n')
 
     with open_session(sess, access_token=PRIVATE_ACCESS_TOKEN) as con:
         result = compute_vpip(con)
@@ -170,13 +194,13 @@ def test_compute_vpip_denominator_uses_hands_not_actions_on_walks(
     # The bugged denominator would report n_hands=2; correct is 3.
     seat5 = next(r for r in result if r["seat"] == 5)
     assert seat5["n_hands"] == 3, (
-        f"seat 5 denominator {seat5['n_hands']} != 3 (walk-handling bug). "
-        f"full result: {result}"
+        f"seat 5 denominator {seat5['n_hands']} != 3 (walk-handling bug). full result: {result}"
     )
 
 
 def test_compute_vpip_includes_seat_with_zero_actions_entire_session(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Codex Phase-2b audit Part B.2 regression: a seat with ZERO snapshots
     across the entire session must still appear in VPIP output (with
@@ -189,9 +213,7 @@ def test_compute_vpip_includes_seat_with_zero_actions_entire_session(
     """
     import json
 
-    monkeypatch.setattr(
-        "llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve()
-    )
+    monkeypatch.setattr("llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve())
     from llm_poker_arena.analysis.metrics import compute_vpip
     from llm_poker_arena.storage.duckdb_query import open_session
 
@@ -200,13 +222,21 @@ def test_compute_vpip_includes_seat_with_zero_actions_entire_session(
 
     hands_data = [
         {
-            "hand_id": i, "started_at": "t0", "ended_at": "t1",
-            "button_seat": 0, "sb_seat": 1, "bb_seat": 2, "deck_seed": i,
+            "hand_id": i,
+            "started_at": "t0",
+            "ended_at": "t1",
+            "button_seat": 0,
+            "sb_seat": 1,
+            "bb_seat": 2,
+            "deck_seed": i,
             "starting_stacks": {str(s): 10000 for s in range(6)},
             "hole_cards": {str(s): ["As", "Kd"] for s in range(6)},
-            "community": [], "actions": [],
+            "community": [],
+            "actions": [],
             "result": {
-                "showdown": False, "winners": [], "side_pots": [],
+                "showdown": False,
+                "winners": [],
+                "side_pots": [],
                 "final_invested": {},
                 "net_pnl": {str(s): 0 for s in range(6)},
             },
@@ -221,51 +251,58 @@ def test_compute_vpip_includes_seat_with_zero_actions_entire_session(
     snaps = []
     for hand_id in range(2):
         for seat in range(5):  # seats 0-4 only; seat 5 absent
-            snaps.append({
-                "hand_id": hand_id, "turn_id": f"{hand_id}-preflop-{seat}",
-                "session_id": "synth", "seat": seat, "street": "preflop",
-                "timestamp": "t0", "view_at_turn_start": {},
-                "iterations": [],
-                "final_action": {"type": "fold"},
-                "is_forced_blind": False, "total_utility_calls": 0,
-                "api_retry_count": 0, "illegal_action_retry_count": 0,
-                "no_tool_retry_count": 0, "tool_usage_error_count": 0,
-                "default_action_fallback": False,
-                "api_error": None, "turn_timeout_exceeded": False,
-                "total_tokens": {}, "wall_time_ms": 0,
-                "agent": {
-                    "provider": "synth", "model": "x", "version": "1",
-                    "temperature": None, "seed": None,
-                },
-            })
-    (sess / "agent_view_snapshots.jsonl").write_text(
-        "\n".join(json.dumps(s) for s in snaps) + "\n"
-    )
-    (sess / "public_replay.jsonl").write_text(
-        '{"hand_id": 0, "street_events": []}\n'
-    )
+            snaps.append(
+                {
+                    "hand_id": hand_id,
+                    "turn_id": f"{hand_id}-preflop-{seat}",
+                    "session_id": "synth",
+                    "seat": seat,
+                    "street": "preflop",
+                    "timestamp": "t0",
+                    "view_at_turn_start": {},
+                    "iterations": [],
+                    "final_action": {"type": "fold"},
+                    "is_forced_blind": False,
+                    "total_utility_calls": 0,
+                    "api_retry_count": 0,
+                    "illegal_action_retry_count": 0,
+                    "no_tool_retry_count": 0,
+                    "tool_usage_error_count": 0,
+                    "default_action_fallback": False,
+                    "api_error": None,
+                    "turn_timeout_exceeded": False,
+                    "total_tokens": {},
+                    "wall_time_ms": 0,
+                    "agent": {
+                        "provider": "synth",
+                        "model": "x",
+                        "version": "1",
+                        "temperature": None,
+                        "seed": None,
+                    },
+                }
+            )
+    (sess / "agent_view_snapshots.jsonl").write_text("\n".join(json.dumps(s) for s in snaps) + "\n")
+    (sess / "public_replay.jsonl").write_text('{"hand_id": 0, "street_events": []}\n')
 
     with open_session(sess, access_token=PRIVATE_ACCESS_TOKEN) as con:
         result = compute_vpip(con, num_players=6)
 
     # ALL 6 seats must appear — even seat 5 with zero snapshots.
-    assert len(result) == 6, (
-        f"expected 6 seats in VPIP output, got {len(result)}: {result}"
-    )
+    assert len(result) == 6, f"expected 6 seats in VPIP output, got {len(result)}: {result}"
     seat5 = next(r for r in result if r["seat"] == 5)
     assert seat5["n_hands"] == 2
     assert seat5["vpip_rate"] == 0.0
 
 
 def test_compute_vpip_rejects_invalid_num_players(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """num_players must be an int in [2, 10] — mirrors SessionConfig bounds."""
     import json
 
-    monkeypatch.setattr(
-        "llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve()
-    )
+    monkeypatch.setattr("llm_poker_arena.storage.duckdb_query.RUNS_ROOT", tmp_path.resolve())
     from llm_poker_arena.analysis.metrics import compute_vpip
     from llm_poker_arena.storage.duckdb_query import open_session
 
@@ -276,35 +313,65 @@ def test_compute_vpip_rejects_invalid_num_players(
         "agent_view_snapshots.jsonl",
     ):
         (sess / fname).write_text("")
-    (sess / "public_replay.jsonl").write_text(
-        '{"hand_id": 0, "street_events": []}\n'
-    )
+    (sess / "public_replay.jsonl").write_text('{"hand_id": 0, "street_events": []}\n')
     (sess / "canonical_private.jsonl").write_text(
-        json.dumps({
-            "hand_id": 0, "started_at": "t", "ended_at": "t",
-            "button_seat": 0, "sb_seat": 1, "bb_seat": 2, "deck_seed": 0,
-            "starting_stacks": {}, "hole_cards": {},
-            "community": [], "actions": [],
-            "result": {
-                "showdown": False, "winners": [], "side_pots": [],
-                "final_invested": {}, "net_pnl": {},
-            },
-        }) + "\n"
+        json.dumps(
+            {
+                "hand_id": 0,
+                "started_at": "t",
+                "ended_at": "t",
+                "button_seat": 0,
+                "sb_seat": 1,
+                "bb_seat": 2,
+                "deck_seed": 0,
+                "starting_stacks": {},
+                "hole_cards": {},
+                "community": [],
+                "actions": [],
+                "result": {
+                    "showdown": False,
+                    "winners": [],
+                    "side_pots": [],
+                    "final_invested": {},
+                    "net_pnl": {},
+                },
+            }
+        )
+        + "\n"
     )
     (sess / "agent_view_snapshots.jsonl").write_text(
-        json.dumps({
-            "hand_id": 0, "turn_id": "x", "session_id": "x", "seat": 0,
-            "street": "preflop", "timestamp": "t", "view_at_turn_start": {},
-            "iterations": [], "final_action": {"type": "fold"},
-            "is_forced_blind": False, "total_utility_calls": 0,
-            "api_retry_count": 0, "illegal_action_retry_count": 0,
-            "no_tool_retry_count": 0, "tool_usage_error_count": 0,
-            "default_action_fallback": False, "api_error": None,
-            "turn_timeout_exceeded": False, "total_tokens": {},
-            "wall_time_ms": 0,
-            "agent": {"provider": "x", "model": "x", "version": "1",
-                      "temperature": None, "seed": None},
-        }) + "\n"
+        json.dumps(
+            {
+                "hand_id": 0,
+                "turn_id": "x",
+                "session_id": "x",
+                "seat": 0,
+                "street": "preflop",
+                "timestamp": "t",
+                "view_at_turn_start": {},
+                "iterations": [],
+                "final_action": {"type": "fold"},
+                "is_forced_blind": False,
+                "total_utility_calls": 0,
+                "api_retry_count": 0,
+                "illegal_action_retry_count": 0,
+                "no_tool_retry_count": 0,
+                "tool_usage_error_count": 0,
+                "default_action_fallback": False,
+                "api_error": None,
+                "turn_timeout_exceeded": False,
+                "total_tokens": {},
+                "wall_time_ms": 0,
+                "agent": {
+                    "provider": "x",
+                    "model": "x",
+                    "version": "1",
+                    "temperature": None,
+                    "seed": None,
+                },
+            }
+        )
+        + "\n"
     )
 
     with open_session(sess, access_token=PRIVATE_ACCESS_TOKEN) as con:

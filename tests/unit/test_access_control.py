@@ -1,4 +1,5 @@
 """Tests for PublicLogReader and PrivateLogReader (trust boundary enforcement)."""
+
 from __future__ import annotations
 
 import json
@@ -20,12 +21,23 @@ def _write_jsonl(path: Path, records: list[dict[str, object]]) -> None:
 
 def test_public_reader_works_without_private_files(tmp_path: Path) -> None:
     # Spec §7.3: one line per hand (not one line per event).
-    _write_jsonl(tmp_path / "public_replay.jsonl",
-                 [{"hand_id": 0, "street_events": [
-                     {"type": "hand_started", "hand_id": 0, "button_seat": 0,
-                      "blinds": {"sb": 50, "bb": 100}},
-                     {"type": "hand_ended", "hand_id": 0, "winnings": {"0": 0}},
-                 ]}])
+    _write_jsonl(
+        tmp_path / "public_replay.jsonl",
+        [
+            {
+                "hand_id": 0,
+                "street_events": [
+                    {
+                        "type": "hand_started",
+                        "hand_id": 0,
+                        "button_seat": 0,
+                        "blinds": {"sb": 50, "bb": 100},
+                    },
+                    {"type": "hand_ended", "hand_id": 0, "winnings": {"0": 0}},
+                ],
+            }
+        ],
+    )
     r = PublicLogReader(tmp_path)
     hands = list(r.iter_events())
     assert len(hands) == 1
@@ -39,8 +51,7 @@ def test_public_reader_raises_when_public_missing(tmp_path: Path) -> None:
 
 
 def test_private_reader_requires_all_three_files(tmp_path: Path) -> None:
-    _write_jsonl(tmp_path / "public_replay.jsonl",
-                 [{"hand_id": 0, "street_events": []}])
+    _write_jsonl(tmp_path / "public_replay.jsonl", [{"hand_id": 0, "street_events": []}])
     with pytest.raises(FileNotFoundError, match="canonical_private.jsonl"):
         PrivateLogReader(tmp_path, access_token=PRIVATE_ACCESS_TOKEN)
 
@@ -54,8 +65,7 @@ def test_private_reader_rejects_wrong_token(tmp_path: Path) -> None:
 
 def test_private_reader_iterates_all_three_layers(tmp_path: Path) -> None:
     _write_jsonl(tmp_path / "canonical_private.jsonl", [{"hand_id": 0}])
-    _write_jsonl(tmp_path / "public_replay.jsonl",
-                 [{"hand_id": 0, "street_events": []}])
+    _write_jsonl(tmp_path / "public_replay.jsonl", [{"hand_id": 0, "street_events": []}])
     _write_jsonl(tmp_path / "agent_view_snapshots.jsonl", [{"hand_id": 0, "seat": 1}])
     r = PrivateLogReader(tmp_path, access_token=PRIVATE_ACCESS_TOKEN)
     assert list(r.iter_private_hands()) == [{"hand_id": 0}]

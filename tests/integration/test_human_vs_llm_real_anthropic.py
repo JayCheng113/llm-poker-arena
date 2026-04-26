@@ -13,6 +13,7 @@ Wire-only assertions (mirror Phase 3 gated patterns):
   - chip_pnl conserves
   - all final_actions in legal set (per snapshot)
 """
+
 from __future__ import annotations
 
 import io
@@ -25,8 +26,7 @@ import pytest
 from llm_poker_arena.cli.play import run_cli
 
 pytestmark = pytest.mark.skipif(
-    os.getenv("ANTHROPIC_INTEGRATION_TEST") != "1"
-    or not os.getenv("ANTHROPIC_API_KEY"),
+    os.getenv("ANTHROPIC_INTEGRATION_TEST") != "1" or not os.getenv("ANTHROPIC_API_KEY"),
     reason="needs ANTHROPIC_INTEGRATION_TEST=1 and ANTHROPIC_API_KEY set",
 )
 
@@ -38,9 +38,12 @@ def test_human_plus_real_claude_session_completes(tmp_path: Path) -> None:
     human_output = io.StringIO()
 
     rc = run_cli(
-        num_hands=6, my_seat=3, rng_seed=42,
+        num_hands=6,
+        my_seat=3,
+        rng_seed=42,
         output_root=tmp_path,
-        human_input=human_input, human_output=human_output,
+        human_input=human_input,
+        human_output=human_output,
         llm_specs=[("anthropic", "claude-haiku-4-5", 0)],
     )
     assert rc == 0
