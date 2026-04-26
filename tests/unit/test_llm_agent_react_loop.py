@@ -649,3 +649,22 @@ def test_rationale_required_NOT_satisfied_by_encrypted_or_redacted() -> None:
     # The first response had only opaque artifacts → no rationale → retry.
     assert result.no_tool_retry_count == 1
     assert result.final_action == Action(tool_name="fold", args={})
+
+
+def test_llm_agent_accepts_optional_tool_runner_callable() -> None:
+    """Phase 3c-math: LLMAgent.__init__ accepts an optional tool_runner
+    callable; default is the stateless run_utility_tool from tools subpackage.
+    Constructor signature change only — no behavior change in this task."""
+    from llm_poker_arena.tools import run_utility_tool
+
+    provider = MockLLMProvider(script=MockResponseScript(responses=()))
+    # Default: no tool_runner passed.
+    agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
+    assert agent._tool_runner is run_utility_tool
+
+    # Override: custom callable.
+    def fake_runner(view: Any, name: str, args: dict[str, Any]) -> dict[str, Any]:
+        return {"value": 0.5}
+    agent2 = LLMAgent(provider=provider, model="m1", temperature=0.7,
+                      tool_runner=fake_runner)
+    assert agent2._tool_runner is fake_runner

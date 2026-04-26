@@ -21,6 +21,7 @@ import hashlib
 import json
 import random
 import time
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from llm_poker_arena.agents.base import Agent
@@ -30,6 +31,7 @@ from llm_poker_arena.agents.llm.provider_base import (
     ProviderTransientError,
 )
 from llm_poker_arena.agents.llm.redaction import redact_secret
+from llm_poker_arena.tools import run_utility_tool as _default_tool_runner
 
 if TYPE_CHECKING:
     from llm_poker_arena.agents.llm.prompt_profile import PromptProfile
@@ -61,6 +63,7 @@ class LLMAgent(Agent):
         total_turn_timeout_sec: float = 180.0,
         version: str = "phase3d",
         prompt_profile: PromptProfile | None = None,
+        tool_runner: Callable[[Any, str, dict[str, Any]], dict[str, Any]] | None = None,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -75,6 +78,7 @@ class LLMAgent(Agent):
             )
             prompt_profile = load_default_prompt_profile()
         self._prompt_profile = prompt_profile
+        self._tool_runner = tool_runner if tool_runner is not None else _default_tool_runner
 
     def provider_id(self) -> str:
         return f"{self._provider.provider_name()}:{self._model}"
