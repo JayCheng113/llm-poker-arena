@@ -83,6 +83,10 @@ class LLMAgent(Agent):
     def provider_id(self) -> str:
         return f"{self._provider.provider_name()}:{self._model}"
 
+    def metadata(self) -> dict[str, Any] | None:
+        """spec §7.4: surface temperature + seed for snapshot persistence."""
+        return {"temperature": self._temperature, "seed": self._seed}
+
     async def decide(self, view: PlayerView) -> TurnDecisionResult:
         try:
             return await asyncio.wait_for(

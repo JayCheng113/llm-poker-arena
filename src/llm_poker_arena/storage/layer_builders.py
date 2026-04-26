@@ -185,6 +185,8 @@ def build_agent_view_snapshot(
     illegal_action_retry_count: int = 0,
     no_tool_retry_count: int = 0,
     tool_usage_error_count: int = 0,
+    agent_temperature: float | None = None,
+    agent_seed: int | None = None,
 ) -> AgentViewSnapshot:
     final_action: dict[str, Any] = {"type": action.tool_name}
     if action.tool_name in ("bet", "raise_to"):
@@ -238,8 +240,8 @@ def build_agent_view_snapshot(
             provider=agent_provider,
             model=agent_model,
             version=agent_version,
-            temperature=None,
-            seed=None,
+            temperature=agent_temperature,
+            seed=agent_seed,
         ),
     )
 

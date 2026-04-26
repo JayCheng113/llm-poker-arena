@@ -255,6 +255,7 @@ class Session:
             ))
 
             provider, model = _split_provider_id(self._agents[actor].provider_id())
+            agent_md = self._agents[actor].metadata() or {}
             snapshot = build_agent_view_snapshot(
                 hand_id=hand_id, session_id=self._session_id, seat=actor,
                 street=street, timestamp=_now_iso(), view=view,
@@ -269,6 +270,8 @@ class Session:
                 illegal_action_retry_count=decision.illegal_action_retry_count,
                 no_tool_retry_count=decision.no_tool_retry_count,
                 tool_usage_error_count=decision.tool_usage_error_count,
+                agent_temperature=agent_md.get("temperature"),
+                agent_seed=agent_md.get("seed"),
             )
             staged_snapshots.append(snapshot.model_dump(mode="json"))
 
