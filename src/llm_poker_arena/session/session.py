@@ -380,6 +380,30 @@ class Session:
             ):
                 hand_state[actor]["did_pfr"] = True
 
+            # Phase 3c-hud: 3-bet — the SECOND voluntary preflop raise
+            # (codex audit BLOCKER B2 fix). Anything beyond is 4-bet+, NOT 3-bet.
+            #
+            # Chance: this seat acts preflop with EXACTLY ONE prior voluntary
+            # aggressive action (from another seat) on the table AND this seat
+            # has not yet raised preflop this hand.
+            # Action: chance + this seat raises in that turn.
+            if street == Street.PREFLOP:
+                preflop_raise_count = sum(
+                    1 for ar in action_records
+                    if ar.street == "preflop"
+                    and ar.action_type in ("raise_to", "bet", "all_in")
+                )
+                if (
+                    preflop_raise_count == 1
+                    and not hand_state[actor]["preflop_raised"]
+                ):
+                    hand_state[actor]["had_3bet_chance"] = True
+                    if chosen.tool_name in ("raise_to", "bet", "all_in"):
+                        hand_state[actor]["did_3bet"] = True
+                # Track this seat's own preflop raises for self-exclusion.
+                if chosen.tool_name in ("raise_to", "bet", "all_in"):
+                    hand_state[actor]["preflop_raised"] = True
+
             result = apply_action(state, actor, chosen)
             if not result.is_valid:
                 raise RuntimeError(
@@ -456,6 +480,10 @@ class Session:
                 self._hud_counters[seat]["vpip_actions"] += 1
             if hand_state[seat]["did_pfr"]:
                 self._hud_counters[seat]["pfr_actions"] += 1
+            if hand_state[seat]["had_3bet_chance"]:
+                self._hud_counters[seat]["three_bet_chances"] += 1
+            if hand_state[seat]["did_3bet"]:
+                self._hud_counters[seat]["three_bet_actions"] += 1
 
         # Hand is over. Emit showdown (if anyone saw it) + hand_ended.
         statuses = list(state._state.statuses)  # noqa: SLF001
