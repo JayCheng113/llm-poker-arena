@@ -1,8 +1,11 @@
-"""HumanCLIAgent: sync Agent that reads actions from a terminal.
+"""HumanCLIAgent: async Agent that reads actions from a terminal.
 
-Dogfood implementation for pre-Phase-3 play. When Phase 3 widens the
-`Agent` ABC to `async def decide(view, tool_runner) -> TurnDecisionResult`,
-this class will be rewritten to match.
+Reads from a configurable text input stream (defaults to sys.stdin) and
+writes prompts/state to a configurable output stream (defaults to
+sys.stdout). The decide() method is async to fit the Phase 3+ Agent ABC
+contract, but stdin reads are synchronous (blocking) — that's acceptable
+because Session.run is sequential per turn and the human IS the rate
+limiter, so blocking the event loop on input() costs nothing.
 
 I/O is injectable (via `input_stream` + `output_stream` constructor args)
 so unit tests can drive it deterministically. Production default is
