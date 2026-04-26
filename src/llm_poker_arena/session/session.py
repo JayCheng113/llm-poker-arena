@@ -161,11 +161,24 @@ class Session:
         # still written). spec §4.4 HR2-03: probe each unique LLMProvider
         # once; non-LLM agents (Random, RuleBased, HumanCLI) skip probe.
         provider_capabilities: dict[str, dict[str, Any]] = {}
+        # Phase 4 Task 3: track stop reason for meta.json. Defaults to
+        # "completed" when the session finishes all configured hands; updated
+        # to a sentinel string if cost cap aborts.
+        stop_reason = "completed"
         try:
             provider_capabilities = await self._probe_providers()
             for hand_id in range(self._config.num_hands):
                 await self._run_one_hand(hand_id)
                 self._total_hands_played += 1
+                # Cost cap check at hand boundary (clean abort, complete artifacts).
+                if self._config.max_total_tokens is not None:
+                    total_tokens = sum(
+                        seat["input_tokens"] + seat["output_tokens"]
+                        for seat in self._total_tokens_per_seat.values()
+                    )
+                    if total_tokens > self._config.max_total_tokens:
+                        stop_reason = "max_total_tokens_exceeded"
+                        break
         finally:
             ended_at_iso = _now_iso()
             wall_time_sec = max(0, int(time.monotonic() - started_at_monotonic))
@@ -182,6 +195,7 @@ class Session:
                 retry_summary_per_seat=self._retry_summary_per_seat,
                 tool_usage_summary=self._tool_usage_summary,
                 total_tokens_per_seat=self._total_tokens_per_seat,
+                stop_reason=stop_reason,
             )
             (self._output_dir / "meta.json").write_text(
                 json.dumps(meta, sort_keys=True, indent=2)

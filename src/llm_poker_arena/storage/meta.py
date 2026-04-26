@@ -40,6 +40,7 @@ def build_session_meta(
     retry_summary_per_seat: dict[int, dict[str, int]] | None = None,
     tool_usage_summary: dict[int, dict[str, int]] | None = None,
     total_tokens_per_seat: dict[int, dict[str, int]] | None = None,
+    stop_reason: str = "completed",
 ) -> dict[str, Any]:
     return {
         "session_id": session_id,
@@ -66,6 +67,7 @@ def build_session_meta(
         ),
         "estimated_cost_breakdown": {},
         "session_wall_time_sec": int(session_wall_time_sec),
+        "stop_reason": stop_reason,
         "seat_assignment": {str(s): label for s, label in seat_assignment.items()},
         "initial_button_seat": initial_button_seat,
         "seat_permutation_id": "phase2a_default",

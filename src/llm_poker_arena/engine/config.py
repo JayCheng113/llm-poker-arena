@@ -30,6 +30,11 @@ class SessionConfig(BaseModel):
     rationale_required: bool
     opponent_stats_min_samples: int = Field(ge=1)
     rng_seed: int
+    # Phase 4: optional session-level token cost cap. None = no cap (backward
+    # compat). When set, Session aborts at the next hand boundary if cumulative
+    # input+output tokens across all seats exceed this threshold. Tracks raw
+    # tokens — USD pricing matrix is Phase 5.
+    max_total_tokens: int | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def _check_invariants(self) -> Self:
