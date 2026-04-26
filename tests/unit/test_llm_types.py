@@ -297,3 +297,30 @@ def test_iteration_record_with_reasoning_artifacts_round_trip() -> None:
     assert rec2 == rec
     assert len(rec2.reasoning_artifacts) == 2
     assert rec2.reasoning_artifacts[0].kind == ReasoningArtifactKind.THINKING_BLOCK
+
+
+def test_iteration_record_default_tool_result_is_none() -> None:
+    rec = IterationRecord(
+        step=1, request_messages_digest="sha256:x",
+        provider_response_kind="tool_use",
+        tool_call=ToolCall(name="fold", args={}, tool_use_id="t1"),
+        text_content="r", tokens=TokenCounts.zero(),
+        wall_time_ms=10,
+    )
+    assert rec.tool_result is None
+
+
+def test_iteration_record_with_tool_result_round_trip() -> None:
+    rec = IterationRecord(
+        step=2, request_messages_digest="sha256:y",
+        provider_response_kind="tool_use",
+        tool_call=ToolCall(name="pot_odds", args={"to_call": 100, "pot": 250},
+                           tool_use_id="tu_a"),
+        text_content="checking pot odds",
+        tokens=TokenCounts.zero(), wall_time_ms=42,
+        tool_result={"value": 0.2857142857142857},
+    )
+    blob = rec.model_dump_json()
+    rec2 = IterationRecord.model_validate_json(blob)
+    assert rec2 == rec
+    assert rec2.tool_result == {"value": 0.2857142857142857}

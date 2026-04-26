@@ -84,6 +84,11 @@ class IterationRecord(BaseModel):
     blocks per turn. Empty tuple is the default for providers that emit no
     reasoning artifacts (Anthropic without extended thinking, OpenAI Chat,
     DeepSeek-Chat / V3).
+
+    `tool_result` is None for action-tool iterations (the result is the
+    `final_action` commit) and for error iterations. It carries the utility
+    tool's structured return (`{"value": float}` for pot_odds/spr, richer
+    dict for future equity tools) for forensic + analytics use.
     """
 
     model_config = _frozen()
@@ -96,6 +101,7 @@ class IterationRecord(BaseModel):
     tokens: TokenCounts
     wall_time_ms: int
     reasoning_artifacts: tuple[ReasoningArtifact, ...] = ()
+    tool_result: dict[str, Any] | None = None
 
 
 class ApiErrorInfo(BaseModel):
