@@ -468,6 +468,8 @@ class LLMAgent(Agent):
             num_players=params.num_players,
             sb=params.sb, bb=params.bb,
             starting_stack=params.starting_stack,
+            enable_math_tools=params.enable_math_tools,
+            max_utility_calls=params.max_utility_calls,
         )
         my_seat_info = view.seats_public[view.my_seat]
         user_text = self._prompt_profile.render_user(

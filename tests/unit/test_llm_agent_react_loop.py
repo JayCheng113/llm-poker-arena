@@ -668,3 +668,73 @@ def test_llm_agent_accepts_optional_tool_runner_callable() -> None:
     agent2 = LLMAgent(provider=provider, model="m1", temperature=0.7,
                       tool_runner=fake_runner)
     assert agent2._tool_runner is fake_runner
+
+
+def test_system_prompt_includes_math_tools_block_when_enabled() -> None:
+    """When SessionConfig.enable_math_tools=True, system.j2 renders a block
+    listing pot_odds + spr signatures and when to use them."""
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
+    captured_systems: list[str | None] = []
+
+    class Capturing(MockLLMProvider):
+        async def complete(self, **kw: Any) -> LLMResponse:
+            captured_systems.append(kw.get("system"))
+            return await super().complete(**kw)
+
+    script = MockResponseScript(responses=(
+        _resp(ToolCall(name="fold", args={}, tool_use_id="t1")),
+    ))
+    provider = Capturing(script=script)
+    agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
+    # _params() default has enable_math_tools=False; override.
+    params_with_math = SessionParamsView(
+        num_players=6, sb=50, bb=100, starting_stack=10_000,
+        max_utility_calls=5, rationale_required=True,
+        enable_math_tools=True, enable_hud_tool=False,
+        opponent_stats_min_samples=30,
+    )
+    view_with_math = PlayerView(
+        my_seat=3, my_hole_cards=("As", "Kd"), community=(),
+        pot=150, sidepots=(), my_stack=10_000,
+        my_invested_this_hand=0, my_invested_this_round=0,
+        current_bet_to_match=100,
+        to_call=100, pot_odds_required=0.4, effective_stack=10_000,
+        seats_public=_seats(), opponent_seats_in_hand=(0, 1, 2, 4, 5),
+        action_order_this_street=(3, 4, 5, 0, 1, 2),
+        seats_yet_to_act_after_me=(4, 5, 0, 1, 2),
+        already_acted_this_street=(), hand_history=(),
+        legal_actions=legal, opponent_stats={},
+        hand_id=1, street=Street.PREFLOP, button_seat=0,
+        turn_seed=42, immutable_session_params=params_with_math,
+    )
+    asyncio.run(agent.decide(view_with_math))
+    sys_text = captured_systems[0]
+    assert sys_text is not None
+    assert "pot_odds" in sys_text
+    assert "spr" in sys_text
+
+
+def test_system_prompt_omits_math_tools_block_when_disabled() -> None:
+    """The default (enable_math_tools=False) must NOT mention pot_odds/spr
+    in the system prompt — preserves K=0 baseline behavior."""
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
+    captured_systems: list[str | None] = []
+
+    class Capturing(MockLLMProvider):
+        async def complete(self, **kw: Any) -> LLMResponse:
+            captured_systems.append(kw.get("system"))
+            return await super().complete(**kw)
+
+    script = MockResponseScript(responses=(
+        _resp(ToolCall(name="fold", args={}, tool_use_id="t1")),
+    ))
+    provider = Capturing(script=script)
+    agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
+    asyncio.run(agent.decide(_view(legal)))  # default _params() has enable_math_tools=False
+    sys_text = captured_systems[0]
+    assert sys_text is not None
+    # The phrase "pot odds" already appears in the rationale guidance ("use
+    # pot_odds_required directly"), but the tool-listing block adds
+    # "pot_odds(" with parens — that's the marker we're checking.
+    assert "pot_odds(" not in sys_text
+    assert "spr(" not in sys_text

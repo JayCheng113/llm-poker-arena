@@ -59,6 +59,8 @@ class PromptProfile:
 
     def render_system(
         self, *, num_players: int, sb: int, bb: int, starting_stack: int,
+        enable_math_tools: bool = False,
+        max_utility_calls: int = 5,
     ) -> str:
         tpl = self._env.get_template(self.system_template)
         return tpl.render(
@@ -66,6 +68,8 @@ class PromptProfile:
             sb=sb, bb=bb, starting_stack=starting_stack,
             rationale_required=self.rationale_required,
             language=self.language,
+            enable_math_tools=enable_math_tools,
+            max_utility_calls=max_utility_calls,
         )
 
     def render_user(
