@@ -27,7 +27,7 @@ describe('Seat', () => {
       <Seat seatIdx={3} positionLabel="UTG" stack={9700}
             status="in_hand" holeCards={cards} />
     )
-    // Card components render <img> tags (one per hole card); expect 2
-    expect(container.querySelectorAll('img').length).toBe(2)
+    // Card components render <span data-card="..."> (one per hole card)
+    expect(container.querySelectorAll('[data-card]').length).toBe(2)
   })
 })

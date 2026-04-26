@@ -25,7 +25,8 @@ describe('PokerTable', () => {
     const { container } = render(
       <PokerTable seats={seats} community={community} pot={500} activeSeatIdx={3} />
     )
-    expect(container.querySelectorAll('img').length).toBeGreaterThanOrEqual(3)
+    // 3 community + 6 seats × 2 face-down = 15 [data-card] elements minimum
+    expect(container.querySelectorAll('[data-card]').length).toBeGreaterThanOrEqual(3)
   })
 
   it('renders pot number', () => {

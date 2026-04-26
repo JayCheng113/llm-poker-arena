@@ -15,7 +15,7 @@ import type {
   ParsedSession, SeatStatus, CardStr, ActionType,
 } from './types'
 
-const DATA_BASE = 'data/demo-1'
+const DATA_BASE = '/data/demo-1'
 const POSITION_LABELS = ['BTN', 'SB', 'BB', 'UTG', 'HJ', 'CO']
 
 function _positionLabelForSeat(seat: number, buttonSeat: number, n: number): string {
