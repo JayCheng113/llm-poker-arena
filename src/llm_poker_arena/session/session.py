@@ -154,6 +154,31 @@ class Session:
             for i in range(n)
         }
 
+        # Phase 3c-hud: per-seat HUD stat counters. Initialized to all zeros.
+        # 8 counters per seat — see plan §"Phase 3c-hud Scope Decisions"
+        # for stat semantics. Updated incrementally in _run_one_hand
+        # (per-action for AF; per-hand boolean flush at hand end for the rest).
+        self._hud_counters: dict[int, dict[str, int]] = {
+            i: {
+                "vpip_actions": 0,
+                "pfr_actions": 0,
+                "three_bet_chances": 0,
+                "three_bet_actions": 0,
+                "af_aggressive": 0,
+                "af_passive": 0,
+                "wtsd_chances": 0,
+                "wtsd_actions": 0,
+            }
+            for i in range(n)
+        }
+        # codex audit IMPORTANT-5 fix: HUD-specific completed-hand counter.
+        # Distinct from self._total_hands_played which counts ALL hands
+        # including censored ones (returned-early in _run_one_hand on
+        # api_error). HUD counters only flush on clean hand completion, so
+        # using _total_hands_played as the VPIP/PFR denominator would
+        # depress rates by the censor count.
+        self._hud_hands_counted: int = 0
+
     async def run(self) -> None:
         started_at_iso = _now_iso()
         started_at_monotonic = time.monotonic()
