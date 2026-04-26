@@ -79,11 +79,65 @@ def run_utility_tool(
 
 
 def utility_tool_specs(view: PlayerView) -> list[dict[str, Any]]:
-    """Return the Anthropic-shape tool spec list for utility tools that are
-    enabled on this view's session params. 3c-math skeleton — Task 5 fills in.
+    """Return the Anthropic-shape tool spec list for utility tools enabled on
+    this view's session params. Empty list when `enable_math_tools=False`.
 
-    `view.immutable_session_params.enable_math_tools` gates pot_odds + spr.
+    spec §5.3 build_tool_specs reads view.immutable_session_params.enable_math_tools.
+    Phase 3c-math ships pot_odds + spr only; 3c-equity adds hand_equity_vs_ranges.
     """
-    raise NotImplementedError(
-        "Phase 3c-math Task 5 implements utility_tool_specs."
-    )
+    if not view.immutable_session_params.enable_math_tools:
+        return []
+    return [
+        {
+            "name": "pot_odds",
+            "description": (
+                "Compute pot odds = to_call / (pot + to_call). Optional args "
+                "let you compute hypothetical scenarios (e.g. 'if I raise to "
+                "X, what pot odds does villain face'). Zero-arg call uses the "
+                "current to_call and pot from your turn state."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "to_call": {
+                        "type": "integer",
+                        "description": "Optional override for the to_call amount; defaults to current.",
+                        "minimum": 0,
+                    },
+                    "pot": {
+                        "type": "integer",
+                        "description": "Optional override for the pot size; defaults to current.",
+                        "minimum": 0,
+                    },
+                },
+                "required": [],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "spr",
+            "description": (
+                "Compute stack-to-pot ratio = stack / pot. Default stack is "
+                "your effective_stack (the smallest live stack at risk for "
+                "showdown). Optional args support post-flop SPR planning "
+                "(e.g. 'after I raise to X, new SPR on flop is Y')."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "stack": {
+                        "type": "integer",
+                        "description": "Optional override for the stack; defaults to effective_stack.",
+                        "minimum": 0,
+                    },
+                    "pot": {
+                        "type": "integer",
+                        "description": "Optional override for the pot size; defaults to current.",
+                        "minimum": 1,
+                    },
+                },
+                "required": [],
+                "additionalProperties": False,
+            },
+        },
+    ]
