@@ -175,4 +175,33 @@ def utility_tool_specs(view: PlayerView) -> list[dict[str, Any]]:
                 "additionalProperties": False,
             },
         },
+        {
+            "name": "hand_equity_vs_ranges",
+            "description": (
+                "Estimate your equity (probability of winning at showdown) "
+                "against villains' hand ranges via Monte Carlo. Pass a "
+                "range_by_seat dict mapping each opponent seat number "
+                "(must equal opponent_seats_in_hand) to an eval7-compatible "
+                "range string (e.g. 'QQ+, AKs, AKo'). Returns hero_equity, "
+                "ci_low, ci_high, n_samples, seed, backend. Use this for "
+                "decisions where pot_odds alone is insufficient — e.g. "
+                "calling a multi-way 3-bet, choosing between calling and "
+                "shoving on a draw, or evaluating equity vs a polarized 3-bet."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "range_by_seat": {
+                        "type": "object",
+                        "description": (
+                            "Dict mapping seat int to eval7 HandRange string. "
+                            "Keys MUST equal opponent_seats_in_hand."
+                        ),
+                        "additionalProperties": {"type": "string"},
+                    },
+                },
+                "required": ["range_by_seat"],
+                "additionalProperties": False,
+            },
+        },
     ]

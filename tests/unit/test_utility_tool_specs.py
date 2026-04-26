@@ -53,7 +53,9 @@ def test_specs_contains_pot_odds_and_spr_when_enabled() -> None:
     v = _view(enable_math_tools=True)
     specs = utility_tool_specs(v)
     names = {s["name"] for s in specs}
-    assert names == {"pot_odds", "spr"}
+    # Phase 3c-equity adds hand_equity_vs_ranges; the dedicated assertion
+    # is in test_specs_includes_hand_equity_vs_ranges_when_enabled.
+    assert names == {"pot_odds", "spr", "hand_equity_vs_ranges"}
 
 
 def test_pot_odds_spec_schema_shape() -> None:
@@ -84,3 +86,21 @@ def test_spr_spec_schema_shape() -> None:
     props = schema["properties"]
     assert props["stack"]["type"] == "integer"
     assert props["pot"]["type"] == "integer"
+
+
+def test_specs_includes_hand_equity_vs_ranges_when_enabled() -> None:
+    """Phase 3c-equity adds hand_equity_vs_ranges to utility_tool_specs."""
+    v = _view(enable_math_tools=True)
+    specs = utility_tool_specs(v)
+    names = {s["name"] for s in specs}
+    assert "hand_equity_vs_ranges" in names
+    equity_spec = next(s for s in specs if s["name"] == "hand_equity_vs_ranges")
+    schema = equity_spec["input_schema"]
+    assert schema["type"] == "object"
+    # spec §5.2.3 + Q4 minimal API: only range_by_seat is exposed.
+    assert "range_by_seat" in schema["properties"]
+    assert schema["required"] == ["range_by_seat"]
+    # range_by_seat is a dict mapping seat (additionalProperties string).
+    rbs = schema["properties"]["range_by_seat"]
+    assert rbs["type"] == "object"
+    assert rbs["additionalProperties"]["type"] == "string"
