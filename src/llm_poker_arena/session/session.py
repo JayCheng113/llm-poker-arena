@@ -372,6 +372,14 @@ class Session:
             ):
                 hand_state[actor]["did_vpip"] = True
 
+            # Phase 3c-hud: PFR — voluntary preflop raise (raise_to/bet/all_in).
+            # Standard tracker convention treats all_in as a raise even when
+            # it equals current_bet_to_match (rare in 6-max deep stack).
+            if street == Street.PREFLOP and chosen.tool_name in (
+                "raise_to", "bet", "all_in",
+            ):
+                hand_state[actor]["did_pfr"] = True
+
             result = apply_action(state, actor, chosen)
             if not result.is_valid:
                 raise RuntimeError(
@@ -442,10 +450,12 @@ class Session:
 
         # Phase 3c-hud: flush per-hand booleans to cumulative counters.
         # (Task 6 will move this AFTER showdown_seats computation to enable
-        # WTSD; for Task 2 only VPIP is wired.)
+        # WTSD; for Tasks 2-5 we wire VPIP/PFR/3-bet here.)
         for seat in range(n_seats):
             if hand_state[seat]["did_vpip"]:
                 self._hud_counters[seat]["vpip_actions"] += 1
+            if hand_state[seat]["did_pfr"]:
+                self._hud_counters[seat]["pfr_actions"] += 1
 
         # Hand is over. Emit showdown (if anyone saw it) + hand_ended.
         statuses = list(state._state.statuses)  # noqa: SLF001
