@@ -139,11 +139,20 @@ class LLMAgent(Agent):
         for step in range(MAX_STEPS):
             digest = _digest_messages(messages)
             iter_start = time.monotonic()
+            # spec §4.2 is_final_step: pass action-only tools when utility
+            # budget is exhausted OR this is the last allowed step. This
+            # denies the model the option to call more utilities — forces
+            # commit pressure.
+            is_final_step = (
+                utility_count >= max_utility_calls
+                or step == MAX_STEPS - 1
+            )
+            tools_this_step = action_tools if is_final_step else all_tools
             try:
                 response = await asyncio.wait_for(
                     self._provider.complete(
                         system=system_text,
-                        messages=messages, tools=all_tools,
+                        messages=messages, tools=tools_this_step,
                         temperature=self._temperature, seed=self._seed,
                     ),
                     timeout=self._per_iter_timeout,
@@ -275,6 +284,42 @@ class LLMAgent(Agent):
             # (model hallucinated) fall through to the action-tool branch and
             # consume illegal_action_retry per spec §4.2 line 1027.
             if tc_first.name in utility_names:
+                if is_final_step:
+                    # Spec §4.2 lines 994-1015: LLM defied the action-only
+                    # tool list (we passed action_tools only). Treat as
+                    # no_tool: didn't follow protocol. Consume no_tool_retry
+                    # budget; on exhaustion fall back to default_safe_action.
+                    iter_record = IterationRecord(
+                        step=step + 1,
+                        request_messages_digest=digest,
+                        provider_response_kind="no_tool",
+                        tool_call=tc_first,
+                        text_content=redact_secret(response.text_content),
+                        tokens=response.tokens,
+                        wall_time_ms=iter_ms,
+                        reasoning_artifacts=artifacts,
+                    )
+                    iterations.append(iter_record)
+                    if no_tool_retry < MAX_NO_TOOL_RETRY:
+                        no_tool_retry += 1
+                        messages.append(
+                            self._provider.build_assistant_message_for_replay(response)
+                        )
+                        messages.extend(self._provider.build_tool_result_messages(
+                            tool_calls=(tc_first,),
+                            is_error=True,
+                            content=(
+                                "You have exhausted your utility-tool budget. "
+                                "Call exactly one action tool now."
+                            ),
+                        ))
+                        continue
+                    return self._fallback_default_safe(
+                        view, iterations, total_tokens, turn_start,
+                        api_retry, illegal_retry, no_tool_retry,
+                        tool_usage_error_count=tool_usage_error_count,
+                    )
+
                 try:
                     tool_result = self._tool_runner(
                         view, tc_first.name, dict(tc_first.args or {}),

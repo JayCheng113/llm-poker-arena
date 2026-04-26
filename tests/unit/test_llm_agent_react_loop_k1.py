@@ -200,6 +200,99 @@ def test_k1_mixed_utility_and_action_in_one_response_is_misuse() -> None:
     assert result.tool_usage_error_count == 1
 
 
+def test_k1_final_step_excludes_utility_specs() -> None:
+    """When utility_count == max_utility_calls, the next provider call must
+    receive ONLY action tools (no pot_odds/spr in the spec list).
+
+    This is the spec §4.2 is_final_step pressure: deny the model the option
+    to ask another utility, forcing it to commit.
+    """
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
+    params = _params(max_utility_calls=1)
+    captured_tools: list[list[dict[str, Any]]] = []
+
+    class CapturingMock(MockLLMProvider):
+        async def complete(self, **kw: Any) -> LLMResponse:
+            captured_tools.append(list(kw["tools"]))
+            return await super().complete(**kw)
+
+    script = MockResponseScript(responses=(
+        # Step 1: utility call (uses up the only budget).
+        _resp(ToolCall(name="pot_odds", args={}, tool_use_id="tu1")),
+        # Step 2: action commit (mock doesn't choose tools, but the spec
+        # list at this step should not include pot_odds anymore).
+        _resp(ToolCall(name="fold", args={}, tool_use_id="tu2")),
+    ))
+    provider = CapturingMock(script=script)
+    agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
+    asyncio.run(agent.decide(_view(legal, params=params)))
+    # Step 1 saw both action + utility tools.
+    step1_names = {t["name"] for t in captured_tools[0]}
+    assert "pot_odds" in step1_names
+    assert "fold" in step1_names
+    # Step 2 (after utility budget exhausted): action tools ONLY.
+    step2_names = {t["name"] for t in captured_tools[1]}
+    assert "pot_odds" not in step2_names
+    assert "spr" not in step2_names
+    assert "fold" in step2_names
+
+
+def test_k1_action_only_after_two_utility_calls_exhausts_budget() -> None:
+    """Codex audit NIT-1 fix: this test exercises the
+    `utility_count >= max_utility_calls` branch of is_final_step (NOT the
+    `step == MAX_STEPS - 1` branch — that one's harder to hit deterministically
+    because it requires burning all 4 retry budgets while keeping
+    utility_count below max_utility_calls).
+
+    With max_utility_calls=2, after 2 utility calls the next step sees
+    action-only tools.
+    """
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
+    params = _params(max_utility_calls=2)
+    captured_tools: list[list[dict[str, Any]]] = []
+
+    class CapturingMock(MockLLMProvider):
+        async def complete(self, **kw: Any) -> LLMResponse:
+            captured_tools.append(list(kw["tools"]))
+            return await super().complete(**kw)
+
+    # Use up both utility budget calls then commit.
+    script = MockResponseScript(responses=(
+        _resp(ToolCall(name="pot_odds", args={}, tool_use_id="t1")),
+        _resp(ToolCall(name="spr", args={}, tool_use_id="t2")),
+        _resp(ToolCall(name="fold", args={}, tool_use_id="t3")),
+    ))
+    provider = CapturingMock(script=script)
+    agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
+    asyncio.run(agent.decide(_view(legal, params=params)))
+    # After 2 utility calls (budget exhausted), step 3 has action-only.
+    assert "pot_odds" not in {t["name"] for t in captured_tools[2]}
+
+
+def test_k1_final_step_utility_call_after_exhaustion_short_circuits_to_fallback() -> None:
+    """If somehow LLM still emits a utility tool call when only action tools
+    were offered (provider ignored the tool list, hallucinated, etc),
+    LLMAgent treats it as 'didn't follow protocol' → no_tool_retry budget,
+    then fallback if exhausted. Mirrors spec §4.2 lines 994-1015."""
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
+    params = _params(max_utility_calls=1)
+    script = MockResponseScript(responses=(
+        # Step 1: utility (uses budget).
+        _resp(ToolCall(name="pot_odds", args={}, tool_use_id="t1")),
+        # Step 2: hallucinated utility despite action-only tool list. This
+        # should consume no_tool_retry (interpretation: model defied the
+        # tool list = didn't follow protocol).
+        _resp(ToolCall(name="pot_odds", args={}, tool_use_id="t2")),
+        # Step 3: still hallucinated utility → fallback.
+        _resp(ToolCall(name="pot_odds", args={}, tool_use_id="t3")),
+    ))
+    provider = MockLLMProvider(script=script)
+    agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
+    result = asyncio.run(agent.decide(_view(legal, params=params)))
+    assert result.default_action_fallback is True
+    assert result.no_tool_retry_count == 1
+
+
 def test_k1_max_utility_calls_exhaustion_falls_back() -> None:
     """LLM keeps calling utility tools past max_utility_calls → fallback."""
     legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
