@@ -1,0 +1,163 @@
+{
+  "censored_hand_ids": [],
+  "censored_hands_count": 0,
+  "chip_pnl": {
+    "0": 0,
+    "1": 4425,
+    "2": -700,
+    "3": -3725,
+    "4": 150,
+    "5": -150
+  },
+  "ended_at": "2026-04-26T21:29:06.432Z",
+  "estimated_cost_breakdown": {},
+  "git_commit": "078943fe0c7b87667d2219be5b3497ee88c2d27a",
+  "initial_button_seat": 0,
+  "planned_hands": 6,
+  "prompt_profile_version": "default-v2",
+  "provider_capabilities": {
+    "3": {
+      "extra_flags": {
+        "extended_thinking_enabled": false,
+        "tool_use_with_thinking_probed": false
+      },
+      "probed_at": "2026-04-26T21:28:16.772Z",
+      "provider": "anthropic",
+      "reasoning_kinds_observed": [
+        "unavailable"
+      ],
+      "seed_supported": false,
+      "tool_use_with_thinking_ok": false
+    }
+  },
+  "retry_summary_per_seat": {
+    "0": {
+      "api_retry_count": 0,
+      "default_action_fallback_count": 0,
+      "illegal_action_retry_count": 0,
+      "no_tool_retry_count": 0,
+      "tool_usage_error_count": 0,
+      "total_turns": 5,
+      "turn_timeout_exceeded_count": 0
+    },
+    "1": {
+      "api_retry_count": 0,
+      "default_action_fallback_count": 0,
+      "illegal_action_retry_count": 0,
+      "no_tool_retry_count": 0,
+      "tool_usage_error_count": 0,
+      "total_turns": 10,
+      "turn_timeout_exceeded_count": 0
+    },
+    "2": {
+      "api_retry_count": 0,
+      "default_action_fallback_count": 0,
+      "illegal_action_retry_count": 0,
+      "no_tool_retry_count": 0,
+      "tool_usage_error_count": 0,
+      "total_turns": 11,
+      "turn_timeout_exceeded_count": 0
+    },
+    "3": {
+      "api_retry_count": 0,
+      "default_action_fallback_count": 0,
+      "illegal_action_retry_count": 0,
+      "no_tool_retry_count": 0,
+      "tool_usage_error_count": 0,
+      "total_turns": 10,
+      "turn_timeout_exceeded_count": 0
+    },
+    "4": {
+      "api_retry_count": 0,
+      "default_action_fallback_count": 0,
+      "illegal_action_retry_count": 0,
+      "no_tool_retry_count": 0,
+      "tool_usage_error_count": 0,
+      "total_turns": 6,
+      "turn_timeout_exceeded_count": 0
+    },
+    "5": {
+      "api_retry_count": 0,
+      "default_action_fallback_count": 0,
+      "illegal_action_retry_count": 0,
+      "no_tool_retry_count": 0,
+      "tool_usage_error_count": 0,
+      "total_turns": 7,
+      "turn_timeout_exceeded_count": 0
+    }
+  },
+  "schema_version": "v2.0",
+  "seat_assignment": {
+    "0": "rule_based:tag_v1",
+    "1": "rule_based:tag_v1",
+    "2": "rule_based:tag_v1",
+    "3": "anthropic:claude-haiku-4-5",
+    "4": "rule_based:tag_v1",
+    "5": "rule_based:tag_v1"
+  },
+  "seat_permutation_id": "phase2a_default",
+  "session_id": "demo-1",
+  "session_wall_time_sec": 50,
+  "started_at": "2026-04-26T21:28:15.841Z",
+  "stop_reason": "completed",
+  "tool_usage_summary": {
+    "0": {
+      "total_utility_calls": 0
+    },
+    "1": {
+      "total_utility_calls": 0
+    },
+    "2": {
+      "total_utility_calls": 0
+    },
+    "3": {
+      "total_utility_calls": 0
+    },
+    "4": {
+      "total_utility_calls": 0
+    },
+    "5": {
+      "total_utility_calls": 0
+    }
+  },
+  "total_hands_played": 6,
+  "total_tokens": {
+    "0": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 0,
+      "output_tokens": 0
+    },
+    "1": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 0,
+      "output_tokens": 0
+    },
+    "2": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 0,
+      "output_tokens": 0
+    },
+    "3": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 30365,
+      "output_tokens": 3498
+    },
+    "4": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 0,
+      "output_tokens": 0
+    },
+    "5": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 0,
+      "output_tokens": 0
+    }
+  },
+  "version": 2
+}
