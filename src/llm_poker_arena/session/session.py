@@ -304,6 +304,21 @@ class Session:
         staged_snapshots: list[dict[str, Any]] = []
         turn_counter = 0
 
+        # Phase 3c-hud: per-hand booleans for VPIP/PFR/3-bet/WTSD; flushed
+        # to _hud_counters at hand end. Per-action stats (AF) are updated
+        # immediately in the loop below.
+        n_seats = self._config.num_players
+        hand_state: dict[int, dict[str, bool]] = {
+            i: {
+                "did_vpip": False,
+                "did_pfr": False,
+                "had_3bet_chance": False,
+                "did_3bet": False,
+                "preflop_raised": False,
+            }
+            for i in range(n_seats)
+        }
+
         while state._state.actor_index is not None:  # noqa: SLF001
             actor = int(state._state.actor_index)  # noqa: SLF001
             turn_seed = _derive_turn_seed(ctx.deck_seed, actor, turn_counter)
@@ -348,6 +363,15 @@ class Session:
                 return
             chosen = decision.final_action
             fallback = decision.default_action_fallback
+
+            # Phase 3c-hud: VPIP — voluntary preflop action (call/raise/bet/all_in).
+            # All `chosen` actions are voluntary by construction (forced blinds
+            # are posted by PokerKit automation, never via agent.decide).
+            if street == Street.PREFLOP and chosen.tool_name in (
+                "call", "raise_to", "bet", "all_in",
+            ):
+                hand_state[actor]["did_vpip"] = True
+
             result = apply_action(state, actor, chosen)
             if not result.is_valid:
                 raise RuntimeError(
@@ -415,6 +439,13 @@ class Session:
         # hand wasn't censored).
         for snap in staged_snapshots:
             self._snapshot_writer.write(snap)
+
+        # Phase 3c-hud: flush per-hand booleans to cumulative counters.
+        # (Task 6 will move this AFTER showdown_seats computation to enable
+        # WTSD; for Task 2 only VPIP is wired.)
+        for seat in range(n_seats):
+            if hand_state[seat]["did_vpip"]:
+                self._hud_counters[seat]["vpip_actions"] += 1
 
         # Hand is over. Emit showdown (if anyone saw it) + hand_ended.
         statuses = list(state._state.statuses)  # noqa: SLF001
