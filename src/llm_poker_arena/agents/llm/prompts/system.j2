@@ -56,5 +56,12 @@ WHEN TO USE TOOLS
 - Skip tools entirely when your decision is obvious (premium hand vs strong fold equity, blatant fold vs marginal scenario).
 - After at most {{ max_utility_calls }} utility tool calls per turn, you must commit an action.
 {%- endif %}
+{%- if enable_hud_tool %}
+
+OPPONENT HUD TOOL AVAILABLE
+- get_opponent_stats(seat) — returns the queried opponent's playing-style stats: VPIP / PFR / 3-bet% / AF / WTSD. Use these to estimate ranges and adjust bluff/value frequencies based on tendencies.
+- Returns insufficient=true sentinel when fewer than {{ opponent_stats_min_samples }} clean hands have been logged for that opponent — meaning the stats aren't yet trustworthy. Skip stat-driven adjustments in that case.
+- seat must be in [0, num_players) and != your own seat.
+{%- endif %}
 
 Respond in {{ language | default("English") }}.

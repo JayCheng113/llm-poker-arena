@@ -66,6 +66,8 @@ class PromptProfile:
         bb: int,
         starting_stack: int,
         enable_math_tools: bool = False,
+        enable_hud_tool: bool = False,
+        opponent_stats_min_samples: int = 30,
         max_utility_calls: int = 5,
     ) -> str:
         tpl = self._env.get_template(self.system_template)
@@ -77,6 +79,8 @@ class PromptProfile:
             rationale_required=self.rationale_required,
             language=self.language,
             enable_math_tools=enable_math_tools,
+            enable_hud_tool=enable_hud_tool,
+            opponent_stats_min_samples=opponent_stats_min_samples,
             max_utility_calls=max_utility_calls,
         )
 
@@ -99,6 +103,7 @@ class PromptProfile:
         opponent_seats_in_hand: Iterable[int],
         seats_yet_to_act_after_me: Iterable[int],
         seats_public: Iterable[Any],
+        opponent_stats: dict[int, Any] | None = None,
     ) -> str:
         tpl = self._env.get_template(self.user_template)
         return tpl.render(
@@ -118,6 +123,7 @@ class PromptProfile:
             opponent_seats_in_hand=tuple(opponent_seats_in_hand),
             seats_yet_to_act_after_me=tuple(seats_yet_to_act_after_me),
             seats_public=tuple(seats_public),
+            opponent_stats=opponent_stats or {},
         )
 
 

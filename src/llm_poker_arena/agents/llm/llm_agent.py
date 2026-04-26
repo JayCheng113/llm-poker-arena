@@ -523,6 +523,8 @@ class LLMAgent(Agent):
             bb=params.bb,
             starting_stack=params.starting_stack,
             enable_math_tools=params.enable_math_tools,
+            enable_hud_tool=params.enable_hud_tool,
+            opponent_stats_min_samples=params.opponent_stats_min_samples,
             max_utility_calls=params.max_utility_calls,
         )
         my_seat_info = view.seats_public[view.my_seat]
@@ -543,6 +545,7 @@ class LLMAgent(Agent):
             opponent_seats_in_hand=view.opponent_seats_in_hand,
             seats_yet_to_act_after_me=view.seats_yet_to_act_after_me,
             seats_public=view.seats_public,
+            opponent_stats=view.opponent_stats,
         )
         return system_text, [{"role": "user", "content": user_text}]
 

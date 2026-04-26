@@ -19,6 +19,17 @@ seats_yet_to_act_after_me: {{ seats_yet_to_act_after_me | list }}
 {%- for s in seats_public %}
 seat {{ s.seat }} ({{ s.position_short }}): stack={{ s.stack }} invested_round={{ s.invested_this_round }} status={{ s.status }}{% if s.seat == my_seat %} ← me{% endif %}
 {%- endfor %}
+{% if opponent_stats %}
+
+=== OPPONENT STATS (HUD) ===
+{%- for seat, s in opponent_stats.items() | sort %}
+{%- if s.insufficient %}
+seat {{ seat }}: insufficient samples
+{%- else %}
+seat {{ seat }}: VPIP={{ '%.2f' | format(s.vpip) }} PFR={{ '%.2f' | format(s.pfr) }} 3bet={{ '%.2f' | format(s.three_bet) }} AF={{ '%.2f' | format(s.af) }} WTSD={{ '%.2f' | format(s.wtsd) }}
+{%- endif %}
+{%- endfor %}
+{% endif %}
 
 === YOUR TURN ===
 The legal action tools are listed below this message. Briefly explain your reasoning, then call exactly one tool.

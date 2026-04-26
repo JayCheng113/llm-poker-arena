@@ -29,6 +29,7 @@ _ALLOWED_ARGS: dict[str, frozenset[str]] = {
     "pot_odds": frozenset({"to_call", "pot"}),
     "spr": frozenset({"stack", "pot"}),
     "hand_equity_vs_ranges": frozenset({"range_by_seat"}),
+    "get_opponent_stats": frozenset({"seat", "detail_level"}),
 }
 
 
@@ -86,43 +87,68 @@ def run_utility_tool(
         for k, v in args.items():
             _validate_int_arg(f"{name}.{k}", v)
         return {"value": spr(view, **args)}
-    # name == "hand_equity_vs_ranges"
-    range_by_seat = args.get("range_by_seat")
-    if not isinstance(range_by_seat, dict):
-        raise ToolDispatchError(
-            f"hand_equity_vs_ranges.range_by_seat must be a dict; "
-            f"got {type(range_by_seat).__name__}"
-        )
-    # Coerce JSON-decoded string keys to int (Anthropic tool args may arrive
-    # with string keys from JSON, but spec §5.2.3 expects seat: int).
-    coerced: dict[int, str] = {}
-    for k, val in range_by_seat.items():
-        try:
-            seat_int = int(k)
-        except (ValueError, TypeError) as e:
+    if name == "hand_equity_vs_ranges":
+        range_by_seat = args.get("range_by_seat")
+        if not isinstance(range_by_seat, dict):
             raise ToolDispatchError(
-                f"hand_equity_vs_ranges.range_by_seat key {k!r} must be a "
-                f"seat integer (or string-encoded integer)"
-            ) from e
-        if not isinstance(val, str):
-            raise ToolDispatchError(
-                f"hand_equity_vs_ranges.range_by_seat[{seat_int}] must be a "
-                f"string range; got {type(val).__name__}"
+                f"hand_equity_vs_ranges.range_by_seat must be a dict; "
+                f"got {type(range_by_seat).__name__}"
             )
-        coerced[seat_int] = val
-    return hand_equity_vs_ranges(view, coerced)
+        # Coerce JSON-decoded string keys to int (Anthropic tool args may arrive
+        # with string keys from JSON, but spec §5.2.3 expects seat: int).
+        coerced: dict[int, str] = {}
+        for k, val in range_by_seat.items():
+            try:
+                seat_int = int(k)
+            except (ValueError, TypeError) as e:
+                raise ToolDispatchError(
+                    f"hand_equity_vs_ranges.range_by_seat key {k!r} must be a "
+                    f"seat integer (or string-encoded integer)"
+                ) from e
+            if not isinstance(val, str):
+                raise ToolDispatchError(
+                    f"hand_equity_vs_ranges.range_by_seat[{seat_int}] must be a "
+                    f"string range; got {type(val).__name__}"
+                )
+            coerced[seat_int] = val
+        return hand_equity_vs_ranges(view, coerced)
+    # name == "get_opponent_stats" (Phase 3c-hud)
+    if not view.immutable_session_params.enable_hud_tool:
+        raise ToolDispatchError(
+            "get_opponent_stats not enabled (enable_hud_tool=False)"
+        )
+    # codex audit BLOCKER B3 fix: explicit required-arg validation.
+    # _ALLOWED_ARGS only checks for EXTRA args; missing "seat" would otherwise
+    # raise an uncaught TypeError from get_opponent_stats(view, **args) since
+    # LLMAgent only catches ToolDispatchError.
+    if "seat" not in args:
+        raise ToolDispatchError(
+            "get_opponent_stats requires 'seat' arg"
+        )
+    from llm_poker_arena.tools.opponent_stats import get_opponent_stats
+    return get_opponent_stats(view, **args)
 
 
 def utility_tool_specs(view: PlayerView) -> list[dict[str, Any]]:
-    """Return the Anthropic-shape tool spec list for utility tools enabled on
-    this view's session params. Empty list when `enable_math_tools=False`.
+    """Return Anthropic-shape tool spec list for utility tools enabled on
+    this view's session params. Empty list when both math and hud are off.
 
-    spec §5.3 build_tool_specs reads view.immutable_session_params.enable_math_tools.
-    Phase 3c-math ships pot_odds + spr only; 3c-equity adds hand_equity_vs_ranges.
+    spec §5.3 build_tool_specs reads view.immutable_session_params for
+    enable_math_tools and enable_hud_tool independently. Phase 3c-math
+    ships pot_odds + spr; 3c-equity adds hand_equity_vs_ranges (all gated
+    on enable_math_tools); 3c-hud adds get_opponent_stats (gated on
+    enable_hud_tool, independent of math).
     """
-    if not view.immutable_session_params.enable_math_tools:
-        return []
-    return [
+    params = view.immutable_session_params
+    specs: list[dict[str, Any]] = []
+    if not params.enable_math_tools and not params.enable_hud_tool:
+        return specs
+    if not params.enable_math_tools:
+        # Skip math specs; jump to HUD-only branch.
+        if params.enable_hud_tool:
+            specs.append(_HUD_TOOL_SPEC)
+        return specs
+    specs = [
         {
             "name": "pot_odds",
             "description": (
@@ -205,3 +231,37 @@ def utility_tool_specs(view: PlayerView) -> list[dict[str, Any]]:
             },
         },
     ]
+    if params.enable_hud_tool:
+        specs.append(_HUD_TOOL_SPEC)
+    return specs
+
+
+_HUD_TOOL_SPEC: dict[str, Any] = {
+    "name": "get_opponent_stats",
+    "description": (
+        "Get opponent's HUD stats (VPIP, PFR, 3-bet%, AF, WTSD) "
+        "for a specific seat. Returns insufficient=True sentinel "
+        "when fewer than opponent_stats_min_samples hands have "
+        "accumulated (default 30). Use to model opponent's playing "
+        "style for range estimation and bluff/value frequency tuning."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "seat": {
+                "type": "integer",
+                "description": "Opponent seat ID. Must be in "
+                               "[0, num_players) and != your own seat.",
+                "minimum": 0,
+            },
+            "detail_level": {
+                "type": "string",
+                "enum": ["summary"],
+                "description": "Only 'summary' supported in v1.",
+                "default": "summary",
+            },
+        },
+        "required": ["seat"],
+        "additionalProperties": False,
+    },
+}
