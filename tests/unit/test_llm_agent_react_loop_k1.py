@@ -316,3 +316,54 @@ def test_k1_max_utility_calls_exhaustion_falls_back() -> None:
         if it.tool_call is not None and it.tool_call.name == "pot_odds"
     )
     assert util_count >= 2
+
+
+def test_k1_equity_call_then_action() -> None:
+    """LLM calls hand_equity_vs_ranges, then commits. IterationRecord
+    chain has 2 entries: equity iteration with tool_result containing
+    hero_equity field; action iteration with tool_result=None."""
+    legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
+    # Build a HU-ish view: opponent_seats=(0,) only
+    params = _params(max_utility_calls=5)
+    hu_view = PlayerView(
+        my_seat=3, my_hole_cards=("As", "Ks"), community=(),
+        pot=250, sidepots=(), my_stack=9_750,
+        my_invested_this_hand=0, my_invested_this_round=0,
+        current_bet_to_match=100,
+        to_call=100, pot_odds_required=100/350, effective_stack=9_750,
+        seats_public=tuple(
+            SeatPublicInfo(seat=i, label=f"P{i}", position_short="UTG",
+                           position_full="x", stack=10_000,
+                           invested_this_hand=0, invested_this_round=0,
+                           status="in_hand") for i in range(6)
+        ),
+        opponent_seats_in_hand=(0,),
+        action_order_this_street=(3, 0),
+        seats_yet_to_act_after_me=(0,),
+        already_acted_this_street=(), hand_history=(),
+        legal_actions=legal, opponent_stats={},
+        hand_id=1, street=Street.PREFLOP, button_seat=0,
+        turn_seed=42, immutable_session_params=params,
+    )
+
+    script = MockResponseScript(responses=(
+        _resp(ToolCall(
+            name="hand_equity_vs_ranges",
+            args={"range_by_seat": {0: "QQ+, AKs"}},
+            tool_use_id="tu_eq",
+        )),
+        _resp(ToolCall(name="fold", args={}, tool_use_id="tu_fold")),
+    ))
+    provider = MockLLMProvider(script=script)
+    agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
+    result = asyncio.run(agent.decide(hu_view))
+    assert result.final_action == Action(tool_name="fold", args={})
+    assert len(result.iterations) == 2
+    eq_iter, action_iter = result.iterations
+    assert eq_iter.tool_call is not None
+    assert eq_iter.tool_call.name == "hand_equity_vs_ranges"
+    assert eq_iter.tool_result is not None
+    assert "hero_equity" in eq_iter.tool_result
+    assert 0.0 <= eq_iter.tool_result["hero_equity"] <= 1.0
+    assert action_iter.tool_result is None
+    assert result.tool_usage_error_count == 0
