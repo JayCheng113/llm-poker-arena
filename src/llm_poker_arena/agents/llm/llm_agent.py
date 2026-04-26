@@ -106,21 +106,33 @@ class LLMAgent(Agent):
             )
 
     async def _decide_inner(self, view: PlayerView) -> TurnDecisionResult:
+        from llm_poker_arena.tools import ToolDispatchError, utility_tool_specs
         MAX_API_RETRY = 1
         MAX_ILLEGAL_RETRY = 1
         MAX_NO_TOOL_RETRY = 1
         MAX_TOOL_USAGE_RETRY = 1  # spec §4.1 BR2-05: independent budget
-        MAX_STEPS = 5  # bumped to accommodate 4 independent retries
+        # spec §4.2 K+1 ReAct: bound = max_utility_calls + 4 retry slots + 1
+        # commit slot. Default max_utility_calls=5 → MAX_STEPS=10. When
+        # enable_math_tools=False, utility_specs is empty and utility_count
+        # stays 0 → behavior identical to Phase 3a/3b K=0.
+        max_utility_calls = view.immutable_session_params.max_utility_calls
+        MAX_STEPS = max_utility_calls + 5
 
         api_retry = 0
         illegal_retry = 0
         no_tool_retry = 0
         tool_usage_retry = 0  # phase 3d: separate from tool_usage_error_count
         tool_usage_error_count = 0
+        utility_count = 0  # successful + failed utility attempts (spec §4.2 line 1017)
 
         iterations: list[IterationRecord] = []
         system_text, messages = self._build_initial_state(view)
         action_tools = _action_tool_specs(view)
+        utility_specs = utility_tool_specs(view)
+        all_tools = action_tools + utility_specs
+        # Codex audit IMPORTANT-1: only dispatch as utility when name matches a
+        # CURRENTLY-REGISTERED utility tool. Empty when enable_math_tools=False.
+        utility_names = {s["name"] for s in utility_specs}
         turn_start = time.monotonic()
         total_tokens = TokenCounts.zero()
 
@@ -131,7 +143,7 @@ class LLMAgent(Agent):
                 response = await asyncio.wait_for(
                     self._provider.complete(
                         system=system_text,
-                        messages=messages, tools=action_tools,
+                        messages=messages, tools=all_tools,
                         temperature=self._temperature, seed=self._seed,
                     ),
                     timeout=self._per_iter_timeout,
@@ -252,6 +264,53 @@ class LLMAgent(Agent):
                     api_retry, illegal_retry, no_tool_retry,
                     tool_usage_error_count=tool_usage_error_count,
                 )
+
+            tc_first = response.tool_calls[0]
+
+            # Phase 3c-math: utility-tool dispatch branch. Fires BEFORE the
+            # rationale_required check — utility tool calls themselves are a
+            # form of structured reasoning, so they're exempt from the
+            # text-rationale requirement (see plan §"Spec Inconsistencies" #3).
+            # Only matches names registered in utility_names — unknown names
+            # (model hallucinated) fall through to the action-tool branch and
+            # consume illegal_action_retry per spec §4.2 line 1027.
+            if tc_first.name in utility_names:
+                try:
+                    tool_result = self._tool_runner(
+                        view, tc_first.name, dict(tc_first.args or {}),
+                    )
+                except ToolDispatchError as e:
+                    tool_result = {"error": str(e)}
+                    tool_usage_error_count += 1
+
+                iter_record = IterationRecord(
+                    step=step + 1,
+                    request_messages_digest=digest,
+                    provider_response_kind="tool_use",
+                    tool_call=tc_first,
+                    text_content=redact_secret(response.text_content),
+                    tokens=response.tokens,
+                    wall_time_ms=iter_ms,
+                    reasoning_artifacts=artifacts,
+                    tool_result=tool_result,
+                )
+                iterations.append(iter_record)
+                # spec §4.2 line 1017: utility_count increments on ATTEMPT,
+                # not just success. Otherwise a buggy/malicious LLM emitting
+                # bad args 5x would never hit the budget cap and would chew
+                # through MAX_STEPS instead.
+                utility_count += 1
+
+                # Feed tool result back to the model and continue the loop.
+                messages.append(
+                    self._provider.build_assistant_message_for_replay(response)
+                )
+                messages.extend(self._provider.build_tool_result_messages(
+                    tool_calls=(tc_first,),
+                    is_error="error" in tool_result,
+                    content=json.dumps(tool_result),
+                ))
+                continue
 
             # Phase 3d: rationale_required strict mode (spec §4.5).
             # When the profile demands reasoning, an empty text_content with
