@@ -11,6 +11,7 @@ authors = [{ name = "zcheng256" }]
 dependencies = [
     "anthropic>=0.34,<1.0",
     "duckdb>=1.0,<2.0",
+    "eval7>=0.1.10,<0.2.0",
     "jinja2>=3.1,<4.0",
     "matplotlib>=3.8,<4.0",
     "openai>=1.0,<2.0",
@@ -55,6 +56,11 @@ files = ["src", "tests"]
 # PokerKit ships without stubs at time of writing; allow implicit Any on its imports only.
 [[tool.mypy.overrides]]
 module = "pokerkit.*"
+ignore_missing_imports = true
+
+# eval7 (Phase 3c-equity dep) is a C-extension without type stubs.
+[[tool.mypy.overrides]]
+module = "eval7.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
