@@ -481,22 +481,29 @@ class Session:
         for snap in staged_snapshots:
             self._snapshot_writer.write(snap)
 
+        # Hand is over. Emit showdown (if anyone saw it) + hand_ended.
+        statuses = list(state._state.statuses)  # noqa: SLF001
+        showdown_seats = {i for i, alive in enumerate(statuses) if bool(alive)}
+
         # Phase 3c-hud: flush per-hand booleans to cumulative counters.
-        # (Task 6 will move this AFTER showdown_seats computation to enable
-        # WTSD; for Tasks 2-5 we wire VPIP/PFR/3-bet here.)
+        # codex audit IMPORTANT-5: also bump HUD-only completed-hand counter.
+        # This block ONLY runs on clean hand completion (censored hands return
+        # early earlier in the method), so _hud_hands_counted reflects the
+        # true denominator for VPIP/PFR rates and min-sample gating.
+        self._hud_hands_counted += 1
         for seat in range(n_seats):
             if hand_state[seat]["did_vpip"]:
                 self._hud_counters[seat]["vpip_actions"] += 1
+                # WTSD chance = saw post-blind action; granted to all VPIP hands.
+                self._hud_counters[seat]["wtsd_chances"] += 1
+                if seat in showdown_seats:
+                    self._hud_counters[seat]["wtsd_actions"] += 1
             if hand_state[seat]["did_pfr"]:
                 self._hud_counters[seat]["pfr_actions"] += 1
             if hand_state[seat]["had_3bet_chance"]:
                 self._hud_counters[seat]["three_bet_chances"] += 1
             if hand_state[seat]["did_3bet"]:
                 self._hud_counters[seat]["three_bet_actions"] += 1
-
-        # Hand is over. Emit showdown (if anyone saw it) + hand_ended.
-        statuses = list(state._state.statuses)  # noqa: SLF001
-        showdown_seats = {i for i, alive in enumerate(statuses) if bool(alive)}
         showdown = len(showdown_seats) > 1
         if showdown:
             events.append(
