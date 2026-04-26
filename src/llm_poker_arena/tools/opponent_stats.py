@@ -55,6 +55,9 @@ def get_opponent_stats(
     stats = view.opponent_stats.get(seat)
     if stats is None:
         # Should not happen in normal Session flow — Session populates all
-        # other seats. Defensive return for edge cases (folded seat post-hand).
-        return {"insufficient": True}
+        # other seats. Defensive: return the full OpponentStatsOrInsufficient
+        # shape (insufficient + 5 numeric Nones) so downstream rehydration
+        # via model_validate doesn't fail (code-reviewer NIT).
+        from llm_poker_arena.engine.views import OpponentStatsOrInsufficient
+        return OpponentStatsOrInsufficient(insufficient=True).model_dump(mode="json")
     return stats.model_dump(mode="json")

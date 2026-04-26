@@ -548,12 +548,18 @@ class Session:
         # early earlier in the method), so _hud_hands_counted reflects the
         # true denominator for VPIP/PFR rates and min-sample gating.
         self._hud_hands_counted += 1
+        # Real showdown requires len(showdown_seats) > 1 (matches the
+        # `showdown` flag computed two lines below). A solo survivor of
+        # uncalled action did not actually show down — code-reviewer
+        # IMPORTANT-1.
+        had_real_showdown = len(showdown_seats) > 1
         for seat in range(n_seats):
             if hand_state[seat]["did_vpip"]:
                 self._hud_counters[seat]["vpip_actions"] += 1
-                # WTSD chance = saw post-blind action; granted to all VPIP hands.
+                # WTSD chance granted to all VPIP hands (matches our
+                # plan §26 denominator convention).
                 self._hud_counters[seat]["wtsd_chances"] += 1
-                if seat in showdown_seats:
+                if had_real_showdown and seat in showdown_seats:
                     self._hud_counters[seat]["wtsd_actions"] += 1
             if hand_state[seat]["did_pfr"]:
                 self._hud_counters[seat]["pfr_actions"] += 1
