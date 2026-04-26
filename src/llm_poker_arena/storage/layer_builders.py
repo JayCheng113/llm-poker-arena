@@ -195,6 +195,15 @@ def build_agent_view_snapshot(
     iter_dump: tuple[dict[str, Any], ...] = tuple(
         cast("Any", ir).model_dump(mode="json") for ir in iterations
     )
+    # Codex audit IMPORTANT-4 fix: Phase 2a hardcoded total_utility_calls=0
+    # because no utility tools fired. Phase 3c-math enables math tools, so
+    # count utility iterations from the iterations tuple. Spec §7.4 wants
+    # this populated. Both successful (tool_result has "value") and failed
+    # (tool_result has "error") utility attempts count — matches spec §4.2
+    # line 1017 (utility_count increments on attempt, not just success).
+    total_utility_calls = sum(
+        1 for ir in iterations if ir.tool_result is not None
+    )
     total_tokens_dict: dict[str, int]
     if total_tokens is None:
         total_tokens_dict = {}
@@ -215,7 +224,7 @@ def build_agent_view_snapshot(
         iterations=iter_dump,
         final_action=final_action,
         is_forced_blind=False,
-        total_utility_calls=0,
+        total_utility_calls=total_utility_calls,
         api_retry_count=api_retry_count,
         illegal_action_retry_count=illegal_action_retry_count,
         no_tool_retry_count=no_tool_retry_count,
