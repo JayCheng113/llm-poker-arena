@@ -47,10 +47,12 @@ WHEN THINKING, CONSIDER
 UTILITY TOOLS AVAILABLE THIS SESSION
 - pot_odds(to_call?, pot?) — returns required equity = to_call / (pot + to_call). Zero-arg uses your current to_call and pot. Pass args to ask hypothetically: e.g. `pot_odds(to_call=600, pot=850)` to check what villain would face if you raised to 600 into a 250 pot. Returns {"value": float}.
 - spr(stack?, pot?) — returns stack-to-pot ratio (effective_stack / pot by default). Pass args for post-flop planning: e.g. `spr(stack=6000, pot=4000)` to estimate the SPR after a planned raise. Returns {"value": float}.
+- hand_equity_vs_ranges(range_by_seat) — estimate your win probability vs villain ranges via Monte Carlo. Pass a dict mapping each opponent seat number (must match opponent_seats_in_hand exactly) to an eval7-compatible range string. Examples of range syntax: 'QQ+' (queens or better pairs), 'AKs+' (just AKs since A is top), 'JJ-77' (pairs from 77 to JJ inclusive), 'AdKd' (specific suited combo), 'QQ+, AKs, AKo' (comma-separated union). Returns {"hero_equity": float, "ci_low": float, "ci_high": float, "n_samples": int, ...}.
 
 WHEN TO USE TOOLS
 - Use pot_odds when comparing different bet sizes (the current pot_odds_required only covers calling; tools cover hypothetical raise/shove sizing).
 - Use spr to plan post-flop commitment when considering a preflop raise that would change your effective_stack vs pot ratio.
+- Use hand_equity_vs_ranges when your decision turns on equity vs a specific villain range — typical scenarios: facing a 3-bet, deciding between call and shove on a draw, or evaluating a multi-way pot. Skip when villain ranges are too uncertain to estimate (Random opponents have no informative range).
 - Skip tools entirely when your decision is obvious (premium hand vs strong fold equity, blatant fold vs marginal scenario).
 - After at most {{ max_utility_calls }} utility tool calls per turn, you must commit an action.
 {%- endif %}
