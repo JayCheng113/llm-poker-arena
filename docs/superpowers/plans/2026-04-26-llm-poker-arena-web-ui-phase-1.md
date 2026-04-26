@@ -165,8 +165,12 @@ uses v3 because shadcn/ui (Phase 2 target) ships v3 templates.
 ```bash
 cd web
 npm install -D tailwindcss@^3 postcss autoprefixer
-npx tailwindcss init -p
+npx tailwindcss init -p --ts
 ```
+
+(`--ts` flag generates `tailwind.config.ts` instead of `.js` —
+codex BLOCKER fix; without it Tailwind would try to load empty
+auto-generated `.js` config alongside our `.ts` edit.)
 
 Edit `web/tailwind.config.ts` to:
 ```ts
@@ -189,14 +193,26 @@ Replace `web/src/index.css` content with:
 @tailwind utilities;
 ```
 
-- [ ] **Step 3: Add ESLint + Prettier**
+- [ ] **Step 3: Add ESLint v8 + Prettier**
+
+ESLint v9 changed config format to flat config (`eslint.config.js`).
+This plan uses v8 to keep the legacy `.eslintrc.cjs` setup the rest
+of the plan assumes (codex IMPORTANT fix).
 
 ```bash
 cd web
-npm install -D eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin \
+npm install -D eslint@^8 @typescript-eslint/parser @typescript-eslint/eslint-plugin \
                eslint-plugin-react eslint-plugin-react-hooks prettier \
                eslint-config-prettier
 ```
+
+If `npm create vite@latest` already installed ESLint v9 and a
+`eslint.config.js` exists, delete that file before installing v8.
+
+Note on React version: `npm create vite@latest` may scaffold React 19
+as of 2026; the plan accepts whatever Vite picks (React 18 or 19 both
+work). Spec §57 mentioned "React 18" as a baseline but React 19 is
+backward-compatible with the components in this plan.
 
 Create `web/.eslintrc.cjs`:
 ```js
@@ -495,8 +511,12 @@ export interface AgentViewSnapshot {
 }
 
 // Subset of PlayerView the UI actually reads. The full schema has more
-// fields (seats_public, opponent_seats_in_hand, opponent_stats, etc.) but
-// Phase 1 surfaces only what's needed by the table+timeline+reasoning views.
+// fields (opponent_seats_in_hand, opponent_stats, etc.) but Phase 1
+// surfaces only what's needed by the table+timeline+reasoning views.
+//
+// seats_public: included so per-seat stacks/status reflect the CURRENT
+// snapshot (not the hand's starting_stacks). codex IMPORTANT-7 fix —
+// otherwise visible stacks don't shrink as raises/calls happen.
 export interface PlayerViewLite {
   my_seat: number
   pot: number
@@ -507,14 +527,24 @@ export interface PlayerViewLite {
   effective_stack: number
   street: Street
   legal_actions: { tools: { name: string; args: object }[] }
-  // Extra fields are ignored at parse time (TS doesn't enforce extras
-  // when reading JSON; we just don't access them.)
+  seats_public: SeatPublicInfo[]
+}
+
+export interface SeatPublicInfo {
+  seat: number
+  label: string
+  position_short: string
+  position_full: string
+  stack: number
+  invested_this_hand: number
+  invested_this_round: number
+  status: SeatStatus
 }
 
 export interface IterationRecord {
   step: number
   request_messages_digest: string
-  provider_response_kind: 'tool_use' | 'text' | 'error'
+  provider_response_kind: 'tool_use' | 'text_only' | 'error' | 'no_tool'
   tool_call: ToolCall | null
   tool_result: { [k: string]: unknown } | null // utility tool returned dict, or null for action commits
   text_content: string
@@ -621,9 +651,10 @@ import shutil
 import sys
 from pathlib import Path
 
-# Ensure repo root on sys.path so we can import from src/
+# src/ layout package — insert repo root/src on sys.path
+# (codex BLOCKER fix: bare _REPO doesn't expose llm_poker_arena/)
 _REPO = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(_REPO))
+sys.path.insert(0, str(_REPO / "src"))
 
 from llm_poker_arena.agents.llm.llm_agent import LLMAgent
 from llm_poker_arena.agents.llm.providers.anthropic_provider import AnthropicProvider
@@ -766,9 +797,12 @@ Add to `web/package.json` scripts:
 }
 ```
 
-Add to `web/vite.config.ts`:
+Add to `web/vite.config.ts` — note: `defineConfig` imported from
+`vitest/config` (NOT `vite`) so the `test` key type-checks. Codex
+IMPORTANT fix.
+
 ```ts
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
@@ -1474,9 +1508,18 @@ EOF
 
 ```bash
 cd web
-npm install react-free-playing-cards
+# react-free-playing-cards has stale React peer dep (^16.13.1); use
+# --legacy-peer-deps to install with React 18+. Library renders SVG
+# only — runtime works fine despite outdated peer dep declaration.
+npm install --legacy-peer-deps react-free-playing-cards
 npm install -D @testing-library/react @testing-library/jest-dom @types/react-test-renderer
 ```
+
+If install fails entirely, fall back to **static SVG sprite** approach
+(codex preferred): download `https://htdebeer.github.io/SVG-cards/cards/svg-cards.svg`
+to `web/src/assets/svg-cards.svg`, render via `<svg><use href="..." /></svg>`
+in self-implemented Card component (~30 LOC). LGPL-2.1 license requires
+attribution.
 
 - [ ] **Step 2: Write the failing test**
 
@@ -1515,9 +1558,10 @@ Expected: FAIL — Card component doesn't exist.
 
 - [ ] **Step 4: Implement Card**
 
-Create `web/src/components/Card.tsx`:
+Create `web/src/components/Card.tsx` (note: react-free-playing-cards
+uses **default export**, not named — codex BLOCKER fix):
 ```tsx
-import { Card as FreeCard } from 'react-free-playing-cards'
+import FreeCard from 'react-free-playing-cards'
 import type { CardStr } from '../types'
 
 type CardProp = CardStr | 'face-down'
@@ -1554,7 +1598,7 @@ Expected: 2 tests PASS.
 cd web && npm run lint && npm run type-check
 ```
 
-If type errors arise from `react-free-playing-cards` (no built-in types), add `web/src/react-free-playing-cards.d.ts`:
+If type errors arise from `react-free-playing-cards` (no built-in types), add `web/src/react-free-playing-cards.d.ts` (default export, codex BLOCKER fix):
 ```ts
 declare module 'react-free-playing-cards' {
   import type { CSSProperties } from 'react'
@@ -1565,7 +1609,7 @@ declare module 'react-free-playing-cards' {
     className?: string
     style?: CSSProperties
   }
-  export function Card(props: CardProps): JSX.Element
+  export default function Card(props: CardProps): JSX.Element
 }
 ```
 
@@ -2637,10 +2681,20 @@ function App() {
     }
   }
 
-  // Stack tracking via meta starting_stacks; for Phase 1 just show starting stack.
+  // Stacks come from current snapshot's view_at_turn_start.seats_public
+  // (codex IMPORTANT-7: starting_stacks is hand-start only; seats_public
+  // reflects the actor's POV at THIS turn, with stacks/status decremented
+  // through this turn's prior actions).
+  const currentSnap = hand.agentSnapshots[safeTurnIdx]
+  const seatsPublic = currentSnap?.view_at_turn_start.seats_public ?? []
+  const seatsPublicByIdx: { [k: number]: typeof seatsPublic[0] } = {}
+  for (const sp of seatsPublic) {
+    seatsPublicByIdx[sp.seat] = sp
+  }
   const seats = [0, 1, 2, 3, 4, 5].map((seatIdx) => {
     const positionLabel = _positionLabelForSeat(seatIdx, buttonSeat, 6)
-    const status: SeatStatus = folded.has(seatIdx) ? 'folded' : 'in_hand'
+    const sp = seatsPublicByIdx[seatIdx]
+    const status: SeatStatus = sp?.status ?? (folded.has(seatIdx) ? 'folded' : 'in_hand')
     const holeFromRevealed = revealed[String(seatIdx)]
     const holeCards: 'face-down' | [CardStr, CardStr] =
       holeFromRevealed && holeFromRevealed !== 'face-down' ? holeFromRevealed : 'face-down'
@@ -2652,7 +2706,7 @@ function App() {
     return {
       seatIdx,
       positionLabel,
-      stack: cfg.starting_stacks[String(seatIdx)] ?? 0,
+      stack: sp?.stack ?? cfg.starting_stacks[String(seatIdx)] ?? 0,
       status,
       holeCards,
       lastAction,
@@ -3010,7 +3064,7 @@ Expected output: ~17 commits matching task numbers (T0-T16).
 
 Read `~/.claude/projects/-Users-zcheng256/memory/project_llm_poker_arena.md`. Insert a "Phase 5 Web UI Phase 1 COMPLETE" block following the existing pattern. Capture:
 - HEAD SHA after final commit
-- Test count (~21 tests)
+- Test count (~35 tests)
 - Demo session bundled at `web/public/data/demo-1/`
 - Phase 2 next: animations + dev toggle + multi-session selector
 
@@ -3032,7 +3086,7 @@ OUT (Phase 2): animations, multi-session selector, dev toggle, mobile,
 TanStack Query, shadcn/ui, framer-motion.
 
 Tech stack minimal: React + Vite + TS + Tailwind + react-free-playing-cards.
-~21 tests (unit parsers + selectors + RTL behavior + 1 Playwright e2e).
+~35 tests (unit parsers + selectors + RTL behavior + 1 Playwright e2e).
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
@@ -3051,7 +3105,7 @@ After all 17 tasks land:
    - §240 card revelation policy (live mode) → Task 5 ✅
    - §266 polar layout (seat 3 = bottom) → Task 6 + Task 10 ✅
    - §305 data flow (plain useEffect, selectors) → Task 14 ✅
-   - §362 testing (~10 unit, ~5 behavior, 1 e2e) → 21 total ✅
+   - §362 testing (~10 unit, ~5 behavior, 1 e2e — actual 13 unit + 21 RTL + 1 e2e = 35 total) ✅
    - §456 success criteria 1-6 → all addressable post-execution
 
 2. **No placeholders**: every step has actual code or commands.
@@ -3071,5 +3125,5 @@ After all 17 tasks land:
 5. **Phase 1 ship gate** (after Task 17):
    - `cd web && npm run dev` boots, demo loads, navigation works ✓
    - `npm run build && npm run preview` produces working static site ✓
-   - All 21 tests pass via `npm test && npm run test:e2e` ✓
+   - All 35 tests pass via `npm test && npm run test:e2e` ✓
    - GitHub Actions CI green on first push ✓
