@@ -26,14 +26,18 @@ class ProviderConfig:
 
     `is_anthropic` flips the provider class (Anthropic SDK vs. OpenAI-compat
     shim). `base_url=None` means the SDK uses its own default (Anthropic,
-    OpenAI). Per-model temperature overrides live in `MODEL_OVERRIDES`,
-    not here — they're a model-specific quirk, not a provider-wide one.
+    OpenAI). `sdk_max_retries=None` keeps the AsyncOpenAI SDK default of 2;
+    set higher for providers known to throw 5xx during capacity spikes
+    (Gemini AI Studio is the canonical example — see Gemini entry below).
+    Per-model temperature overrides live in `MODEL_OVERRIDES`, not here —
+    they're a model-specific quirk, not a provider-wide one.
     """
 
     provider_name: str
     env_var: str
     base_url: str | None = None
     is_anthropic: bool = False
+    sdk_max_retries: int | None = None
 
 
 # Per-model overrides keyed by "provider:model". Today this is only used
@@ -92,6 +96,16 @@ PROVIDERS: dict[str, ProviderConfig] = {
         # /chat/completions and Google's edge has historically been
         # whitespace-strict on the path concat.
         base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        # AI Studio (the free / preview-tier endpoint we use here) is
+        # known to throw 503 "model experiencing high demand" during
+        # capacity spikes — community reports + our own first 30-hand
+        # tournament both saw 503 censors. Spike duration is typically
+        # tens of seconds; SDK default max_retries=2 with ~6s total
+        # backoff isn't enough. Bump to 5 so AsyncOpenAI's own
+        # exponential backoff covers ~30-60s of spike. Vertex AI / paid
+        # tier is more stable but needs GCP setup outside this repo;
+        # this is the cheapest mitigation that helps. (codex 2026-04-27.)
+        sdk_max_retries=5,
     ),
 }
 
@@ -125,6 +139,8 @@ def make_provider(provider_tag: str, model: str, api_key: str) -> Any:
     }
     if cfg.base_url is not None:
         kwargs["base_url"] = cfg.base_url
+    if cfg.sdk_max_retries is not None:
+        kwargs["sdk_max_retries"] = cfg.sdk_max_retries
     return OpenAICompatibleProvider(**kwargs)
 
 

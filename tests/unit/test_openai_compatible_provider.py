@@ -405,6 +405,45 @@ def test_openai_provider_name_passthrough() -> None:
     assert p.provider_name() == "deepseek"
 
 
+def test_sdk_max_retries_is_forwarded_to_async_openai_client() -> None:
+    """Provider-level capacity mitigation: when registry says a provider
+    needs more SDK-level retries (Gemini AI Studio's 503 spikes), that
+    number must reach AsyncOpenAI's `max_retries` so its built-in
+    exponential backoff has room to ride out the spike. Default (None)
+    leaves the SDK's own default (2) untouched."""
+    # Default path — no override, SDK default 2 stays.
+    default_p = OpenAICompatibleProvider(
+        provider_name_value="openai", model="gpt-4o-mini", api_key="sk-test"
+    )
+    assert default_p._client.max_retries == 2
+
+    # Override path — bumped retry budget reaches the client.
+    bumped_p = OpenAICompatibleProvider(
+        provider_name_value="gemini",
+        model="gemini-2.5-flash",
+        api_key="sk-test",
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        sdk_max_retries=5,
+    )
+    assert bumped_p._client.max_retries == 5
+
+
+def test_registry_make_provider_threads_sdk_max_retries_for_gemini() -> None:
+    """Smoke: the registry-driven factory wires `sdk_max_retries` end to
+    end. If a future refactor drops the field anywhere along the path
+    (registry → make_provider → kwargs → AsyncOpenAI) Gemini silently
+    reverts to the 2-retry default and 503-driven censors return."""
+    from llm_poker_arena.agents.llm.providers.registry import PROVIDERS, make_provider
+
+    assert PROVIDERS["gemini"].sdk_max_retries == 5
+    p = make_provider("gemini", "gemini-2.5-flash", "AIza-test")
+    assert p._client.max_retries == 5
+
+    # Counter-check: providers without an override get the SDK default.
+    p_openai = make_provider("openai", "gpt-4o-mini", "sk-test")
+    assert p_openai._client.max_retries == 2
+
+
 def test_deepseek_reasoner_extracts_reasoning_content_as_raw_artifact() -> None:
     msg = _FakeMessage(
         content="The answer is fold.",

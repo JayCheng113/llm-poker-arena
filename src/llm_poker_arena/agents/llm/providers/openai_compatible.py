@@ -63,12 +63,22 @@ class OpenAICompatibleProvider(LLMProvider):
         api_key: str,
         base_url: str | None = None,
         max_tokens: int = 1024,
+        sdk_max_retries: int | None = None,
     ) -> None:
         self._provider_name = provider_name_value
         self._model = model
         self._max_tokens = max_tokens
         # AsyncOpenAI accepts base_url=None (= OpenAI canonical endpoint).
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        # sdk_max_retries=None lets the SDK use its default (2). Caller
+        # bumps it for endpoints with known capacity issues — Gemini AI
+        # Studio's 503 spikes are the canonical case, see registry.py
+        # `gemini` entry. The SDK does its own exponential backoff on
+        # 5xx, so a single LLMAgent api_retry can absorb a multi-second
+        # spike instead of immediately censoring the hand.
+        client_kwargs: dict[str, Any] = {"api_key": api_key, "base_url": base_url}
+        if sdk_max_retries is not None:
+            client_kwargs["max_retries"] = sdk_max_retries
+        self._client = AsyncOpenAI(**client_kwargs)
         # spec §11.2: probe will set this to True if seed is rejected so
         # that complete() drops seed on subsequent calls. Defaults to None
         # (unknown until probe runs); complete() treats None as "try seed".
