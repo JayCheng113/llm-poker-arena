@@ -1,0 +1,98 @@
+# Changelog
+
+All notable user-facing changes are listed here. Dates are in YYYY-MM-DD.
+
+## [Unreleased]
+
+### Web UI Polish (April 27, 2026)
+
+- Inter + JetBrains Mono fonts loaded from Google Fonts
+- Tremor + Recharts as the chart engine; PnL chart redesigned with axes,
+  gridlines, gradient fill, and hover tooltips
+- @lobehub/icons brand SVGs added; each seat shows the actual provider logo
+  (Anthropic, OpenAI, DeepSeek, Qwen) instead of a grey box
+- god-view (all hole cards visible) is now the default replay mode; live
+  spectator mode is opt-in via `?live=1`
+- HandSelector toolbar redesigned with lucide-react icons and grouped
+  controls; brand title "♠ LLM Poker Arena" in the header
+- ReasoningPanel: provider header, structured iteration cards with code-block
+  styling for tool calls, color-coded decision row (lucide icon + tone)
+- ActionTimeline: turns grouped by street (PREFLOP / FLOP / TURN / RIVER),
+  per-action color coding, provider color dots
+
+### Multi-LLM Tournament Demo
+
+- New `web/scripts/generate-demo-tournament.py` runs a 4-LLM × 30-hand
+  tournament: Claude Haiku 4.5 + DeepSeek + GPT-5.4-mini + Qwen 3.6-plus
+  + 2 RuleBased agents
+- 30-hand bundled session at `web/public/data/demo-tournament/`
+- Provider compatibility fix: `_max_tokens_kwarg` routes gpt-5.x and
+  o-series to `max_completion_tokens`; older OpenAI / DeepSeek / Qwen
+  keep `max_tokens`
+
+### Web UI Phase 2 (April 26, 2026)
+
+- Per-session chip-stack PnL chart (`PnlChart`)
+- Auto-play mode + playback speed selector (0.5× / 1× / 2× / 4×)
+- Keyboard navigation (←/→ turn, ↑/↓ hand, space play/pause)
+- Multi-session selector + `bundle-demos.mjs` auto-discovery
+- Custom-session file picker in dev mode (load any local `runs/<id>/`)
+- Dev mode toggle (`?dev=1`): raw JSON viewer + retry / api_error /
+  reasoning_artifact.kind badges
+- Session summary modal (per-seat PnL / tokens / utility calls / retry)
+- Mobile-responsive layout (best-effort)
+- GitHub Actions deploy workflow → GitHub Pages
+- CSS-rendered playing cards (no external card-image dep)
+- Winner banner + community-card placeholders
+- Active-seat ring with subtle pulse animation
+
+### Web UI Phase 1 (April 26, 2026)
+
+- React 19 + Vite 8 + TypeScript 6 + Tailwind v3 stack
+- Replay viewer: oval poker table with polar-arranged seats, community
+  cards, pot display, action highlighting
+- Reasoning panel showing every LLM iteration verbatim (text + tool
+  calls + tool results)
+- Action timeline (one card per turn, click to seek)
+- Hand selector (prev / next / dropdown)
+- URL state: `?session=&hand=&turn=&dev=&live=`
+- 4 JSONL parsers + canonical-private / public-replay / agent-snapshot
+  data flow
+- Hardcoded `demo-1` session bundled (1 Claude Haiku + 5 RuleBased,
+  6 hands, $0.05)
+
+### Backend Phase 4 (April 26, 2026)
+
+- Session-level `max_total_tokens` cost cap with clean abort at hand
+  boundary
+- USAGE.md initial publication
+- CLI: `--llm-seat / --llm-provider / --llm-model` flags
+
+### Backend Phase 3 (April 24-26, 2026)
+
+- LLMAgent with bounded ReAct loop (K+1 utility calls + 1 commit)
+- 4 retry budgets per spec §4.1 BR2-05: api_retry,
+  illegal_action_retry, no_tool_retry, tool_usage_error
+- Three providers: Anthropic (`AnthropicProvider`), OpenAI / DeepSeek /
+  Qwen (`OpenAICompatibleProvider`)
+- Math tools: `pot_odds`, `spr`, `hand_equity_vs_ranges`
+- HUD tool: `get_opponent_stats` with VPIP / PFR / 3-bet / AF / WTSD
+  counters (single-session in-memory)
+- Prompt-retry-censor-redact pipeline: secrets redacted, hands censored
+  on permanent provider error
+- Reasoning artifacts captured per provider (raw / summary /
+  thinking_block / encrypted / redacted)
+
+### Backend Phase 2 (April 24, 2026)
+
+- `cli/play.py` entry point + HumanCLIAgent
+- Multi-hand session loop with button rotation
+- 3-layer JSONL artifacts: canonical_private, public_replay,
+  agent_view_snapshots, plus meta.json
+
+### Backend Phase 1 (April 23, 2026)
+
+- 6-max No-Limit Texas Hold'em engine wrapping PokerKit 0.7.3
+- Frozen Pydantic DTOs for engine ↔ agent boundary
+- RandomAgent + RuleBasedAgent baselines
+- Test suite scaffolding
