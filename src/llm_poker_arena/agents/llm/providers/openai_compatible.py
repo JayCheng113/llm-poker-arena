@@ -18,6 +18,7 @@ spec §4.4 / §4.6 / §11.2:
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -54,6 +55,56 @@ def _max_tokens_kwarg(model: str, value: int) -> dict[str, int]:
     return {"max_tokens": value}
 
 
+# OpenAI's reasoning-model lines (GPT-5.x, o-series, future gpt-6.x) hide
+# their chain-of-thought behind the Responses API: Chat Completions only
+# returns `usage.completion_tokens_details.reasoning_tokens` (an int), so a
+# UI panel built around those models looks silent. The Responses API
+# exposes a user-facing `summary` per turn, which is what we want to feed
+# into the reasoning panel.
+#
+# Other OpenAI-compatible providers (DeepSeek, Kimi, Qwen, Grok, Gemini)
+# do NOT implement the Responses API — they stay on Chat Completions and
+# surface their own thinking via `reasoning_content` (DeepSeek/Kimi) or
+# nothing at all (Qwen/Grok/Gemini). So this routing only flips for the
+# `openai` provider tag + a reasoning-model prefix.
+_OPENAI_REASONING_MODEL_PREFIXES = ("gpt-5", "gpt-6", "o1", "o3", "o4")
+
+
+def _is_openai_reasoning_model(provider_name: str, model: str) -> bool:
+    return provider_name == "openai" and any(
+        model.startswith(p) for p in _OPENAI_REASONING_MODEL_PREFIXES
+    )
+
+
+# Gemini's OpenAI-compat shim, when called with
+# `extra_body.google.thinking_config.include_thoughts=True`, returns the
+# model's reasoning summary INLINE in `content` wrapped in literal
+# `<thought>...</thought>` tags. We split those out so:
+#   - the visible decision text is clean (no leaking tags),
+#   - the thinking summary lands as a SUMMARY reasoning artifact for
+#     the UI panel.
+#
+# Multiple thought blocks are concatenated with a blank line. Missing
+# closing tag → no extraction (the input is returned untouched and the
+# whole content stays as the visible message — graceful failure).
+_THOUGHT_BLOCK_RE = re.compile(r"<thought>(.*?)</thought>", re.DOTALL)
+
+
+def _split_gemini_thought(content: str) -> tuple[str, str]:
+    """Return (visible_content_without_thought, joined_thought_text).
+
+    Both strings are stripped of leading/trailing whitespace so the UI
+    doesn't render gratuitous newlines around the panel boxes."""
+    if not content or "<thought>" not in content:
+        return content, ""
+    thoughts = _THOUGHT_BLOCK_RE.findall(content)
+    if not thoughts:
+        return content, ""
+    visible = _THOUGHT_BLOCK_RE.sub("", content).strip()
+    summary = "\n\n".join(t.strip() for t in thoughts if t.strip())
+    return visible, summary
+
+
 class OpenAICompatibleProvider(LLMProvider):
     def __init__(
         self,
@@ -64,6 +115,7 @@ class OpenAICompatibleProvider(LLMProvider):
         base_url: str | None = None,
         max_tokens: int = 1024,
         sdk_max_retries: int | None = None,
+        enable_thinking_summary: bool = False,
     ) -> None:
         self._provider_name = provider_name_value
         self._model = model
@@ -83,6 +135,12 @@ class OpenAICompatibleProvider(LLMProvider):
         # that complete() drops seed on subsequent calls. Defaults to None
         # (unknown until probe runs); complete() treats None as "try seed".
         self._seed_known_unsupported: bool | None = None
+        # When True, complete() injects Gemini's `extra_body.google.
+        # thinking_config.include_thoughts=True` and _normalize() splits
+        # the resulting <thought>...</thought> block out of `content` into
+        # a SUMMARY-kind reasoning artifact. Only Gemini supports this
+        # surface today; verified 2026-04-27.
+        self._enable_thinking_summary = enable_thinking_summary
 
     def provider_name(self) -> str:
         return self._provider_name
@@ -96,6 +154,19 @@ class OpenAICompatibleProvider(LLMProvider):
         temperature: float,
         seed: int | None,
     ) -> LLMResponse:
+        # Fork: OpenAI reasoning models go through the Responses API so we
+        # can pull a user-visible reasoning summary (Chat Completions only
+        # returns reasoning token COUNTS, not text). Non-reasoning OpenAI
+        # models and every other OpenAI-compat provider stay on Chat.
+        if _is_openai_reasoning_model(self._provider_name, self._model):
+            return await self._complete_via_responses(
+                system=system,
+                messages=messages,
+                tools=tools,
+                temperature=temperature,
+                seed=seed,
+            )
+
         # Convert our portable Anthropic-style tool spec to OpenAI tool spec.
         # Our spec: {"name": ..., "description": ..., "input_schema": {...}}
         # OpenAI:  {"type": "function", "function": {"name": ..., "description": ..., "parameters": {...}}}
@@ -131,6 +202,24 @@ class OpenAICompatibleProvider(LLMProvider):
         # providers known not to accept seed.
         if seed is not None and self._seed_known_unsupported is not True:
             kwargs["seed"] = seed
+        # Gemini-specific: ask the OpenAI-compat shim to surface internal
+        # thinking. Response will inline a <thought>...</thought> block
+        # at the start of `content`; _normalize() will split it out.
+        #
+        # Wire-format quirk: Gemini wants the request body to literally
+        # have a top-level `extra_body` JSON key wrapping the `google`
+        # config — but the OpenAI Python SDK's own `extra_body=` kwarg
+        # SPREADS its dict to the top level of the body (so a naive
+        # `{"google": ...}` ends up as `body.google`, which Gemini
+        # rejects with `Unknown name "google"`). Double-wrap so SDK's
+        # spread leaves a literal `extra_body` field intact. Verified
+        # 2026-04-27 by sniffing the raw httpx request.
+        if self._enable_thinking_summary:
+            kwargs["extra_body"] = {
+                "extra_body": {
+                    "google": {"thinking_config": {"include_thoughts": True}}
+                }
+            }
 
         try:
             resp = await self._client.chat.completions.create(**kwargs)
@@ -216,9 +305,264 @@ class OpenAICompatibleProvider(LLMProvider):
         # can find it. For OpenAI the field is simply absent.
         raw_msg_dict = msg.model_dump() if hasattr(msg, "model_dump") else dict(msg)
 
+        # Gemini-only: split <thought>...</thought> out of content. The
+        # extracted summary lands under reasoning_content so the
+        # downstream artifact-extractor (and replay-stripper) treat it
+        # the same as DeepSeek/Kimi reasoning_content. The visible
+        # text_content is the remainder; raw_msg_dict["content"] gets
+        # the same remainder so replay round trips do NOT carry the
+        # <thought> tags back to Gemini.
+        if self._enable_thinking_summary and text_content:
+            visible, summary = _split_gemini_thought(text_content)
+            if summary:
+                text_content = visible
+                raw_msg_dict["content"] = visible or None
+                raw_msg_dict["reasoning_content"] = summary
+
         return LLMResponse(
             provider=self._provider_name,
             model=resp.model,
+            stop_reason=cast("Any", stop_reason),
+            tool_calls=tuple(tool_calls),
+            text_content=text_content,
+            tokens=tokens,
+            raw_assistant_turn=AssistantTurn(
+                provider=self._provider_name,
+                blocks=(raw_msg_dict,),
+            ),
+        )
+
+    # ------------------------------------------------------------------
+    # Responses API path (OpenAI reasoning models only)
+    # ------------------------------------------------------------------
+
+    async def _complete_via_responses(
+        self,
+        *,
+        system: str | None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        temperature: float,
+        seed: int | None,
+    ) -> LLMResponse:
+        """OpenAI reasoning-model path. Builds the Responses API request,
+        parses the typed `output[]` array (message + function_call +
+        reasoning items), and returns an `LLMResponse` whose
+        `raw_assistant_turn.blocks[0]` is a Chat-style assistant dict so
+        the existing replay / extract pipeline keeps working downstream.
+        The reasoning summary is embedded under
+        `blocks[0]["reasoning_summary"]` for `extract_reasoning_artifact`
+        to pick up."""
+        # Tool spec: Responses uses a flat shape (no "function" nesting).
+        responses_tools: list[dict[str, Any]] = [
+            {
+                "type": "function",
+                "name": t["name"],
+                "description": t.get("description", ""),
+                "parameters": t.get("input_schema", {"type": "object", "properties": {}}),
+            }
+            for t in tools
+        ]
+
+        # Convert the Chat-style message list into Responses input items.
+        input_items = self._messages_to_responses_input(system, messages)
+
+        kwargs: dict[str, Any] = {
+            "model": self._model,
+            "input": cast("Any", input_items),
+            # Responses API: "summary" key requests a user-visible summary
+            # of the model's reasoning. "auto" lets the API pick concise
+            # vs detailed; effort "low" matches our token budget profile
+            # (we want fast turns, not deep reasoning).
+            "reasoning": {"effort": "low", "summary": "auto"},
+        }
+        if responses_tools:
+            kwargs["tools"] = cast("Any", responses_tools)
+        # max_output_tokens is the Responses API equivalent of
+        # max_completion_tokens; bump higher than Chat's default because
+        # reasoning eats from the same budget.
+        kwargs["max_output_tokens"] = max(self._max_tokens, 2048)
+        # Reasoning models reject `temperature` outright (only the default
+        # is accepted) — don't pass it. Same for `seed` on the Responses
+        # API: it isn't a documented parameter. Both args are accepted
+        # by the signature for API symmetry with the Chat path but go
+        # unused here.
+        del temperature, seed
+
+        try:
+            resp = await self._client.responses.create(**kwargs)
+        except (APITimeoutError, RateLimitError) as e:
+            raise ProviderTransientError(str(e)) from e
+        except BadRequestError as e:
+            raise ProviderPermanentError(f"400: {e}") from e
+        except APIStatusError as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status is not None and status >= 500:
+                raise ProviderTransientError(f"{status}: {e}") from e
+            if status == 429:
+                raise ProviderTransientError(f"429 rate limited: {e}") from e
+            raise ProviderPermanentError(f"{status}: {e}") from e
+
+        return self._normalize_responses(resp)
+
+    @staticmethod
+    def _messages_to_responses_input(
+        system: str | None,
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Translate the LLMAgent's Chat-format conversation history into
+        Responses-format input items. Roles map: system→developer (the
+        Responses API renamed it), user/assistant→message; assistant
+        tool_calls become standalone function_call items; tool messages
+        become function_call_output items keyed by call_id.
+
+        Pure function so unit tests can exercise it without an SDK round
+        trip."""
+        items: list[dict[str, Any]] = []
+        if system is not None:
+            items.append({
+                "type": "message",
+                "role": "developer",
+                "content": system,
+            })
+        for m in messages:
+            role = m.get("role")
+            if role in ("user", "system"):
+                # Defensive: a stray system message in `messages` (rare —
+                # we only ever set system via the kwarg) gets the same
+                # developer downgrade so the Responses API accepts it.
+                mapped_role = "developer" if role == "system" else "user"
+                items.append({
+                    "type": "message",
+                    "role": mapped_role,
+                    "content": m.get("content") or "",
+                })
+            elif role == "assistant":
+                content = m.get("content")
+                tool_calls = m.get("tool_calls") or []
+                if content:
+                    items.append({
+                        "type": "message",
+                        "role": "assistant",
+                        "content": content,
+                    })
+                for tc in tool_calls:
+                    fn = tc.get("function", {})
+                    items.append({
+                        "type": "function_call",
+                        "call_id": tc.get("id", ""),
+                        "name": fn.get("name", ""),
+                        "arguments": fn.get("arguments", "{}"),
+                    })
+            elif role == "tool":
+                items.append({
+                    "type": "function_call_output",
+                    "call_id": m.get("tool_call_id", ""),
+                    "output": m.get("content") or "",
+                })
+            # Anything else is silently dropped — there's no fifth role
+            # in our message vocab.
+        return items
+
+    def _normalize_responses(self, resp: Any) -> LLMResponse:  # noqa: ANN401
+        """Parse a Responses API response into our LLMResponse dataclass.
+
+        `resp.output` is a list of items: ResponseReasoningItem,
+        ResponseOutputMessage, ResponseFunctionToolCall (in arbitrary
+        order). We collect:
+          - text: from message items' `content[].text` (only output_text
+            content blocks count)
+          - tool calls: from function_call items
+          - reasoning summary: concatenated `summary[].text` strings
+        """
+        output_items = getattr(resp, "output", None) or []
+        text_parts: list[str] = []
+        tool_calls: list[ToolCall] = []
+        reasoning_summary_parts: list[str] = []
+        sample_finish: str | None = None
+
+        for item in output_items:
+            item_type = getattr(item, "type", None)
+            if item_type == "message":
+                for content_block in getattr(item, "content", None) or []:
+                    cb_type = getattr(content_block, "type", None)
+                    if cb_type == "output_text":
+                        text_parts.append(getattr(content_block, "text", "") or "")
+            elif item_type == "function_call":
+                args_str = getattr(item, "arguments", "") or ""
+                try:
+                    args_dict = json.loads(args_str) if args_str else {}
+                    if not isinstance(args_dict, dict):
+                        args_dict = {}
+                except json.JSONDecodeError:
+                    # Same fallback as the Chat path: malformed JSON →
+                    # empty args, illegal_action_retry kicks in.
+                    args_dict = {}
+                tool_calls.append(
+                    ToolCall(
+                        name=getattr(item, "name", ""),
+                        args=args_dict,
+                        # Responses uses `call_id` as the public id;
+                        # store under `tool_use_id` to match our shape.
+                        tool_use_id=getattr(item, "call_id", "")
+                        or getattr(item, "id", ""),
+                    )
+                )
+            elif item_type == "reasoning":
+                for summary_block in getattr(item, "summary", None) or []:
+                    txt = getattr(summary_block, "text", "")
+                    if txt:
+                        reasoning_summary_parts.append(txt)
+            sample_finish = getattr(item, "status", sample_finish)
+
+        # Map Responses API status → our stop_reason vocab. The Responses
+        # API doesn't have a per-response finish_reason; use status of
+        # the last item as a proxy. Most successful turns end with
+        # status=="completed"; `incomplete` we map to max_tokens.
+        if tool_calls:
+            stop_reason = "tool_use"
+        elif sample_finish == "incomplete":
+            stop_reason = "max_tokens"
+        else:
+            stop_reason = "end_turn"
+
+        usage = getattr(resp, "usage", None)
+        # Responses uses `input_tokens`/`output_tokens` (not the
+        # Chat-style `prompt_tokens`/`completion_tokens`).
+        tokens = TokenCounts(
+            input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
+            output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=0,
+        )
+
+        # Build a Chat-shaped raw block so downstream replay/extract code
+        # paths don't have to know we used Responses. The reasoning
+        # summary lives under a non-OpenAI key (`reasoning_summary`)
+        # which `extract_reasoning_artifact` knows to look for.
+        text_content = "".join(text_parts)
+        raw_msg_dict: dict[str, Any] = {
+            "role": "assistant",
+            "content": text_content or None,
+        }
+        if tool_calls:
+            raw_msg_dict["tool_calls"] = [
+                {
+                    "id": tc.tool_use_id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.name,
+                        "arguments": json.dumps(tc.args),
+                    },
+                }
+                for tc in tool_calls
+            ]
+        if reasoning_summary_parts:
+            raw_msg_dict["reasoning_summary"] = "\n\n".join(reasoning_summary_parts)
+
+        return LLMResponse(
+            provider=self._provider_name,
+            model=getattr(resp, "model", self._model),
             stop_reason=cast("Any", stop_reason),
             tool_calls=tuple(tool_calls),
             text_content=text_content,
@@ -256,6 +600,12 @@ class OpenAICompatibleProvider(LLMProvider):
             # the surface tight.
             if self._provider_name not in {"deepseek", "kimi"}:
                 raw_msg.pop("reasoning_content", None)
+            # `reasoning_summary` is our internal annotation from the
+            # Responses API path (OpenAI reasoning models). It's read
+            # by extract_reasoning_artifact for the UI; OpenAI itself
+            # has no use for it on a replay round trip, so strip before
+            # sending the message back.
+            raw_msg.pop("reasoning_summary", None)
             _normalize_assistant_content(raw_msg)
             return raw_msg
         # Fallback: synthesize from text + tool_calls (used when raw is empty).
@@ -301,22 +651,48 @@ class OpenAICompatibleProvider(LLMProvider):
         self,
         response: LLMResponse,
     ) -> tuple[ReasoningArtifact, ...]:
-        """DeepSeek-Reasoner: surface `reasoning_content` as RAW. Other
-        OpenAI-compatible models: empty tuple.
+        """Extract a per-turn reasoning artifact for the UI:
+          - DeepSeek / Kimi thinking-mode: `reasoning_content` (raw CoT)
+            → ReasoningArtifact(kind=RAW)
+          - OpenAI reasoning models (GPT-5.x, o-series via Responses
+            API): `reasoning_summary` (an OpenAI-summarized blurb, NOT
+            raw CoT) → ReasoningArtifact(kind=SUMMARY)
+          - Everyone else: empty tuple.
         """
         if not response.raw_assistant_turn.blocks:
             return ()
         msg = response.raw_assistant_turn.blocks[0]
+        # Order matters only if a single response carries both, which
+        # shouldn't happen — but if it does we'd want both surfaced.
+        artifacts: list[ReasoningArtifact] = []
         rc = msg.get("reasoning_content")
-        if rc is None or rc == "":
-            return ()
-        return (
-            ReasoningArtifact(
-                kind=ReasoningArtifactKind.RAW,
-                content=str(rc),
-                provider_raw_index=0,
-            ),
-        )
+        if rc:
+            # Gemini's <thought> output goes through reasoning_content but
+            # is semantically a SUMMARY (Google compresses it before the
+            # client sees it), unlike DeepSeek/Kimi raw chain-of-thought.
+            # Use the per-provider flag to pick the right kind.
+            kind = (
+                ReasoningArtifactKind.SUMMARY
+                if self._enable_thinking_summary
+                else ReasoningArtifactKind.RAW
+            )
+            artifacts.append(
+                ReasoningArtifact(
+                    kind=kind,
+                    content=str(rc),
+                    provider_raw_index=0,
+                )
+            )
+        rs = msg.get("reasoning_summary")
+        if rs:
+            artifacts.append(
+                ReasoningArtifact(
+                    kind=ReasoningArtifactKind.SUMMARY,
+                    content=str(rs),
+                    provider_raw_index=0,
+                )
+            )
+        return tuple(artifacts)
 
     async def probe(self) -> ObservedCapability:
         """Send a one-token probe with seed=42 to test seed acceptance and

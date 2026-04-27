@@ -29,6 +29,10 @@ class ProviderConfig:
     OpenAI). `sdk_max_retries=None` keeps the AsyncOpenAI SDK default of 2;
     set higher for providers known to throw 5xx during capacity spikes
     (Gemini AI Studio is the canonical example — see Gemini entry below).
+    `enable_thinking_summary=True` opts the provider into the Gemini-style
+    `extra_body.google.thinking_config.include_thoughts` request — the
+    response then contains `<thought>...</thought>` blocks the provider
+    parses out as a SUMMARY artifact. Only Gemini supports this today.
     Per-model temperature overrides live in `MODEL_OVERRIDES`, not here —
     they're a model-specific quirk, not a provider-wide one.
     """
@@ -38,6 +42,7 @@ class ProviderConfig:
     base_url: str | None = None
     is_anthropic: bool = False
     sdk_max_retries: int | None = None
+    enable_thinking_summary: bool = False
 
 
 # Per-model overrides keyed by "provider:model". Today this is only used
@@ -106,6 +111,14 @@ PROVIDERS: dict[str, ProviderConfig] = {
         # tier is more stable but needs GCP setup outside this repo;
         # this is the cheapest mitigation that helps. (codex 2026-04-27.)
         sdk_max_retries=5,
+        # Surface Gemini's internal thinking. The OpenAI-compat shim
+        # accepts `extra_body.google.thinking_config.include_thoughts=True`
+        # and inlines the model's reasoning summary into the response
+        # `content` wrapped in <thought>...</thought>. The provider
+        # extracts those blocks into a SUMMARY artifact so the UI panel
+        # has something to show — without this Gemini's reasoning panel
+        # is completely empty (verified 2026-04-27 smoke).
+        enable_thinking_summary=True,
     ),
 }
 
@@ -141,6 +154,8 @@ def make_provider(provider_tag: str, model: str, api_key: str) -> Any:
         kwargs["base_url"] = cfg.base_url
     if cfg.sdk_max_retries is not None:
         kwargs["sdk_max_retries"] = cfg.sdk_max_retries
+    if cfg.enable_thinking_summary:
+        kwargs["enable_thinking_summary"] = True
     return OpenAICompatibleProvider(**kwargs)
 
 

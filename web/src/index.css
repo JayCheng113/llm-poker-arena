@@ -15,3 +15,50 @@ code, pre, [class*='font-mono'] {
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-variant-ligatures: common-ligatures;
 }
+
+/* Markdown-rendered LLM reasoning. Tailwind's @typography plugin would
+   give us this for free but adds ~30 KB of CSS we don't otherwise need
+   — hand-rolling the small set of tags marked actually emits. */
+.prose-reasoning p           { margin-block: 0.4em; }
+.prose-reasoning p:first-child { margin-top: 0; }
+.prose-reasoning p:last-child  { margin-bottom: 0; }
+.prose-reasoning ul, .prose-reasoning ol {
+  margin-block: 0.4em;
+  padding-left: 1.25em;
+}
+.prose-reasoning ul { list-style: disc; }
+.prose-reasoning ol { list-style: decimal; }
+.prose-reasoning li { margin-block: 0.15em; }
+.prose-reasoning strong { color: #1e293b; font-weight: 600; }   /* slate-800 */
+.prose-reasoning em     { font-style: italic; }
+.prose-reasoning code   {
+  background: #eef2ff;        /* indigo-50 */
+  color:      #4338ca;        /* indigo-700 */
+  padding: 0 0.25em;
+  border-radius: 3px;
+  font-size: 0.92em;
+}
+.prose-reasoning pre {
+  background: #f1f5f9;        /* slate-100 */
+  padding: 0.5em 0.75em;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.85em;
+  margin-block: 0.5em;
+}
+.prose-reasoning pre code { background: transparent; padding: 0; color: inherit; }
+.prose-reasoning h1, .prose-reasoning h2, .prose-reasoning h3, .prose-reasoning h4 {
+  font-weight: 600;
+  color: #1e293b;
+  margin-top: 0.6em;
+  margin-bottom: 0.25em;
+  /* Same size as body so a model that opens with "## Decision" doesn't
+     blow up the panel layout — but stay bold so it reads as a header. */
+  font-size: inherit;
+}
+.prose-reasoning blockquote {
+  border-left: 2px solid #cbd5e1;  /* slate-300 */
+  padding-left: 0.75em;
+  color: #475569;                  /* slate-600 */
+  margin-block: 0.4em;
+}

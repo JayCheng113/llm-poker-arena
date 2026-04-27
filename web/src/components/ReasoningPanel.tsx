@@ -4,6 +4,7 @@ import {
 import { ProviderBadge } from './ProviderBadge'
 import { shortAgentLabel } from './agentLabel'
 import { formatActionLabel } from '../utils/formatAction'
+import { Markdown } from '../utils/renderMarkdown'
 import type { IterationRecord, ActionType, AgentViewSnapshot } from '../types'
 
 interface Props {
@@ -168,6 +169,16 @@ function IterationItem({
   const showHeaderRow =
     showDebugBadges && (kindBadge || (iter.reasoning_artifacts && iter.reasoning_artifacts.length > 0))
 
+  // Some artifact kinds carry actual readable text — render them inline
+  // (NOT gated on showDebugBadges) so the user can see e.g. an OpenAI
+  // reasoning summary, a DeepSeek/Kimi raw chain-of-thought, or an
+  // Anthropic thinking block. Opaque kinds (encrypted/redacted/
+  // unavailable) stay as dev-only tags since their content is unusable.
+  const READABLE_KINDS = new Set(['raw', 'summary', 'thinking_block'])
+  const readableArtifacts = (iter.reasoning_artifacts ?? []).filter(
+    (a) => READABLE_KINDS.has(a.kind) && a.content
+  )
+
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
@@ -186,10 +197,30 @@ function IterationItem({
         )}
       </div>
 
-      {iter.text_content && (
-        <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-          {iter.text_content}
+      {readableArtifacts.map((a, i) => (
+        <div
+          key={i}
+          data-reasoning-artifact={a.kind}
+          className="rounded-md border-l-2 border-indigo-200 bg-indigo-50/40 pl-3 py-1.5"
+        >
+          <div className="text-[10px] uppercase tracking-wider text-indigo-500 font-semibold mb-1">
+            reasoning
+            {showDebugBadges && a.kind !== 'raw' && (
+              <span className="ml-1 text-slate-400 normal-case">({a.kind})</span>
+            )}
+          </div>
+          <Markdown
+            text={a.content ?? ''}
+            className="prose-reasoning text-sm text-slate-600 leading-relaxed"
+          />
         </div>
+      ))}
+
+      {iter.text_content && (
+        <Markdown
+          text={iter.text_content}
+          className="prose-reasoning text-sm text-slate-700 leading-relaxed"
+        />
       )}
 
       {iter.tool_call && (

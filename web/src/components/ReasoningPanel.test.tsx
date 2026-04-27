@@ -151,4 +151,58 @@ describe('ReasoningPanel', () => {
     expect(getByText(/thinking_block/)).toBeDefined()
     expect(getByText(/redacted/)).toBeDefined()
   })
+
+  it('renders readable reasoning content (raw / summary / thinking_block) in normal mode', () => {
+    // Critical for GPT-5 reasoning summary visibility — the panel used
+    // to gate ALL artifact display on dev mode + only show the kind tag,
+    // never the content. Smoke test caught it; regression test for
+    // both summary (OpenAI Responses API) and raw (DeepSeek/Kimi).
+    const iters = [
+      _iter({
+        text_content: '',  // GPT-5 path: rationale_required=False ⇒ no prose
+        reasoning_artifacts: [
+          { kind: 'summary', content: 'Weighing pot odds vs implied odds with 3-2 in BB.' },
+        ],
+      }),
+      _iter({
+        text_content: '',
+        reasoning_artifacts: [
+          { kind: 'raw', content: 'Internal CoT from DeepSeek thinking mode.' },
+        ],
+      }),
+    ]
+    const { getByText, container } = render(
+      <ReasoningPanel actor={2} positionLabel="BB" iterations={iters}
+                      commitAction={{ type: 'fold' }} />
+    )
+    // Content visible without dev mode:
+    expect(getByText(/Weighing pot odds vs implied odds/)).toBeDefined()
+    expect(getByText(/Internal CoT from DeepSeek/)).toBeDefined()
+    // Header labels for the two readable kinds:
+    expect(container.querySelector('[data-reasoning-artifact="summary"]')).not.toBeNull()
+    expect(container.querySelector('[data-reasoning-artifact="raw"]')).not.toBeNull()
+  })
+
+  it('hides opaque artifact kinds (encrypted / redacted / unavailable) from the inline view', () => {
+    // These kinds carry no usable content for the user. They still
+    // appear as dev-mode tags (covered by the previous test) but should
+    // never produce an inline content block.
+    const iters = [
+      _iter({
+        text_content: '',
+        reasoning_artifacts: [
+          { kind: 'encrypted', content: '[opaque blob]' },
+          { kind: 'redacted', content: '[redacted]' },
+          { kind: 'unavailable' },
+        ],
+      }),
+    ]
+    const { container } = render(
+      <ReasoningPanel actor={3} positionLabel="UTG" iterations={iters}
+                      commitAction={{ type: 'fold' }} />
+    )
+    expect(container.querySelector('[data-reasoning-artifact="encrypted"]')).toBeNull()
+    expect(container.querySelector('[data-reasoning-artifact="redacted"]')).toBeNull()
+    expect(container.querySelector('[data-reasoning-artifact="unavailable"]')).toBeNull()
+  })
 })
