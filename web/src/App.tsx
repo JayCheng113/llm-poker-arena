@@ -31,6 +31,11 @@ function readPointerFromUrl() {
     sessionId: params.get('session'),
     handId: Number(params.get('hand') ?? '0'),
     turnIdx: Number(params.get('turn') ?? '0'),
+    // Default = god-view (cards visible). ?live=1 opts into the
+    // spectator's-camera mode where cards stay face-down until showdown.
+    liveMode: params.get('live') === '1',
+    // ?dev=1 enables debug-only surfaces (raw JSON viewer, retry/error
+    // badges) — independent of card visibility.
     devMode: params.get('dev') === '1',
   }
 }
@@ -39,10 +44,12 @@ function useUrlPointer(): {
   sessionId: string | null
   handId: number
   turnIdx: number
+  liveMode: boolean
   devMode: boolean
   setSessionId: (s: string) => void
   setHandId: (h: number) => void
   setTurnIdx: (t: number) => void
+  toggleLive: () => void
   toggleDev: () => void
 } {
   const [pointer, setPointer] = useState(readPointerFromUrl)
@@ -53,11 +60,10 @@ function useUrlPointer(): {
     else params.delete('session')
     params.set('hand', String(pointer.handId))
     params.set('turn', String(pointer.turnIdx))
-    if (pointer.devMode) {
-      params.set('dev', '1')
-    } else {
-      params.delete('dev')
-    }
+    if (pointer.liveMode) params.set('live', '1')
+    else params.delete('live')
+    if (pointer.devMode) params.set('dev', '1')
+    else params.delete('dev')
     const newUrl = `${window.location.pathname}?${params.toString()}`
     window.history.replaceState(null, '', newUrl)
   }, [pointer])
@@ -82,6 +88,10 @@ function useUrlPointer(): {
     (t: number) => setPointer((p) => ({ ...p, turnIdx: t })),
     [],
   )
+  const toggleLive = useCallback(
+    () => setPointer((p) => ({ ...p, liveMode: !p.liveMode })),
+    [],
+  )
   const toggleDev = useCallback(
     () => setPointer((p) => ({ ...p, devMode: !p.devMode })),
     [],
@@ -91,8 +101,9 @@ function useUrlPointer(): {
     sessionId: pointer.sessionId,
     handId: pointer.handId,
     turnIdx: pointer.turnIdx,
+    liveMode: pointer.liveMode,
     devMode: pointer.devMode,
-    setSessionId, setHandId, setTurnIdx, toggleDev,
+    setSessionId, setHandId, setTurnIdx, toggleLive, toggleDev,
   }
 }
 
@@ -271,7 +282,7 @@ function App() {
   const handEnded = safeTurnIdx >= turnCount - 1
   const revealed = cardRevelation(
     session, ptr.handId,
-    ptr.devMode ? 'god-view' : 'live',
+    ptr.liveMode ? 'live' : 'god-view',
     { handEnded },
   )
 
@@ -342,6 +353,8 @@ function App() {
         onTogglePlay={togglePlay}
         playbackSpeed={playbackSpeed}
         onChangeSpeed={setPlaybackSpeed}
+        liveMode={ptr.liveMode}
+        onToggleLive={ptr.toggleLive}
         devMode={ptr.devMode}
         onToggleDev={ptr.toggleDev}
         onOpenSummary={() => setShowSummary(true)}

@@ -10,6 +10,8 @@ interface Props {
   onTogglePlay?: () => void
   playbackSpeed?: number
   onChangeSpeed?: (s: number) => void
+  liveMode?: boolean
+  onToggleLive?: () => void
   devMode?: boolean
   onToggleDev?: () => void
   onOpenSummary?: () => void
@@ -24,6 +26,7 @@ interface Props {
 export function HandSelector({
   handIds, currentHandId, onSelect, isPlaying, onTogglePlay,
   playbackSpeed, onChangeSpeed,
+  liveMode, onToggleLive,
   devMode, onToggleDev, onOpenSummary,
   manifest, currentSessionId, onSelectSession,
   customLoaded, onLoadCustom, onClearCustom,
@@ -81,6 +84,24 @@ export function HandSelector({
       <span className="text-slate-400 text-xs hidden md:inline">
         ←/→ turn · ↑/↓ hand · space play
       </span>
+      {onToggleLive && (
+        <button
+          onClick={onToggleLive}
+          aria-label={liveMode ? 'show all cards (god-view)' : 'hide cards (live spectator mode)'}
+          title={
+            liveMode
+              ? 'live spectator mode: cards face-down until showdown — click to reveal all'
+              : 'god-view (default): all hole cards visible — click to switch to spectator mode'
+          }
+          className={`px-2 py-1 rounded text-xs font-medium ${
+            liveMode
+              ? 'bg-slate-600 text-slate-100 hover:bg-slate-500'
+              : 'bg-slate-200 text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          {liveMode ? 'cards: hidden' : 'cards: shown'}
+        </button>
+      )}
       {onOpenSummary && (
         <button
           onClick={onOpenSummary}
