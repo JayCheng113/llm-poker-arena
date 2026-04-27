@@ -1,9 +1,9 @@
 {
   "sessions": [
     {
-      "id": "demo-1",
-      "label": "5 RuleBased + claude-haiku-4-5 (6 hands)",
-      "hands": 6
+      "id": "demo-tournament",
+      "label": "2 RuleBased + claude-haiku-4-5 + deepseek-chat + gpt-5.4-mini + qwen3.6-plus (30 hands)",
+      "hands": 30
     },
     {
       "id": "demo-6llm-smoke",
@@ -11,14 +11,14 @@
       "hands": 6
     },
     {
+      "id": "demo-1",
+      "label": "5 RuleBased + claude-haiku-4-5 (6 hands)",
+      "hands": 6
+    },
+    {
       "id": "demo-bots",
       "label": "6 RuleBased (60 hands)",
       "hands": 60
-    },
-    {
-      "id": "demo-tournament",
-      "label": "2 RuleBased + claude-haiku-4-5 + deepseek-chat + gpt-5.4-mini + qwen3.6-plus (30 hands)",
-      "hands": 30
     }
   ]
 }

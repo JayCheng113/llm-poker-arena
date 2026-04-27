@@ -10,7 +10,6 @@ interface SeatProps {
   status: SeatStatus
   holeCards: 'face-down' | [CardStr, CardStr]
   lastAction?: string
-  lastActionAmount?: number
   agentId?: string
 }
 

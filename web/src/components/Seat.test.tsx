@@ -32,12 +32,14 @@ describe('Seat', () => {
   })
 
   it('renders lastAction text in a badge', () => {
+    // App.tsx pre-formats raw "raise_to" → "Raise to 900" before passing
+    // it as a string prop, so the component itself just renders verbatim.
     const { container, getByText } = render(
       <Seat seatIdx={3} positionLabel="UTG" stack={9100}
             status="in_hand" holeCards="face-down"
-            lastAction="raise_to 900" lastActionAmount={900} />
+            lastAction="Raise to 900" />
     )
-    expect(getByText('raise_to 900')).toBeDefined()
+    expect(getByText('Raise to 900')).toBeDefined()
     expect(container.textContent).toContain('900')
   })
 

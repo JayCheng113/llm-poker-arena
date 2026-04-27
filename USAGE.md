@@ -1,9 +1,9 @@
 # Usage Guide
 
 A multi-agent platform for No-Limit Texas Hold'em 6-max. Mix human players,
-rule-based bots, and LLM agents (Anthropic / OpenAI / DeepSeek / Qwen / any
-OpenAI-compatible endpoint) in the same session; replay any hand from the
-3-layer JSONL artifacts in your browser.
+rule-based bots, and LLM agents (Anthropic / OpenAI / DeepSeek / Qwen /
+Kimi / Gemini / Grok / any OpenAI-compatible endpoint) in the same
+session; replay any hand from the 3-layer JSONL artifacts in your browser.
 
 For the project pitch, screenshots, and live demos, see [README.md](README.md).
 This file is the operational reference.
@@ -43,8 +43,7 @@ poker-play \
 
 ### 4-LLM tournament demo
 
-The script bundled with the web UI runs the full lineup that powers the
-[live demo](https://jaycheng113.github.io/llm-poker-arena/?session=demo-tournament):
+The 4-LLM mixed lineup (2 RuleBased + 4 LLM):
 
 ```bash
 # all four keys required
@@ -54,11 +53,37 @@ export OPENAI_API_KEY=sk-...
 export QWEN_API_KEY=sk-...
 
 .venv/bin/python web/scripts/generate-demo-tournament.py --hands 30
-# → runs/demo-tournament/ + web/public/data/demo-tournament/
+# → runs/demo-tournament/ + web/public/data/demo-tournament/ + manifest auto-rebuilt
 ```
 
-Cost: ~$0.55 for 30 hands at the prices in effect April 2026 (Haiku $0.24 +
-DeepSeek $0.06 + GPT-5.4-mini $0.13 + Qwen 3.6-plus $0.12).
+Cost: ~$0.55 for 30 hands at April 2026 prices (Haiku $0.24 + DeepSeek
+$0.06 + GPT-5.4-mini $0.13 + Qwen 3.6-plus $0.12).
+
+### 6-LLM showdown demo
+
+Headline lineup — every seat is a different provider:
+
+```bash
+# all six keys required
+export ANTHROPIC_API_KEY=sk-ant-...
+export DEEPSEEK_API_KEY=sk-...
+export OPENAI_API_KEY=sk-...
+export QWEN_API_KEY=sk-...
+export KIMI_API_KEY=sk-...
+export GEMINI_API_KEY=AIza...
+
+.venv/bin/python web/scripts/generate-demo-6llm.py --hands 30
+# → runs/demo-6llm/ + web/public/data/demo-6llm/ + manifest auto-rebuilt
+```
+
+Seats: Claude Haiku 4.5 / deepseek-chat / gpt-5.4-mini / qwen3.6-plus /
+kimi-k2.5 / gemini-2.5-flash. Cost: ~$0.80–$1.60 for 30 hands at April
+2026 prices (token cap is set to 2M = ~$2 ceiling). The exact USD
+breakdown lands in `meta.estimated_cost_breakdown` after the run.
+
+Both generators refuse to overwrite an existing run by default — pass
+`--force` to clobber it (useful when iterating on a test, dangerous for
+finished tournaments). Use `--hands 6` for a smoke test (one rotation).
 
 ## Agent types
 
@@ -137,19 +162,25 @@ npm run build        # static build → dist/
 
 ### Adding a new session to the bundled site
 
+The bundled `web/scripts/generate-demo-*.py` generators handle all three
+steps (run, copy to `web/public/data/`, rebuild manifest) automatically:
+
 ```bash
-# 1. produce the session (any way you like — CLI, script, etc.)
 .venv/bin/python web/scripts/generate-demo-bots.py     # 60-hand all-bot baseline
-
-# 2. copy the runs/<id>/ directory into web/public/data/
-cp -r runs/demo-bots web/public/data/
-
-# 3. regenerate the manifest
-node web/scripts/bundle-demos.mjs                      # writes web/public/data/manifest.json
-
-# 4. dev / build
 cd web && npm run dev
 ```
+
+For a session you produced by hand (e.g. via `poker-play`):
+
+```bash
+cp -r runs/<your-id> web/public/data/
+node web/scripts/bundle-demos.mjs                      # writes web/public/data/manifest.json
+```
+
+The manifest sorts by a curated marquee order (`demo-6llm` first, then
+`demo-tournament`, then `demo-6llm-smoke`, then alphabetical for
+anything else) — adjust `MARQUEE_ORDER` in `bundle-demos.mjs` if you
+want a different default landing demo.
 
 ### GitHub Pages deploy
 
@@ -204,6 +235,10 @@ Two endpoints — pick by your account region:
   the `.ai` console
 - **China** (`api.moonshot.cn/v1`) — for keys from the `.cn` console.
   Wrong endpoint → 401 "Invalid Authentication" even on a valid key.
+
+The shipped `registry.py` defaults to `.cn` (matches the most common
+key in this codebase). Edit `PROVIDERS["kimi"].base_url` locally if
+your key is `.ai`.
 
 Current models: `kimi-k2.6` (256K context flagship), `kimi-k2.5`
 (stable), `kimi-k2-thinking` (reasoning variant). Legacy `kimi-k2`
@@ -261,7 +296,9 @@ Quirks:
 session dirs include microseconds. Re-run; should auto-resolve.
 
 **`API key not set` error** — confirm the env var name matches the provider:
-`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` / `QWEN_API_KEY`.
+`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` / `QWEN_API_KEY` /
+`KIMI_API_KEY` / `GEMINI_API_KEY` / `GROK_API_KEY`. The canonical mapping
+lives in `src/llm_poker_arena/agents/llm/providers/registry.py`.
 
 **Real LLM session takes minutes** — that's normal. Each turn = 1 API call
 (~1-3s for Haiku, longer for Opus / Reasoner / Qwen-plus).

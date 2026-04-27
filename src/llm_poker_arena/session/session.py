@@ -180,6 +180,16 @@ class Session:
         # depress rates by the censor count.
         self._hud_hands_counted: int = 0
 
+        # Pre-flight 1: track censored hand IDs as they happen so meta.json
+        # can publish accurate censored_hands_count + censored_hand_ids
+        # (previously hardcoded 0 / [] in build_session_meta — invisible to
+        # post-hoc analysis). Pre-flight 7: collect per-iteration latency
+        # samples for p50/p95 summary.
+        self._censored_hand_ids: list[int] = []
+        self._latency_samples_per_seat: dict[int, list[int]] = {
+            i: [] for i in range(n)
+        }
+
     async def run(self) -> None:
         started_at_iso = _now_iso()
         started_at_monotonic = time.monotonic()
@@ -236,6 +246,12 @@ class Session:
                 total_tokens_per_seat=self._total_tokens_per_seat,
                 hud_per_seat=self._hud_counters,
                 hud_hands_counted=self._hud_hands_counted,
+                # Pre-flight 1+7+8: surface censored ids, latency samples,
+                # and agent config snapshot so meta is the single source of
+                # truth for a run.
+                censored_hand_ids=self._censored_hand_ids,
+                latency_samples_per_seat=self._latency_samples_per_seat,
+                agents=self._agents,
                 stop_reason=stop_reason,
             )
             (self._output_dir / "meta.json").write_text(json.dumps(meta, sort_keys=True, indent=2))
@@ -414,6 +430,9 @@ class Session:
             for ir in decision.iterations:
                 if ir.tool_result is not None:
                     tu["total_utility_calls"] += 1
+                # Pre-flight 7: collect per-iteration wall time for the
+                # session-level latency summary (p50/p95/max per seat).
+                self._latency_samples_per_seat[actor].append(int(ir.wall_time_ms))
 
             tt = self._total_tokens_per_seat[actor]
             tt["input_tokens"] += decision.total_tokens.input_tokens
@@ -433,6 +452,8 @@ class Session:
                     timestamp=_now_iso(),
                 )
                 self._censor_writer.write(censor_rec.model_dump(mode="json"))
+                # Pre-flight 1: surface in meta.
+                self._censored_hand_ids.append(hand_id)
                 return
             chosen = decision.final_action
             fallback = decision.default_action_fallback

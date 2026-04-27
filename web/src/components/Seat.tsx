@@ -9,15 +9,16 @@ interface Props {
   stack: number
   status: SeatStatus
   holeCards: 'face-down' | [CardStr, CardStr]
+  // lastAction is the formatted label ("Raise to 900", "Fold", "All-in").
+  // App.tsx pre-formats via formatActionLabel before passing it down.
   lastAction?: string
-  lastActionAmount?: number
   isActive?: boolean
   agentId?: string  // meta.seat_assignment[seatIdx], e.g. "anthropic:claude-haiku-4-5"
 }
 
 export function Seat({
   seatIdx, positionLabel, stack, status, holeCards,
-  lastAction, lastActionAmount, isActive, agentId,
+  lastAction, isActive, agentId,
 }: Props) {
   const folded = status === 'folded'
   const allIn = status === 'all_in'
@@ -90,9 +91,6 @@ export function Seat({
               title={lastAction}
             >
               {lastAction}
-              {lastActionAmount !== undefined && lastActionAmount > 0
-                ? ''
-                : ''}
             </span>
           ) : null}
         </div>

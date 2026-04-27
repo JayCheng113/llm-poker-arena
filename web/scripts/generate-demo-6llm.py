@@ -25,6 +25,7 @@ import argparse
 import asyncio
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -42,15 +43,25 @@ if _env_file.exists():
         os.environ[k.strip()] = v.strip()
 
 from llm_poker_arena.agents.llm.llm_agent import LLMAgent
-from llm_poker_arena.agents.llm.providers.anthropic_provider import AnthropicProvider
-from llm_poker_arena.agents.llm.providers.openai_compatible import OpenAICompatibleProvider
+from llm_poker_arena.agents.llm.providers.registry import (
+    PROVIDERS,
+    make_provider,
+    resolved_temperature,
+)
 from llm_poker_arena.engine.config import SessionConfig
 from llm_poker_arena.session.session import Session
 
-REQUIRED_ENV = (
-    "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY",
-    "QWEN_API_KEY", "KIMI_API_KEY", "GEMINI_API_KEY",
+# Six providers, one seat each — sourced from the registry so adding a
+# provider there auto-extends the env-key check.
+SEAT_LINEUP: tuple[tuple[str, str], ...] = (
+    ("anthropic", "claude-haiku-4-5"),       # seat 0
+    ("deepseek", "deepseek-chat"),           # seat 1
+    ("openai", "gpt-5.4-mini"),              # seat 2
+    ("qwen", "qwen3.6-plus"),                # seat 3
+    ("kimi", "kimi-k2.5"),                   # seat 4
+    ("gemini", "gemini-2.5-flash"),          # seat 5
 )
+REQUIRED_ENV = tuple(PROVIDERS[tag].env_var for tag, _ in SEAT_LINEUP)
 
 
 def main() -> None:
@@ -59,6 +70,12 @@ def main() -> None:
                         help="hands to play (must be multiple of 6; default 30)")
     parser.add_argument("--out", default="demo-6llm",
                         help="session id / output dir name")
+    parser.add_argument(
+        "--force", action="store_true",
+        help="overwrite existing runs/<out>/ and web/public/data/<out>/. "
+             "Without this flag the script aborts if either dir exists, "
+             "so a $1+ tournament run is not silently nuked.",
+    )
     args = parser.parse_args()
 
     if args.hands % 6 != 0:
@@ -67,6 +84,18 @@ def main() -> None:
     for k in REQUIRED_ENV:
         if not os.environ.get(k):
             sys.exit(f"{k} not set; check .env")
+
+    # Pre-flight 4: refuse to clobber an existing run unless --force.
+    # Why: the prior behaviour was a silent shutil.rmtree before each run,
+    # which once cost a 30-hand 6-LLM tournament to a typo'd --out arg.
+    session_dir = _REPO / "runs" / args.out
+    web_target = _REPO / "web" / "public" / "data" / args.out
+    for dir_to_check in (session_dir, web_target):
+        if dir_to_check.exists() and not args.force:
+            sys.exit(
+                f"refusing to overwrite existing {dir_to_check}\n"
+                f"pass --force to delete it, or pick a new --out name."
+            )
 
     cfg = SessionConfig(
         num_players=6, starting_stack=10_000, sb=50, bb=100,
@@ -79,77 +108,32 @@ def main() -> None:
         max_total_tokens=2_000_000,  # $2 budget cap (6 LLMs)
     )
 
-    claude = LLMAgent(
-        provider=AnthropicProvider(
-            model="claude-haiku-4-5",
-            api_key=os.environ["ANTHROPIC_API_KEY"],
-        ),
-        model="claude-haiku-4-5",
-        temperature=0.7, total_turn_timeout_sec=60.0,
-    )
-    deepseek = LLMAgent(
-        provider=OpenAICompatibleProvider(
-            provider_name_value="deepseek",
-            model="deepseek-chat",
-            api_key=os.environ["DEEPSEEK_API_KEY"],
-            base_url="https://api.deepseek.com/v1",
-        ),
-        model="deepseek-chat",
-        temperature=0.7, total_turn_timeout_sec=60.0,
-    )
-    gpt = LLMAgent(
-        provider=OpenAICompatibleProvider(
-            provider_name_value="openai",
-            model="gpt-5.4-mini",
-            api_key=os.environ["OPENAI_API_KEY"],
-        ),
-        model="gpt-5.4-mini",
-        temperature=0.7, total_turn_timeout_sec=60.0,
-    )
-    qwen = LLMAgent(
-        provider=OpenAICompatibleProvider(
-            provider_name_value="qwen",
-            model="qwen3.6-plus",
-            api_key=os.environ["QWEN_API_KEY"],
-            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        ),
-        model="qwen3.6-plus",
-        temperature=0.7, total_turn_timeout_sec=60.0,
-    )
-    kimi = LLMAgent(
-        provider=OpenAICompatibleProvider(
-            provider_name_value="kimi",
-            model="kimi-k2.5",
-            api_key=os.environ["KIMI_API_KEY"],
-            # User's key is China-region — moonshot.cn (not the .ai
-            # international endpoint, which 401s on this key)
-            base_url="https://api.moonshot.cn/v1",
-        ),
-        model="kimi-k2.5",
-        # Kimi K2.5 enforces temperature=1.0 (any other value 400s with
-        # "invalid temperature: only 1 is allowed for this model").
-        # Empirically observed during the first 6-LLM smoke — all 6
-        # hands censored on seat 4 until this was fixed.
-        temperature=1.0,
-        # Kimi is noticeably slower than the other providers (China-region
-        # latency + verbose internal reasoning). Default 60s timeout was
-        # exceeded on 2/6 smoke hands — bump to 120s.
-        total_turn_timeout_sec=120.0,
-    )
-    gemini = LLMAgent(
-        provider=OpenAICompatibleProvider(
-            provider_name_value="gemini",
-            model="gemini-2.5-flash",
-            api_key=os.environ["GEMINI_API_KEY"],
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-        ),
-        model="gemini-2.5-flash",
-        temperature=0.7, total_turn_timeout_sec=60.0,
-    )
+    # Pre-flight 2: timeout geometry. With MAX_API_RETRY=2 (one transient
+    # retry on top of the original call) and per_iteration_timeout=60s, the
+    # total_turn_timeout must be ≥ 2*60 + buffer ≈ 180s — otherwise the
+    # very first retry exceeds the cap and we get a false turn_timeout.
+    # 180s is the LLMAgent default; we set it explicitly here for clarity.
+    # Kimi gets 240s because it's observably slower (China-region latency
+    # + verbose internal reasoning).
+    NORMAL_TIMEOUT = 180.0
+    SLOW_TIMEOUT = 240.0
+    SLOW_PROVIDERS = {"kimi"}  # observed to need extra headroom
 
-    agents = [claude, deepseek, gpt, qwen, kimi, gemini]
+    agents = []
+    for provider_tag, model in SEAT_LINEUP:
+        api_key = os.environ[PROVIDERS[provider_tag].env_var]
+        timeout = SLOW_TIMEOUT if provider_tag in SLOW_PROVIDERS else NORMAL_TIMEOUT
+        agents.append(
+            LLMAgent(
+                provider=make_provider(provider_tag, model, api_key),
+                model=model,
+                # resolved_temperature pins Kimi to 1.0; everything else
+                # passes the requested 0.7 through unchanged.
+                temperature=resolved_temperature(provider_tag, 0.7),
+                total_turn_timeout_sec=timeout,
+            )
+        )
 
-    session_dir = _REPO / "runs" / args.out
     if session_dir.exists():
         shutil.rmtree(session_dir)
 
@@ -157,11 +141,22 @@ def main() -> None:
                    session_id=args.out)
     asyncio.run(sess.run())
 
-    web_target = _REPO / "web" / "public" / "data" / args.out
     if web_target.exists():
         shutil.rmtree(web_target)
     web_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(session_dir, web_target)
+
+    # Pre-flight 12: auto-rebuild the web manifest so the new session is
+    # immediately picked up by the picker without a separate bundle step.
+    # No-op (with a warning) if node isn't installed — the artifacts are
+    # already on disk and the user can run `node web/scripts/bundle-demos.mjs`
+    # later by hand.
+    bundle_script = _REPO / "web" / "scripts" / "bundle-demos.mjs"
+    try:
+        subprocess.run(["node", str(bundle_script)], check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        print(f"warning: manifest rebuild skipped ({e}); "
+              f"run `node {bundle_script}` manually.", file=sys.stderr)
 
     print(f"6-LLM session generated:")
     print(f"  runs/{args.out}/")

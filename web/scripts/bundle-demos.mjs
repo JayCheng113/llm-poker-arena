@@ -29,6 +29,26 @@ function lineupLabel(seatAssignment) {
     .join(' + ')
 }
 
+// Marquee order — ids in this list float to the top in this exact order.
+// Anything else falls back to alphabetical at the bottom. The picker
+// shows whatever is first (App.tsx's `manifest.sessions[0]?.id`), so
+// putting the headline 6-LLM tournament first makes it the default
+// landing demo without forcing the user to re-pick on every page load.
+const MARQUEE_ORDER = [
+  'demo-6llm',         // the headline 6-provider tournament
+  'demo-tournament',   // 4-LLM mixed lineup
+  'demo-6llm-smoke',   // smoke variant of the 6-LLM tournament
+  'demo-1',            // single-LLM walk-through
+  'demo-bots',         // all-bot baseline
+]
+
+function priority(id) {
+  const i = MARQUEE_ORDER.indexOf(id)
+  // unknown ids sort after the marquee block (Number.MAX_SAFE_INTEGER
+  // keeps the comparator stable even if the list grows large).
+  return i === -1 ? Number.MAX_SAFE_INTEGER : i
+}
+
 function main() {
   const entries = readdirSync(DATA_ROOT)
     .filter((name) => {
@@ -50,7 +70,12 @@ function main() {
       }
     })
     .filter(Boolean)
-    .sort((a, b) => a.id.localeCompare(b.id))
+    .sort((a, b) => {
+      const pa = priority(a.id)
+      const pb = priority(b.id)
+      if (pa !== pb) return pa - pb
+      return a.id.localeCompare(b.id)
+    })
 
   const manifest = { sessions: entries }
   writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n', 'utf-8')

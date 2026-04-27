@@ -52,8 +52,8 @@ describe('ReasoningPanel', () => {
     const { container } = render(
       <ReasoningPanel actor={3} positionLabel="UTG" iterations={[]} commitAction={commit} />
     )
-    // commit row now: lucide icon + action type text + formatted amount
-    expect(container.textContent).toMatch(/raise_to/)
+    // commit row now: lucide icon + formatted action label ("Raise to 900")
+    expect(container.textContent).toMatch(/Raise to/)
     expect(container.textContent).toMatch(/900/)
   })
 

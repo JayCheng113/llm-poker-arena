@@ -3,6 +3,7 @@ import {
 } from 'lucide-react'
 import { ProviderBadge } from './ProviderBadge'
 import { shortAgentLabel } from './agentLabel'
+import { formatActionLabel } from '../utils/formatAction'
 import type { IterationRecord, ActionType, AgentViewSnapshot } from '../types'
 
 interface Props {
@@ -89,12 +90,9 @@ function CommitAction({ action }: { action: { type: ActionType; amount?: number 
   return (
     <div className={`flex items-center gap-2 ${cfg.text}`}>
       <Icon className="w-5 h-5" strokeWidth={2.5} />
-      <span className="text-base font-semibold">{action.type}</span>
-      {action.amount !== undefined && action.amount > 0 && (
-        <span className="text-base font-mono tabular-nums font-semibold">
-          {action.amount.toLocaleString()}
-        </span>
-      )}
+      <span className="text-base font-semibold">
+        {formatActionLabel(action)}
+      </span>
     </div>
   )
 }

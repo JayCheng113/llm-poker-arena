@@ -116,11 +116,18 @@ poker-play \
 ### Generate the multi-LLM tournament demo locally
 
 ```bash
-# requires all 4 keys: ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY, QWEN_API_KEY
+# 4-LLM mixed lineup: requires ANTHROPIC_API_KEY, DEEPSEEK_API_KEY,
+# OPENAI_API_KEY, QWEN_API_KEY
 .venv/bin/python web/scripts/generate-demo-tournament.py --hands 30
+
+# 6-LLM showdown: every seat is a different provider. Requires the
+# four above plus KIMI_API_KEY and GEMINI_API_KEY.
+.venv/bin/python web/scripts/generate-demo-6llm.py --hands 30
 ```
 
-Output is bundled into `web/public/data/demo-tournament/` and auto-discovered by the manifest builder.
+Output is bundled into `web/public/data/<id>/` and the manifest is
+rebuilt automatically. Generators refuse to overwrite an existing run
+without `--force`. See `.env.example` for the canonical key list.
 
 ### Web UI — run locally
 

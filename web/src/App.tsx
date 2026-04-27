@@ -19,10 +19,11 @@ const SessionSummary = lazy(() =>
   import('./components/SessionSummary').then((m) => ({ default: m.SessionSummary })))
 import { useKeyboardNav } from './hooks/useKeyboardNav'
 import { useAutoPlay } from './hooks/useAutoPlay'
+import { formatActionLabel as _formatAction } from './utils/formatAction'
 
 const AUTO_PLAY_INTERVAL_MS = 1500
 import type {
-  ParsedSession, SessionManifest, SeatStatus, CardStr, ActionType,
+  ParsedSession, SessionManifest, SeatStatus, CardStr,
 } from './types'
 
 const DATA_ROOT = `${import.meta.env.BASE_URL}data`
@@ -127,10 +128,6 @@ function useWindowWidth(): number {
   return w
 }
 
-function _formatAction(action: { type: ActionType; amount?: number }): string {
-  if (action.amount !== undefined) return `${action.type} ${action.amount}`
-  return action.type
-}
 
 function App() {
   const [manifest, setManifest] = useState<SessionManifest | null>(null)
@@ -337,8 +334,11 @@ function App() {
       holeFromRevealed && holeFromRevealed !== 'face-down' ? holeFromRevealed : 'face-down'
     const myActions = actionsByTurn.filter((s) => s.seat === seatIdx)
     const lastSnap = myActions.length > 0 ? myActions[myActions.length - 1] : undefined
+    // formatActionLabel collapses type+amount into one human-readable string,
+    // so the seat row only needs `lastAction` — the raw amount used to be
+    // rendered as a separate "Bet 250" / "Raise 900" suffix and is no
+    // longer needed.
     const lastAction = lastSnap ? _formatAction(lastSnap.final_action) : undefined
-    const lastActionAmount = lastSnap?.final_action.amount
     return {
       seatIdx,
       positionLabel,
@@ -346,7 +346,6 @@ function App() {
       status,
       holeCards,
       lastAction,
-      lastActionAmount,
       agentId: session.meta.seat_assignment[String(seatIdx)],
     }
   })

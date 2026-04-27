@@ -26,8 +26,9 @@ describe('PnlChart', () => {
   it('renders chart caption with viewing hand', () => {
     const series = [mk({ seat: 0, values: [10000, 10100, 10200] })]
     const { container } = render(<PnlChart series={series} currentHandIdx={1} />)
-    expect(container.textContent).toMatch(/stack trajectory/i)
-    expect(container.textContent).toMatch(/viewing hand 1/i)
+    // caption was renamed from "stack trajectory" → "standings · @ hand N of M".
+    expect(container.textContent).toMatch(/standings/i)
+    expect(container.textContent).toMatch(/@ hand 1 of/i)
     expect(container.textContent).toMatch(/starting 10,?000/i)
   })
 

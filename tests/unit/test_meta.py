@@ -68,7 +68,12 @@ def test_meta_phase2a_retry_fields_are_zeros_or_empty() -> None:
     assert m["total_tokens"] == {}
     assert m["retry_summary_per_seat"] == {}
     assert m["tool_usage_summary"] == {}
-    assert m["estimated_cost_breakdown"] == {}
+    # Pre-flight 6: estimated_cost_breakdown is always populated with the
+    # pricing table version + per-seat breakdown (degenerates to total_usd=0
+    # + per_seat={} when no token data was collected).
+    assert m["estimated_cost_breakdown"]["total_usd"] == 0.0
+    assert m["estimated_cost_breakdown"]["per_seat"] == {}
+    assert "price_table_version" in m["estimated_cost_breakdown"]
 
 
 def test_meta_includes_git_commit_or_empty_string() -> None:

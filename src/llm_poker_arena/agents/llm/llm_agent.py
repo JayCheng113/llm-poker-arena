@@ -116,7 +116,14 @@ class LLMAgent(Agent):
     async def _decide_inner(self, view: PlayerView) -> TurnDecisionResult:
         from llm_poker_arena.tools import ToolDispatchError, utility_tool_specs
 
-        MAX_API_RETRY = 1
+        # Pre-flight 3: bumped MAX_API_RETRY 1→2 ahead of the official
+        # 6-LLM tournament. With 6 LLMs × ~50 turns / 30 hands ≈ 300 calls,
+        # even a 1% per-call transient rate yields 3 censored hands at
+        # retry=1. Doubling the budget tolerates Gemini 503 / Kimi
+        # transient timeouts much better. Other budgets stay at 1 because
+        # they're protocol-failure indicators (model misbehavior, not
+        # network noise) and re-asking only repeats the failure mode.
+        MAX_API_RETRY = 2
         MAX_ILLEGAL_RETRY = 1
         MAX_NO_TOOL_RETRY = 1
         MAX_TOOL_USAGE_RETRY = 1  # spec §4.1 BR2-05: independent budget

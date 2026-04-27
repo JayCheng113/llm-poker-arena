@@ -13,6 +13,7 @@ Usage:
 """
 import asyncio
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -49,6 +50,14 @@ def main() -> None:
         shutil.rmtree(web_target)
     web_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(session_dir, web_target)
+
+    # Pre-flight 12: auto-rebuild the web manifest.
+    bundle_script = _REPO / "web" / "scripts" / "bundle-demos.mjs"
+    try:
+        subprocess.run(["node", str(bundle_script)], check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        print(f"warning: manifest rebuild skipped ({e}); "
+              f"run `node {bundle_script}` manually.", file=sys.stderr)
 
     print("All-bot baseline session generated:")
     print(f"  runs/demo-bots/ (canonical)")

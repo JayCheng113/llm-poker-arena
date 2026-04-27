@@ -27,6 +27,7 @@ import argparse
 import asyncio
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -44,11 +45,29 @@ if _env_file.exists():
         os.environ[k.strip()] = v.strip()
 
 from llm_poker_arena.agents.llm.llm_agent import LLMAgent
-from llm_poker_arena.agents.llm.providers.anthropic_provider import AnthropicProvider
-from llm_poker_arena.agents.llm.providers.openai_compatible import OpenAICompatibleProvider
+from llm_poker_arena.agents.llm.providers.registry import (
+    PROVIDERS,
+    make_provider,
+    resolved_temperature,
+)
 from llm_poker_arena.agents.rule_based import RuleBasedAgent
 from llm_poker_arena.engine.config import SessionConfig
 from llm_poker_arena.session.session import Session
+
+# Per-seat lineup: (provider_tag, model) or None for a RuleBased bot.
+# Sourced from registry so URL/env-var changes flow through.
+SEAT_LINEUP: tuple[tuple[str, str] | None, ...] = (
+    ("anthropic", "claude-haiku-4-5"),  # 0
+    None,                                # 1 RuleBased
+    ("deepseek", "deepseek-chat"),       # 2
+    None,                                # 3 RuleBased
+    ("openai", "gpt-5.4-mini"),          # 4
+    ("qwen", "qwen3.6-plus"),            # 5
+)
+REQUIRED_ENV = tuple(
+    PROVIDERS[tag].env_var for slot in SEAT_LINEUP if slot is not None
+    for tag, _ in [slot]
+)
 
 
 def main() -> None:
@@ -57,14 +76,29 @@ def main() -> None:
                         help="hands to play (must be multiple of 6; default 30)")
     parser.add_argument("--out", default="demo-tournament",
                         help="session id / output dir name")
+    parser.add_argument(
+        "--force", action="store_true",
+        help="overwrite existing runs/<out>/ and web/public/data/<out>/. "
+             "Without this flag the script aborts if either dir exists.",
+    )
     args = parser.parse_args()
 
     if args.hands % 6 != 0:
         sys.exit(f"--hands ({args.hands}) must be a multiple of 6 (6 players)")
 
-    for k in ("ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY", "QWEN_API_KEY"):
+    for k in REQUIRED_ENV:
         if not os.environ.get(k):
             sys.exit(f"{k} not set; check .env")
+
+    # Pre-flight 4: refuse to clobber existing artifacts unless --force.
+    session_dir = _REPO / "runs" / args.out
+    web_target = _REPO / "web" / "public" / "data" / args.out
+    for dir_to_check in (session_dir, web_target):
+        if dir_to_check.exists() and not args.force:
+            sys.exit(
+                f"refusing to overwrite existing {dir_to_check}\n"
+                f"pass --force to delete it, or pick a new --out name."
+            )
 
     cfg = SessionConfig(
         num_players=6, starting_stack=10_000, sb=50, bb=100,
@@ -77,53 +111,22 @@ def main() -> None:
         max_total_tokens=1_000_000,  # $1 budget cap
     )
 
-    claude = LLMAgent(
-        provider=AnthropicProvider(
-            model="claude-haiku-4-5",
-            api_key=os.environ["ANTHROPIC_API_KEY"],
-        ),
-        model="claude-haiku-4-5",
-        temperature=0.7, total_turn_timeout_sec=60.0,
-    )
-    deepseek = LLMAgent(
-        provider=OpenAICompatibleProvider(
-            provider_name_value="deepseek",
-            model="deepseek-chat",
-            api_key=os.environ["DEEPSEEK_API_KEY"],
-            base_url="https://api.deepseek.com/v1",
-        ),
-        model="deepseek-chat",
-        temperature=0.7, total_turn_timeout_sec=60.0,
-    )
-    gpt = LLMAgent(
-        provider=OpenAICompatibleProvider(
-            provider_name_value="openai",
-            model="gpt-5.4-mini",
-            api_key=os.environ["OPENAI_API_KEY"],
-        ),
-        model="gpt-5.4-mini",
-        temperature=0.7, total_turn_timeout_sec=60.0,
-    )
-    qwen = LLMAgent(
-        provider=OpenAICompatibleProvider(
-            provider_name_value="qwen",
-            model="qwen3.6-plus",
-            api_key=os.environ["QWEN_API_KEY"],
-            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        ),
-        model="qwen3.6-plus",
-        temperature=0.7, total_turn_timeout_sec=60.0,
-    )
-    agents = [
-        claude,           # 0
-        RuleBasedAgent(), # 1
-        deepseek,         # 2
-        RuleBasedAgent(), # 3
-        gpt,              # 4
-        qwen,             # 5
-    ]
+    agents = []
+    for slot in SEAT_LINEUP:
+        if slot is None:
+            agents.append(RuleBasedAgent())
+            continue
+        provider_tag, model = slot
+        api_key = os.environ[PROVIDERS[provider_tag].env_var]
+        agents.append(
+            LLMAgent(
+                provider=make_provider(provider_tag, model, api_key),
+                model=model,
+                temperature=resolved_temperature(provider_tag, 0.7),
+                total_turn_timeout_sec=60.0,
+            )
+        )
 
-    session_dir = _REPO / "runs" / args.out
     if session_dir.exists():
         shutil.rmtree(session_dir)
 
@@ -131,11 +134,18 @@ def main() -> None:
                    session_id=args.out)
     asyncio.run(sess.run())
 
-    web_target = _REPO / "web" / "public" / "data" / args.out
     if web_target.exists():
         shutil.rmtree(web_target)
     web_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(session_dir, web_target)
+
+    # Pre-flight 12: auto-rebuild the web manifest.
+    bundle_script = _REPO / "web" / "scripts" / "bundle-demos.mjs"
+    try:
+        subprocess.run(["node", str(bundle_script)], check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        print(f"warning: manifest rebuild skipped ({e}); "
+              f"run `node {bundle_script}` manually.", file=sys.stderr)
 
     print(f"Tournament session generated:")
     print(f"  runs/{args.out}/")

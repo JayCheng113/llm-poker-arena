@@ -222,17 +222,20 @@ def test_transient_error_retried_once_then_recovers() -> None:
 
 def test_transient_error_exhausted_returns_api_error() -> None:
     legal = LegalActionSet(tools=(ActionToolSpec(name="fold", args={}),))
+    # MAX_API_RETRY=2 (Pre-flight 3 bump): the original call + 2 retries
+    # = 3 total provider calls. Three errors exhaust the budget.
     script = MockResponseScript(
         responses=(),
         errors_at_step={
             0: ProviderTransientError("503-1"),
             1: ProviderTransientError("503-2"),
+            2: ProviderTransientError("503-3"),
         },
     )
     provider = MockLLMProvider(script=script)
     agent = LLMAgent(provider=provider, model="m1", temperature=0.7)
     result = asyncio.run(agent.decide(_view(legal)))
-    assert result.api_retry_count == 1
+    assert result.api_retry_count == 2
     assert result.api_error is not None
     assert result.api_error.type == "ProviderTransientError"
     assert result.final_action is None

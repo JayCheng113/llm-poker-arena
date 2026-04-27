@@ -22,82 +22,23 @@ from typing import Any, TextIO
 from llm_poker_arena.agents.base import Agent
 from llm_poker_arena.agents.human_cli import HumanCLIAgent
 from llm_poker_arena.agents.llm.llm_agent import LLMAgent
-from llm_poker_arena.agents.llm.providers.anthropic_provider import (
-    AnthropicProvider,
-)
-from llm_poker_arena.agents.llm.providers.openai_compatible import (
-    OpenAICompatibleProvider,
+from llm_poker_arena.agents.llm.providers.registry import (
+    PROVIDERS,
+    make_provider,
+    resolved_temperature,
 )
 from llm_poker_arena.agents.random_agent import RandomAgent
 from llm_poker_arena.agents.rule_based import RuleBasedAgent
 from llm_poker_arena.engine.config import SessionConfig
 from llm_poker_arena.session.session import Session
 
-# Provider tag → (env_var_name, factory(model, api_key) -> Provider).
-# Many providers ship an OpenAI-compatible /chat/completions endpoint; for
-# those we just point OpenAICompatibleProvider at the right base_url.
+# Backward-compat shim for older imports / tests: expose the same
+# (env_var, factory) tuple shape derived from the canonical registry.
+# Source of truth lives in `providers/registry.py` — adding a provider
+# there auto-extends this table and the argparse choices.
 _PROVIDER_TABLE: dict[str, tuple[str, Any]] = {
-    "anthropic": (
-        "ANTHROPIC_API_KEY",
-        lambda model, key: AnthropicProvider(model=model, api_key=key),
-    ),
-    "openai": (
-        "OPENAI_API_KEY",
-        lambda model, key: OpenAICompatibleProvider(
-            provider_name_value="openai",
-            model=model,
-            api_key=key,
-        ),
-    ),
-    "deepseek": (
-        "DEEPSEEK_API_KEY",
-        lambda model, key: OpenAICompatibleProvider(
-            provider_name_value="deepseek",
-            model=model,
-            api_key=key,
-            base_url="https://api.deepseek.com/v1",
-        ),
-    ),
-    "qwen": (
-        "QWEN_API_KEY",
-        lambda model, key: OpenAICompatibleProvider(
-            provider_name_value="qwen",
-            model=model,
-            api_key=key,
-            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        ),
-    ),
-    "kimi": (
-        "KIMI_API_KEY",
-        lambda model, key: OpenAICompatibleProvider(
-            provider_name_value="kimi",
-            model=model,
-            api_key=key,
-            base_url="https://api.moonshot.ai/v1",
-        ),
-    ),
-    "grok": (
-        "GROK_API_KEY",
-        lambda model, key: OpenAICompatibleProvider(
-            provider_name_value="grok",
-            model=model,
-            api_key=key,
-            base_url="https://api.x.ai/v1",
-        ),
-    ),
-    "gemini": (
-        # Google AI Studio's OpenAI-compatibility endpoint (stable since
-        # 2024). Trailing slash matters: the AsyncOpenAI client appends
-        # /chat/completions and Google's edge has historically been
-        # whitespace-strict on the path concat.
-        "GEMINI_API_KEY",
-        lambda model, key: OpenAICompatibleProvider(
-            provider_name_value="gemini",
-            model=model,
-            api_key=key,
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-        ),
-    ),
+    tag: (cfg.env_var, lambda model, key, _tag=tag: make_provider(_tag, model, key))
+    for tag, cfg in PROVIDERS.items()
 }
 
 
@@ -152,11 +93,13 @@ def build_agents(
             env_name, factory = _PROVIDER_TABLE[provider_tag]
             api_key = os.environ[env_name]
             provider = factory(model, api_key)
+            # resolved_temperature pins Kimi to 1.0 (provider enforced),
+            # passes everything else through.
             agents.append(
                 LLMAgent(
                     provider=provider,
                     model=model,
-                    temperature=0.7,
+                    temperature=resolved_temperature(provider_tag, 0.7),
                 )
             )
         elif i % 2 == 0:
