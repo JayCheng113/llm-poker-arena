@@ -9,9 +9,72 @@
     "4": 850,
     "5": -375
   },
-  "ended_at": "2026-04-27T02:04:30.619Z",
+  "ended_at": "2026-04-27T06:14:27.495Z",
   "estimated_cost_breakdown": {},
-  "git_commit": "52d39db0edc6dc814582be68bdf0faa52c652998",
+  "git_commit": "70ef69a8298581a3ffeb7c439ff9dfd960f63830",
+  "hud_hands_counted": 60,
+  "hud_per_seat": {
+    "0": {
+      "af_aggressive": 4,
+      "af_passive": 5,
+      "pfr_actions": 3,
+      "three_bet_actions": 0,
+      "three_bet_chances": 5,
+      "vpip_actions": 6,
+      "wtsd_actions": 0,
+      "wtsd_chances": 6
+    },
+    "1": {
+      "af_aggressive": 2,
+      "af_passive": 3,
+      "pfr_actions": 0,
+      "three_bet_actions": 0,
+      "three_bet_chances": 5,
+      "vpip_actions": 3,
+      "wtsd_actions": 0,
+      "wtsd_chances": 3
+    },
+    "2": {
+      "af_aggressive": 4,
+      "af_passive": 0,
+      "pfr_actions": 3,
+      "three_bet_actions": 1,
+      "three_bet_chances": 3,
+      "vpip_actions": 3,
+      "wtsd_actions": 0,
+      "wtsd_chances": 3
+    },
+    "3": {
+      "af_aggressive": 8,
+      "af_passive": 3,
+      "pfr_actions": 6,
+      "three_bet_actions": 0,
+      "three_bet_chances": 2,
+      "vpip_actions": 8,
+      "wtsd_actions": 0,
+      "wtsd_chances": 8
+    },
+    "4": {
+      "af_aggressive": 5,
+      "af_passive": 1,
+      "pfr_actions": 3,
+      "three_bet_actions": 1,
+      "three_bet_chances": 7,
+      "vpip_actions": 4,
+      "wtsd_actions": 0,
+      "wtsd_chances": 4
+    },
+    "5": {
+      "af_aggressive": 4,
+      "af_passive": 5,
+      "pfr_actions": 1,
+      "three_bet_actions": 0,
+      "three_bet_chances": 7,
+      "vpip_actions": 6,
+      "wtsd_actions": 1,
+      "wtsd_chances": 6
+    }
+  },
   "initial_button_seat": 0,
   "planned_hands": 60,
   "prompt_profile_version": "default-v2",
@@ -84,7 +147,7 @@
   "seat_permutation_id": "phase2a_default",
   "session_id": "demo-bots",
   "session_wall_time_sec": 0,
-  "started_at": "2026-04-27T02:04:30.518Z",
+  "started_at": "2026-04-27T06:14:27.386Z",
   "stop_reason": "completed",
   "tool_usage_summary": {
     "0": {
