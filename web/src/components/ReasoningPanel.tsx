@@ -1,5 +1,5 @@
 import {
-  X, Check, Phone, TrendingUp, Zap, HelpCircle,
+  X, Check, Equal, TrendingUp, Zap, HelpCircle,
 } from 'lucide-react'
 import { ProviderBadge } from './ProviderBadge'
 import { shortAgentLabel } from './agentLabel'
@@ -99,10 +99,17 @@ function CommitAction({ action }: { action: { type: ActionType; amount?: number 
   )
 }
 
+// Action icon picks (poker semantics, not English literalism):
+//   fold      → X            reject the hand
+//   check     → Check        pass without putting chips in
+//   call      → Equal (=)    match the bet (NOT Phone — "call" here is
+//                            "match", not "make a telephone call")
+//   bet/raise → TrendingUp   add chips, increase the price
+//   all_in    → Zap          shove everything, intense action
 const ACTION_STYLES = {
   fold:     { icon: X,           text: 'text-rose-600' },
   check:    { icon: Check,       text: 'text-slate-700' },
-  call:     { icon: Phone,       text: 'text-indigo-600' },
+  call:     { icon: Equal,       text: 'text-indigo-600' },
   bet:      { icon: TrendingUp,  text: 'text-emerald-600' },
   raise_to: { icon: TrendingUp,  text: 'text-emerald-600' },
   all_in:   { icon: Zap,         text: 'text-amber-600' },
