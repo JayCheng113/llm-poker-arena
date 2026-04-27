@@ -11,6 +11,7 @@ import { HandSelector } from './components/HandSelector'
 import { PokerTable } from './components/PokerTable'
 import { ReasoningPanel } from './components/ReasoningPanel'
 import { ActionTimeline } from './components/ActionTimeline'
+import { PnlChart, type SeatSeries } from './components/PnlChart'
 import { useKeyboardNav } from './hooks/useKeyboardNav'
 import { useAutoPlay } from './hooks/useAutoPlay'
 
@@ -100,6 +101,20 @@ function App() {
     () => session ? Object.keys(session.hands).map(Number).sort((a, b) => a - b) : [],
     [session]
   )
+  const pnlSeries = useMemo<SeatSeries[]>(() => {
+    if (!session) return []
+    const seats = [0, 1, 2, 3, 4, 5]
+    return seats.map((seat) => {
+      const values: number[] = []
+      let cum = 0
+      for (const h of handIds) {
+        const pnl = session.hands[h].canonical.result.net_pnl[String(seat)] ?? 0
+        cum += pnl
+        values.push(cum)
+      }
+      return { seat, values }
+    })
+  }, [session, handIds])
   const hand = session?.hands[ptr.handId]
   const turnCount = hand?.agentSnapshots.length ?? 0
   const safeTurnIdx = Math.min(ptr.turnIdx, Math.max(0, turnCount - 1))
@@ -231,6 +246,12 @@ function App() {
             isRuleBased={(session.meta.seat_assignment[String(turn.actor)] ?? '').startsWith('rule_based')}
           />
         </div>
+      </div>
+      <div className="bg-slate-800 px-3 py-2 flex justify-center">
+        <PnlChart
+          series={pnlSeries}
+          currentHandIdx={handIds.indexOf(ptr.handId)}
+        />
       </div>
       <ActionTimeline
         turns={timelineTurns}
