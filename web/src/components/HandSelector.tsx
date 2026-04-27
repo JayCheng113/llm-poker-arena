@@ -1,4 +1,5 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
+import { KeyboardHelp } from './KeyboardHelp'
 import {
   ChevronLeft, ChevronRight, Play, Pause,
   Eye, EyeOff, BarChart3, Bug, Upload, X, Spade,
@@ -36,6 +37,7 @@ export function HandSelector({
   customLoaded, onLoadCustom, onClearCustom,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false)
   const idx = handIds.indexOf(currentHandId)
   const canPrev = idx > 0
   const canNext = idx >= 0 && idx < handIds.length - 1
@@ -136,13 +138,19 @@ export function HandSelector({
 
       {/* Right-side controls (push to the end) */}
       <div className="flex items-center gap-1.5 ml-auto">
-        {/* Keyboard shortcut hint as a tooltip on a small icon */}
-        <div
-          className="hidden md:flex items-center text-slate-400 hover:text-slate-600"
-          title="keyboard: ←/→ turn · ↑/↓ hand · space play/pause"
+        {/* Keyboard shortcut help — opens a modal with the full list */}
+        <button
+          type="button"
+          onClick={() => setShowKeyboardHelp(true)}
+          aria-label="show keyboard shortcuts"
+          title="keyboard shortcuts"
+          className="hidden md:flex items-center p-1.5 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
         >
           <Keyboard className="w-4 h-4" />
-        </div>
+        </button>
+        {showKeyboardHelp && (
+          <KeyboardHelp onClose={() => setShowKeyboardHelp(false)} />
+        )}
 
         {onToggleLive && (
           <ToggleButton
