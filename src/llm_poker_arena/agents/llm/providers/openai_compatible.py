@@ -238,6 +238,7 @@ class OpenAICompatibleProvider(LLMProvider):
             # only; strip it so they don't see noise.
             if self._provider_name != "deepseek":
                 raw_msg.pop("reasoning_content", None)
+            _normalize_assistant_content(raw_msg)
             return raw_msg
         # Fallback: synthesize from text + tool_calls (used when raw is empty).
         out: dict[str, Any] = {
@@ -256,6 +257,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 }
                 for tc in response.tool_calls
             ]
+        _normalize_assistant_content(out)
         return out
 
     def build_tool_result_messages(
@@ -372,6 +374,44 @@ class OpenAICompatibleProvider(LLMProvider):
         )
 
 
+def _normalize_assistant_content(msg: dict[str, Any]) -> None:
+    """In-place: shape the OpenAI-style assistant message dict so strict
+    OpenAI-compatible providers accept it on multi-turn replay.
+
+    Two things:
+
+    1. Replace null / empty `content` with a single space. Kimi
+       (api.moonshot.cn) rejects ANY assistant message whose content is
+       null or empty string with 400 "message at position N with role
+       'assistant' must not be empty." Kimi has even been observed to
+       return {content: "", tool_calls: null} itself which we'd then echo
+       back, triggering the rejection.
+
+    2. Strip OpenAI-cruft null fields (`function_call: null`,
+       `audio: null`, `refusal: null`, `annotations: null`, `tool_calls:
+       null`). Gemini's OpenAI-compat shim rejects these with
+       "Value is not a struct: null" because its parser interprets the
+       fields as expected-to-be-struct and null violates that.
+
+    A single-space placeholder is OpenAI-compatible (OpenAI accepts any
+    string content), semantically equivalent (tool calls live in
+    `tool_calls`), and unblocks both strict providers.
+    """
+    content = msg.get("content")
+    if content is None or content == "":
+        msg["content"] = " "
+    # Strip OpenAI legacy / extension fields whose null value confuses
+    # other providers' parsers. Only strip when value is None — preserves
+    # any field that's actually populated.
+    for legacy_field in ("function_call", "audio", "refusal", "annotations"):
+        if msg.get(legacy_field) is None and legacy_field in msg:
+            msg.pop(legacy_field)
+    # tool_calls=null is a special case: keep the key absent rather than
+    # =null, since some providers (Gemini) reject the null value here too.
+    if msg.get("tool_calls") is None and "tool_calls" in msg:
+        msg.pop("tool_calls")
+
+
 def _looks_like_seed_unsupported(exc: BadRequestError) -> bool:
     """Heuristic: does this 400 error reference the `seed` parameter as the
     cause? Matches OpenAI's 'Unknown parameter: seed' / 'unsupported parameter'
@@ -387,6 +427,8 @@ def _looks_like_seed_unsupported(exc: BadRequestError) -> bool:
         "'seed' is not a recognized",
         "parameter 'seed'",
         "unrecognized request argument: seed",
+        # Gemini OpenAI-compat shim form: "Unknown name \"seed\""
+        'unknown name "seed"',
     )
     return any(p in msg for p in seed_phrases)
 

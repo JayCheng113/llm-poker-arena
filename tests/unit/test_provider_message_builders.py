@@ -150,6 +150,46 @@ def test_deepseek_replay_keeps_reasoning_content() -> None:
     assert "Internal CoT" in msg["reasoning_content"]
 
 
+def test_replay_normalizes_empty_assistant_content_with_tool_calls() -> None:
+    """Kimi (api.moonshot.cn) rejects {role: assistant, content: null,
+    tool_calls: [...]} with 400 'message at position N with role assistant
+    must not be empty'. OpenAI/DeepSeek accept null content fine. Our
+    normalizer replaces null/empty with a single space whenever tool_calls
+    are present, keeping all providers happy."""
+    response = LLMResponse(
+        provider="kimi",
+        model="kimi-k2.5",
+        stop_reason="tool_use",
+        tool_calls=(ToolCall(name="fold", args={}, tool_use_id="call_x"),),
+        text_content="",
+        tokens=TokenCounts(input_tokens=0, output_tokens=0,
+                           cache_read_input_tokens=0, cache_creation_input_tokens=0),
+        raw_assistant_turn=AssistantTurn(
+            provider="kimi",
+            blocks=({
+                "role": "assistant",
+                "content": None,    # the null Kimi rejects
+                "tool_calls": [{
+                    "id": "call_x", "type": "function",
+                    "function": {"name": "fold", "arguments": "{}"},
+                }],
+            },),
+        ),
+    )
+    provider = OpenAICompatibleProvider(
+        provider_name_value="kimi",
+        model="kimi-k2.5",
+        api_key="sk-test",
+        base_url="https://api.moonshot.cn/v1",
+    )
+    msg = provider.build_assistant_message_for_replay(response)
+    assert msg["content"] == " ", (
+        "empty assistant content with tool_calls must be normalized to a single "
+        "space so Kimi accepts the multi-turn replay."
+    )
+    assert msg["tool_calls"][0]["function"]["name"] == "fold"
+
+
 def test_openai_replay_strips_reasoning_content() -> None:
     """For non-DeepSeek OpenAI-compatible providers, reasoning_content is
     informational only — strip it so the wire payload stays minimal."""
