@@ -11,6 +11,7 @@ import { HandSelector } from './components/HandSelector'
 import { PokerTable } from './components/PokerTable'
 import { ReasoningPanel } from './components/ReasoningPanel'
 import { ActionTimeline } from './components/ActionTimeline'
+import { DevPanel } from './components/DevPanel'
 import { PnlChart, type SeatSeries } from './components/PnlChart'
 import { useKeyboardNav } from './hooks/useKeyboardNav'
 import { useAutoPlay } from './hooks/useAutoPlay'
@@ -253,14 +254,22 @@ function App() {
             handResult={handEnded ? cfg.result : undefined}
           />
         </div>
-        <div className="w-96">
-          <ReasoningPanel
-            actor={turn.actor}
-            positionLabel={actorPosition}
-            iterations={turn.reasoning}
-            commitAction={turn.commitAction}
-            isRuleBased={(session.meta.seat_assignment[String(turn.actor)] ?? '').startsWith('rule_based')}
-          />
+        <div className="w-96 flex flex-col">
+          <div className="flex-1 overflow-auto">
+            <ReasoningPanel
+              actor={turn.actor}
+              positionLabel={actorPosition}
+              iterations={turn.reasoning}
+              commitAction={turn.commitAction}
+              isRuleBased={(session.meta.seat_assignment[String(turn.actor)] ?? '').startsWith('rule_based')}
+            />
+          </div>
+          {ptr.devMode && currentSnap && (
+            <DevPanel
+              snapshot={currentSnap}
+              canonicalAction={cfg.actions.find((a) => a.turn_index === safeTurnIdx)}
+            />
+          )}
         </div>
       </div>
       <div className="bg-slate-800 px-3 py-2 flex justify-center">
