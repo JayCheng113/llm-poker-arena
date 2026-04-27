@@ -1,0 +1,24 @@
+import { test } from '@playwright/test'
+
+test.describe.configure({ mode: 'serial' })
+
+test('screenshot hand 0 turn 0', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/?hand=0&turn=0')
+  await page.waitForSelector('text=is acting', { timeout: 10_000 })
+  await page.screenshot({ path: '/tmp/web-dogfood/hand0-turn0.png', fullPage: false })
+})
+
+test('screenshot hand 2 turn 5', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/?hand=2&turn=5')
+  await page.waitForSelector('text=is acting', { timeout: 10_000 })
+  await page.screenshot({ path: '/tmp/web-dogfood/hand2-turn5.png', fullPage: false })
+})
+
+test('screenshot hand 5 last turn (showdown reveals)', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/?hand=5&turn=99')
+  await page.waitForSelector('text=is acting', { timeout: 10_000 })
+  await page.screenshot({ path: '/tmp/web-dogfood/hand5-last.png', fullPage: false })
+})

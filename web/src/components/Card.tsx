@@ -4,56 +4,97 @@ type CardProp = CardStr | 'face-down'
 
 interface Props {
   card: CardProp
-  height?: string
+  /** width in px (height auto-derived ~1.4:1) */
+  width?: number
   className?: string
 }
 
-// Unicode playing card code points (U+1F0A0 block).
-// Suits: spades 1F0A0, hearts 1F0B0, diamonds 1F0C0, clubs 1F0D0.
-// Ranks: A=1, 2-9=2-9, T=A, J=B, Q=D, K=E (0xC = knight, skipped).
-const SUIT_BASE: Record<Suit, number> = {
-  s: 0x1f0a0, h: 0x1f0b0, d: 0x1f0c0, c: 0x1f0d0,
+const SUIT_CHAR: Record<Suit, string> = {
+  s: '♠', h: '♥', d: '♦', c: '♣',
 }
-const RANK_OFFSET: Record<Rank, number> = {
-  A: 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7,
-  '8': 8, '9': 9, T: 0xa, J: 0xb, Q: 0xd, K: 0xe,
-}
-
-function cardChar(card: CardStr): string {
-  const rank = card[0] as Rank
-  const suit = card[1] as Suit
-  return String.fromCodePoint(SUIT_BASE[suit] + RANK_OFFSET[rank])
-}
-
 const SUIT_COLOR: Record<Suit, string> = {
   s: '#000', c: '#000', h: '#dc2626', d: '#dc2626',
 }
 
+function rankDisplay(r: Rank): string {
+  return r === 'T' ? '10' : r
+}
+
 /**
- * Single-character Unicode playing card (no external dep).
+ * CSS-rendered playing card. Looks like a real card (white face, rounded
+ * corners, rank+suit corners + large center suit). Zero external dep.
  *
- * Trade-off vs SVG: less polished, font-dependent rendering (can be small
- * on default fonts), but zero external dependency + CC0 + works in any
- * browser. Phase 2 polish may swap for a static SVG sprite.
+ * width prop controls overall size; height = 1.4 × width (poker standard).
  */
-export function Card({ card, height = '80px', className }: Props) {
-  const isBack = card === 'face-down'
-  const ch = isBack ? '\u{1F0A0}' : cardChar(card)
-  const color = isBack ? '#1e3a8a' : SUIT_COLOR[card[1] as Suit]
+export function Card({ card, width = 50, className }: Props) {
+  const height = Math.round(width * 1.4)
+  const cornerFontSize = Math.max(10, Math.round(width * 0.28))
+  const centerFontSize = Math.max(20, Math.round(width * 0.55))
+
+  if (card === 'face-down') {
+    return (
+      <div
+        data-card="face-down"
+        className={className}
+        style={{
+          width, height,
+          background: 'repeating-linear-gradient(45deg, #1e3a8a, #1e3a8a 4px, #1e40af 4px, #1e40af 8px)',
+          border: '2px solid #1e40af',
+          borderRadius: Math.round(width * 0.1),
+          boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+          display: 'inline-block',
+          verticalAlign: 'middle',
+        }}
+      />
+    )
+  }
+
+  const rank = card[0] as Rank
+  const suit = card[1] as Suit
+  const color = SUIT_COLOR[suit]
+  const rankStr = rankDisplay(rank)
+  const suitStr = SUIT_CHAR[suit]
+
   return (
-    <span
+    <div
       data-card={card}
       className={className}
       style={{
-        fontSize: height,
-        lineHeight: '0.8',
-        color,
-        fontFamily:
-          '"Apple Symbols", "DejaVu Sans", "Symbola", "Segoe UI Symbol", sans-serif',
+        width, height,
+        background: 'white',
+        border: '1px solid #444',
+        borderRadius: Math.round(width * 0.1),
+        position: 'relative',
         display: 'inline-block',
+        verticalAlign: 'middle',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+        fontFamily: 'Helvetica, Arial, sans-serif',
+        color,
+        userSelect: 'none',
+        overflow: 'hidden',
       }}
     >
-      {ch}
-    </span>
+      {/* top-left corner */}
+      <div style={{
+        position: 'absolute',
+        top: Math.round(width * 0.06),
+        left: Math.round(width * 0.08),
+        fontSize: cornerFontSize,
+        fontWeight: 700,
+        lineHeight: 1,
+        textAlign: 'center',
+      }}>
+        <div>{rankStr}</div>
+        <div style={{ fontSize: cornerFontSize * 0.85 }}>{suitStr}</div>
+      </div>
+      {/* center suit */}
+      <div style={{
+        position: 'absolute',
+        top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)',
+        fontSize: centerFontSize,
+        lineHeight: 1,
+      }}>{suitStr}</div>
+    </div>
   )
 }

@@ -45,7 +45,7 @@ export function PokerTable({ seats, community, pot, activeSeatIdx }: Props) {
           {community.length === 0 ? (
             <div className="text-xs opacity-60">(no community cards yet)</div>
           ) : (
-            community.map((c, i) => <Card key={i} card={c} height="60px" />)
+            community.map((c, i) => <Card key={i} card={c} width={48} />)
           )}
         </div>
         <div className="text-lg font-bold mt-1">pot {pot}</div>

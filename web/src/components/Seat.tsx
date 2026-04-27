@@ -28,13 +28,13 @@ export function Seat({
       <div className="flex gap-1">
         {holeCards === 'face-down' ? (
           <>
-            <Card card="face-down" height="50px" />
-            <Card card="face-down" height="50px" />
+            <Card card="face-down" width={36} />
+            <Card card="face-down" width={36} />
           </>
         ) : (
           <>
-            <Card card={holeCards[0]} height="50px" />
-            <Card card={holeCards[1]} height="50px" />
+            <Card card={holeCards[0]} width={36} />
+            <Card card={holeCards[1]} width={36} />
           </>
         )}
       </div>
