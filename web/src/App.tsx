@@ -133,9 +133,9 @@ function App() {
     const holeCards: 'face-down' | [CardStr, CardStr] =
       holeFromRevealed && holeFromRevealed !== 'face-down' ? holeFromRevealed : 'face-down'
     const myActions = actionsByTurn.filter((s) => s.seat === seatIdx)
-    const lastAction = myActions.length > 0
-      ? _formatAction(myActions[myActions.length - 1].final_action)
-      : undefined
+    const lastSnap = myActions.length > 0 ? myActions[myActions.length - 1] : undefined
+    const lastAction = lastSnap ? _formatAction(lastSnap.final_action) : undefined
+    const lastActionAmount = lastSnap?.final_action.amount
     return {
       seatIdx,
       positionLabel,
@@ -143,6 +143,7 @@ function App() {
       status,
       holeCards,
       lastAction,
+      lastActionAmount,
     }
   })
 

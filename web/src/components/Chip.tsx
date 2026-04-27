@@ -16,6 +16,7 @@ export function Chip({ denomination, size = 32 }: Props) {
   const color = colorForDenom(denomination)
   return (
     <div
+      data-chip={denomination}
       style={{
         display: 'inline-flex',
         alignItems: 'center',

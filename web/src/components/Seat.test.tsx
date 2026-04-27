@@ -30,4 +30,23 @@ describe('Seat', () => {
     // Card components render <span data-card="..."> (one per hole card)
     expect(container.querySelectorAll('[data-card]').length).toBe(2)
   })
+
+  it('renders a chip beside lastAction when amount provided', () => {
+    const { container } = render(
+      <Seat seatIdx={3} positionLabel="UTG" stack={9100}
+            status="in_hand" holeCards="face-down"
+            lastAction="raise_to 900" lastActionAmount={900} />
+    )
+    expect(container.querySelector('[data-chip]')).not.toBeNull()
+    expect(container.textContent).toContain('900')
+  })
+
+  it('does not render a chip for fold (no amount)', () => {
+    const { container } = render(
+      <Seat seatIdx={3} positionLabel="UTG" stack={9100}
+            status="folded" holeCards="face-down"
+            lastAction="fold" />
+    )
+    expect(container.querySelector('[data-chip]')).toBeNull()
+  })
 })

@@ -1,4 +1,5 @@
 import { Card } from './Card'
+import { Chip } from './Chip'
 import type { CardStr, SeatStatus } from '../types'
 
 interface Props {
@@ -8,11 +9,12 @@ interface Props {
   status: SeatStatus
   holeCards: 'face-down' | [CardStr, CardStr]
   lastAction?: string
+  lastActionAmount?: number
   isActive?: boolean
 }
 
 export function Seat({
-  seatIdx, positionLabel, stack, status, holeCards, lastAction, isActive,
+  seatIdx, positionLabel, stack, status, holeCards, lastAction, lastActionAmount, isActive,
 }: Props) {
   const opacity = status === 'folded' ? 0.4 : 1
   const ring = isActive ? 'ring-4 ring-yellow-400' : ''
@@ -39,8 +41,13 @@ export function Seat({
         )}
       </div>
       {lastAction && (
-        <div className="px-2 py-0.5 rounded bg-yellow-500 text-slate-900 font-semibold">
-          {lastAction}
+        <div className="flex items-center gap-1">
+          {lastActionAmount !== undefined && lastActionAmount > 0 && (
+            <Chip denomination={lastActionAmount} size={20} />
+          )}
+          <div className="px-2 py-0.5 rounded bg-yellow-500 text-slate-900 font-semibold">
+            {lastAction}
+          </div>
         </div>
       )}
     </div>
