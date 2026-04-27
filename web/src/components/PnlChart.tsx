@@ -47,10 +47,11 @@ export function PnlChart({ series, currentHandIdx }: Props) {
   const categories = series.map((s) => `seat ${s.seat}`)
   const colors = series.map((s) => SEAT_COLORS[s.seat % SEAT_COLORS.length])
 
-  // For the legend value, show the *delta* from starting stack since that's
-  // the interesting number ("how much did this player win/lose"). Derived
-  // by subtracting the first value from the last.
+  // For the legend value, show the *delta* from starting stack at the
+  // CURRENTLY VIEWED hand (codex NIT-3 — was end-of-session, which made
+  // the legend lie about live state when scrubbing back through hands).
   const startingStack = series[0].values[0]
+  const cursor = Math.max(0, Math.min(currentHandIdx, numHands - 1))
 
   return (
     <div
@@ -68,8 +69,8 @@ export function PnlChart({ series, currentHandIdx }: Props) {
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-1 justify-end">
           {series.map((s) => {
-            const last = s.values[s.values.length - 1]
-            const delta = last - startingStack
+            const cursorValue = s.values[cursor]
+            const delta = cursorValue - startingStack
             const color = SEAT_COLORS[s.seat % SEAT_COLORS.length]
             return (
               <div key={s.seat} className="flex items-center gap-1.5 text-xs">

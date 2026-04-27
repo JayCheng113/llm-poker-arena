@@ -36,4 +36,25 @@ describe('PnlChart', () => {
     expect(text).toMatch(/s0\s*\+200/)
     expect(text).toMatch(/s1\s*[-−]300/)
   })
+
+  it('legend tracks the currently viewed hand cursor (codex NIT-3)', () => {
+    // Legend should reflect mid-session state, not the final outcome,
+    // so users scrubbing back through hands see live values.
+    const series = [
+      { seat: 0, values: [10000, 10050, 10200] },
+      { seat: 1, values: [10000, 9900, 9700] },
+    ]
+    // cursor at hand 1 (the middle): s0 should show +50, s1 -100
+    const { container } = render(<PnlChart series={series} currentHandIdx={1} />)
+    const text = container.textContent ?? ''
+    expect(text).toMatch(/s0\s*\+50/)
+    expect(text).toMatch(/s1\s*[-−]100/)
+  })
+
+  it('legend cursor clamps when currentHandIdx > numHands-1', () => {
+    const series = [{ seat: 0, values: [10000, 10500] }]
+    // currentHandIdx=99 (past end) — should clamp to last hand (idx=1)
+    const { container } = render(<PnlChart series={series} currentHandIdx={99} />)
+    expect(container.textContent).toMatch(/s0\s*\+500/)
+  })
 })

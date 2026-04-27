@@ -86,15 +86,16 @@ _PROVIDER_TABLE: dict[str, tuple[str, Any]] = {
         ),
     ),
     "gemini": (
-        # Google AI Studio ships an OpenAI-compatible /chat/completions
-        # endpoint as of 2024; using it lets us reuse the same provider
-        # adapter instead of pulling in google-genai SDK.
+        # Google AI Studio's OpenAI-compatibility endpoint (stable since
+        # 2024). Trailing slash matters: the AsyncOpenAI client appends
+        # /chat/completions and Google's edge has historically been
+        # whitespace-strict on the path concat.
         "GEMINI_API_KEY",
         lambda model, key: OpenAICompatibleProvider(
             provider_name_value="gemini",
             model=model,
             api_key=key,
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         ),
     ),
 }
@@ -287,7 +288,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--llm-provider",
         action="append",
         default=[],
-        choices=["anthropic", "openai", "deepseek"],
+        # Derived from _PROVIDER_TABLE so adding a provider in the table
+        # automatically extends the CLI surface (no parallel string list to
+        # maintain — codex review IMP-1).
+        choices=sorted(_PROVIDER_TABLE),
         help="Provider for the corresponding --llm-seat (must repeat in tandem).",
     )
     parser.add_argument(

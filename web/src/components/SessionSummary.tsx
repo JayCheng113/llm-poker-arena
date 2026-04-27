@@ -30,7 +30,8 @@ function retryStatus(r: RetrySummary): { label: string; bad: boolean } {
 
 function shortAgent(s: string): string {
   // "anthropic:claude-haiku-4-5" → "claude-haiku-4-5"
-  // "rule_based:tag_v1" → "rule_based:tag_v1"  (keep namespace for clarity)
+  // "rule_based:tag_v1" → "rule_based"  (keep "rule_based" namespace for
+  // clarity — distinguishes a rule-based seat from an LLM seat at a glance).
   if (s.startsWith('rule_based')) return 'rule_based'
   return s.split(':').slice(1).join(':') || s
 }
@@ -221,19 +222,18 @@ function HudTable({ hud, hands, seats, seatAssignment }: HudRowsProps) {
             <th className="text-right p-2" title="preflop raise %">PFR</th>
             <th className="text-right p-2" title="3-bet %">3-bet</th>
             <th className="text-right p-2" title="aggression factor (bets+raises)/calls">AF</th>
-            <th className="text-right p-2" title="went-to-showdown when saw flop %">WTSD</th>
+            <th className="text-right p-2" title="went-to-showdown when VPIP'd %">WTSD</th>
           </tr>
         </thead>
         <tbody>
           {seats.map((seat) => {
             const c = hud[String(seat)]
             const agent = seatAssignment[String(seat)] ?? ''
-            const isRule = agent.startsWith('rule_based')
             return (
               <tr key={seat} className="border-b border-slate-200">
                 <td className="p-2 font-mono">seat {seat}</td>
                 <td className="p-2 font-mono text-slate-600">
-                  {agent.split(':')[1] ?? agent}
+                  {shortAgent(agent)}
                 </td>
                 {!c ? (
                   <td colSpan={5} className="p-2 text-slate-400 text-center">—</td>
@@ -245,9 +245,6 @@ function HudTable({ hud, hands, seats, seatAssignment }: HudRowsProps) {
                     <td className="p-2 text-right font-mono tabular-nums text-slate-700">{af(c)}</td>
                     <td className="p-2 text-right font-mono tabular-nums text-slate-700">{pct(c.wtsd_actions, c.wtsd_chances)}</td>
                   </>
-                )}
-                {isRule && (
-                  <td className="p-2 text-[10px] text-slate-400 italic">(rule-based)</td>
                 )}
               </tr>
             )
