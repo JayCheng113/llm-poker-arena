@@ -17,11 +17,12 @@ export function Seat({
   seatIdx, positionLabel, stack, status, holeCards, lastAction, lastActionAmount, isActive,
 }: Props) {
   const opacity = status === 'folded' ? 0.4 : 1
-  const ring = isActive ? 'ring-4 ring-yellow-400' : ''
+  const ring = isActive ? 'ring-4 ring-yellow-400 animate-pulse-ring' : ''
   return (
     <div
       className={`flex flex-col items-center gap-1 p-2 rounded bg-slate-800 text-white text-xs ${ring}`}
       style={{ opacity }}
+      data-active={isActive ? '1' : undefined}
     >
       <div className="font-bold">seat {seatIdx} ({positionLabel})</div>
       <div className="text-slate-300">{stack}</div>

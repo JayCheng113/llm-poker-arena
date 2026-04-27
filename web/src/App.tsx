@@ -89,6 +89,7 @@ function App() {
   >(null)
   const [error, setError] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [showSummary, setShowSummary] = useState(false)
   const ptr = useUrlPointer()
 
@@ -196,7 +197,11 @@ function App() {
     }
     setIsPlaying(false)
   }, [ptr, safeTurnIdx, turnCount, handIds])
-  useAutoPlay({ isPlaying: isPlaying && !!hand, intervalMs: AUTO_PLAY_INTERVAL_MS, onTick: autoTick })
+  useAutoPlay({
+    isPlaying: isPlaying && !!hand,
+    intervalMs: Math.round(AUTO_PLAY_INTERVAL_MS / playbackSpeed),
+    onTick: autoTick,
+  })
 
   if (error) {
     return <div className="p-8 text-red-700">{error}</div>
@@ -279,6 +284,8 @@ function App() {
         onSelect={ptr.setHandId}
         isPlaying={isPlaying}
         onTogglePlay={togglePlay}
+        playbackSpeed={playbackSpeed}
+        onChangeSpeed={setPlaybackSpeed}
         devMode={ptr.devMode}
         onToggleDev={ptr.toggleDev}
         onOpenSummary={() => setShowSummary(true)}

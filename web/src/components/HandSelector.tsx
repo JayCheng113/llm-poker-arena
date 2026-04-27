@@ -6,6 +6,8 @@ interface Props {
   onSelect: (handId: number) => void
   isPlaying?: boolean
   onTogglePlay?: () => void
+  playbackSpeed?: number
+  onChangeSpeed?: (s: number) => void
   devMode?: boolean
   onToggleDev?: () => void
   onOpenSummary?: () => void
@@ -16,6 +18,7 @@ interface Props {
 
 export function HandSelector({
   handIds, currentHandId, onSelect, isPlaying, onTogglePlay,
+  playbackSpeed, onChangeSpeed,
   devMode, onToggleDev, onOpenSummary,
   manifest, currentSessionId, onSelectSession,
 }: Props) {
@@ -54,6 +57,19 @@ export function HandSelector({
         >
           {isPlaying ? '⏸ pause' : '▶ play'}
         </button>
+      )}
+      {onChangeSpeed && (
+        <select
+          value={String(playbackSpeed ?? 1)}
+          onChange={(e) => onChangeSpeed(Number(e.target.value))}
+          aria-label="playback speed"
+          className="bg-slate-600 border border-slate-500 rounded px-2 py-1 text-xs"
+        >
+          <option value="0.5">0.5×</option>
+          <option value="1">1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
       )}
       <span className="text-slate-400 text-xs hidden md:inline">
         ←/→ turn · ↑/↓ hand · space play

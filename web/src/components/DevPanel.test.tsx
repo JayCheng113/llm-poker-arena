@@ -23,7 +23,9 @@ const stubSnapshot: AgentViewSnapshot = {
   api_error: null,
   turn_timeout_exceeded: false,
   total_tokens: {},
-} as AgentViewSnapshot
+  wall_time_ms: 0,
+  agent: {} as never,
+}
 
 describe('DevPanel', () => {
   it('renders dev panel with snapshot JSON', () => {
