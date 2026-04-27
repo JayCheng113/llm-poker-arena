@@ -78,9 +78,8 @@ def audit_pre_settlement(state: CanonicalState, config: SessionConfig) -> None:
     raw = state._state  # noqa: SLF001
     starting_total = config.starting_stack * config.num_players
     total_stacks = sum(getattr(raw, "stacks", ()) or ())
-    # total_pot_amount == collected pots + in-flight bets (per pokerkit 0.7.3 API
-    # reference at docs/superpowers/notes/pokerkit-0.7.3-api.md §Stacks / bets /
-    # pot). Adding `sum(bets)` again would double-count in-flight chips.
+    # total_pot_amount == collected pots + in-flight bets (PokerKit 0.7.3
+    # convention). Adding `sum(bets)` again would double-count in-flight chips.
     total_pot = int(getattr(raw, "total_pot_amount", 0) or 0)
     conserved = total_stacks + total_pot
     if conserved != starting_total:

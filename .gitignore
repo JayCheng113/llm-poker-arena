@@ -45,3 +45,12 @@ dist/
 .vite/
 uv.lock
 .superpowers/
+
+# Internal AI working docs — specs / plans driven by claude-code,
+# not for public consumption. Files stay locally; just untracked.
+docs/superpowers/
+
+# Playwright / e2e
+test-results/
+playwright-report/
+/tmp/web-dogfood/
