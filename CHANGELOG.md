@@ -4,6 +4,36 @@ All notable user-facing changes are listed here. Dates are in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Reasoning visibility overhaul (April 27, 2026)
+
+Closed the last gap in the 6-LLM tournament demo: every seat now
+surfaces structured, user-facing reasoning to the panel. Before this
+work, GPT-5 and Gemini reasoning panels were silent.
+
+- **OpenAI Responses API for GPT-5/o-series**: Chat Completions only
+  returns reasoning token *counts*, not text. The provider now forks on
+  the `gpt-5` / `gpt-6` / `o1` / `o3` / `o4` prefix and routes through
+  `client.responses.create(reasoning={summary:"auto"})`. Reasoning
+  summary surfaces as `kind=SUMMARY` artifact. New helpers convert
+  Chat-style history into Responses input items each turn.
+- **Gemini thinking summary via OpenAI-compat shim**: Gemini accepts
+  `extra_body.google.thinking_config.include_thoughts=True` and inlines
+  a `<thought>...</thought>` block at the start of content. The provider
+  extracts those into reasoning artifacts. Wire-format quirk: AsyncOpenAI
+  spreads `extra_body=` to top level, so we double-wrap to keep a
+  literal `extra_body` JSON key (Gemini requires it; smoke #2 censored
+  3/3 hands until this was discovered).
+- **Frontend markdown rendering**: Claude emits heavy markdown on 100%
+  of turns (was rendering as literal asterisks/hashes). New
+  `web/src/utils/renderMarkdown.tsx` uses `marked` (~9KB gzip) + a
+  defense-in-depth regex sanitizer (script/iframe/on*= stripper). All
+  artifact kinds collapse to a single "REASONING" label; dev mode adds
+  a small `(summary)` / `(thinking_block)` parenthetical for analysts.
+- **Re-run demo-6llm**: 30/30 hands clean, $0.83, 54 min wall, 0
+  thought-tag leaks. New P&L scoreboard (GPT-5 jumps from -12,800 last
+  run to +19,200 this run — once it can use its built-in reasoning,
+  the model dominates).
+
 ### 6-LLM showdown shipped (April 27, 2026)
 
 Official 30-hand 6-LLM tournament now lives at

@@ -59,11 +59,12 @@ export GEMINI_API_KEY=AIza...
 ```
 
 Seats: Claude Haiku 4.5 / deepseek-chat / gpt-5.4-mini / qwen3.6-plus /
-kimi-k2.5 / gemini-2.5-flash. The shipped reference run cost **$0.71** and
-took **51.6 min** wall time with **30/30 clean hands** (no censors). Token
-cap is set to 2M ≈ $2 budget ceiling; the exact per-seat USD breakdown lands
-in `meta.estimated_cost_breakdown`. Per-hand progress prints to stderr so
-the run isn't a black box.
+kimi-k2.5 / gemini-2.5-flash. The shipped reference run cost **$0.83** and
+took **54 min** wall time with **30/30 clean hands** (no censors) and a
+visible reasoning artifact on every LLM seat. Token cap is set to 2M ≈ $2
+budget ceiling; the exact per-seat USD breakdown lands in
+`meta.estimated_cost_breakdown`. Per-hand progress prints to stderr so the
+run isn't a black box.
 
 The generator refuses to overwrite an existing run unless you pass
 `--force` — useful when iterating on a test, dangerous for finished
@@ -206,10 +207,20 @@ Source = "GitHub Actions".
 Standard `claude-*` model IDs. No special handling needed.
 
 ### OpenAI
-`gpt-5.x` and `o1`/`o3` families require `max_completion_tokens` instead of
-`max_tokens`. The provider auto-routes by model-name prefix; older `gpt-4*`
-keep `max_tokens`. Reasoning models (o-series) emit `reasoning_content`
-which is captured into `reasoning_artifacts`.
+`gpt-5.x` and `o1`/`o3`/`o4` families are reasoning models — the provider
+auto-routes them through the **Responses API** (`client.responses.create`)
+to get user-visible reasoning summaries. Other OpenAI models stay on Chat
+Completions. The Responses-path adapter translates Chat-format history
+(role+content+tool_calls) into Responses input items
+(developer/user/assistant + function_call + function_call_output) on each
+turn, so the LLMAgent doesn't have to know which path is in use.
+
+Reasoning summaries surface as `kind=SUMMARY` artifacts. OpenAI compresses
+the chain-of-thought before returning it (low effort = sometimes empty;
+high effort = paragraph-form). Token billing includes reasoning tokens.
+
+Older OpenAI models still use `max_tokens` for output budget; the
+provider routes by model-name prefix.
 
 ### DeepSeek
 Use base_url `https://api.deepseek.com/v1`. Current model IDs:
@@ -218,8 +229,10 @@ Use base_url `https://api.deepseek.com/v1`. Current model IDs:
 `deepseek-reasoner` are deprecated 2026-07-24.
 
 DeepSeek thinking-mode roundtrips `reasoning_content` on multi-turn
-calls. The provider preserves this field for replay (other OpenAI-
-compatible providers strip it, since it's informational only).
+calls. The provider preserves this field for replay; the whitelist
+also covers Kimi for the same reason. Other OpenAI-compatible providers
+strip it (it's informational only and a few endpoints reject it on
+replay round trips).
 
 ### Qwen
 Use base_url `https://dashscope.aliyuncs.com/compatible-mode/v1` (Alibaba
@@ -247,6 +260,11 @@ Quirks observed in production:
 - Latency is noticeably higher than other providers (China-region +
   verbose internal reasoning). Bump `total_turn_timeout_sec` to ≥120s
   for stability.
+- Kimi K2.5 emits `reasoning_content` (raw chain-of-thought) and
+  REQUIRES the field to be round-tripped on multi-turn calls — the
+  provider's reasoning_content whitelist covers Kimi for this reason.
+  Without it: 400 "thinking is enabled but reasoning_content is
+  missing in assistant tool call message at index N".
 - Empty-content assistant messages (which Kimi itself sometimes emits
   on a no-tool-call turn) get rejected on multi-turn replay with
   "message at position N with role 'assistant' must not be empty" —
@@ -285,7 +303,19 @@ Quirks:
   "Value is not a struct: null" — `_normalize_assistant_content`
   strips them before send.
 - Free / paid tiers can both hit transient 503 "high demand". Paid
-  tier hits it less frequently but doesn't eliminate it.
+  tier hits it less frequently but doesn't eliminate it. The shipped
+  `registry.py` bumps `sdk_max_retries=5` for Gemini so AsyncOpenAI's
+  exponential backoff covers ~30-60s of spike.
+
+**Thinking summaries**: Gemini's OpenAI-compat shim accepts
+`extra_body.google.thinking_config.include_thoughts=True` and inlines
+a `<thought>...</thought>` block at the start of `content`. The provider
+extracts that block as a `kind=SUMMARY` reasoning artifact and strips
+the tag from visible content. Wire-format quirk: AsyncOpenAI's
+`extra_body=` kwarg spreads its dict to the request body's top level,
+so the provider double-wraps as `extra_body={"extra_body": {...}}` to
+get a literal `extra_body` key in the wire JSON (Gemini's compat
+endpoint requires it that way; verified 2026-04-27).
 
 ## Troubleshooting
 

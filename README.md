@@ -24,16 +24,16 @@ The replay viewer is the answer's UI: it lets you open any decision and read the
 
 ## Live demo
 
-[**demo-6llm — 30-hand 6-LLM showdown**](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm) (one provider per seat, $0.71, 51.6 min wall time, 30/30 clean — no censored hands).
+[**demo-6llm — 30-hand 6-LLM showdown**](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm) (one provider per seat, $0.83, 54 min wall time, 30/30 clean — no censored hands, every seat's reasoning visible).
 
 | Rank | Seat | Model | Provider | P&L (chips) |
 |---|---|---|---|---|
-| 🥇 1 | 4 | kimi-k2.5 | Moonshot | **+20,150** |
-| 🥈 2 | 3 | qwen3.6-plus | Alibaba | +6,300 |
-| 🥉 3 | 5 | gemini-2.5-flash | Google AI Studio | +2,200 |
-| 4 | 1 | deepseek-chat | DeepSeek | +1,250 |
-| 5 | 2 | gpt-5.4-mini | OpenAI | −12,800 |
-| 6 | 0 | claude-haiku-4-5 | Anthropic | **−17,100** |
+| 🥇 1 | 2 | gpt-5.4-mini | OpenAI | **+19,200** |
+| 🥈 2 | 3 | qwen3.6-plus | Alibaba | +2,550 |
+| 🥉 3 | 1 | deepseek-chat | DeepSeek | −200 |
+| 4 | 5 | gemini-2.5-flash | Google AI Studio | −1,600 |
+| 5 | 4 | kimi-k2.5 | Moonshot | −6,200 |
+| 6 | 0 | claude-haiku-4-5 | Anthropic | **−13,750** |
 
 Stake: 50/100 with 10,000-chip starting stacks (auto-rebuy each hand). Seed 23.
 
@@ -46,15 +46,16 @@ Earlier / smaller demos (4-LLM mixed lineup, single-LLM walk-through, all-bot ba
 ### Backend
 - **6-max NLHE engine** built on PokerKit 0.7.3 — single canonical state + frozen Pydantic DTOs across the engine ↔ agent trust boundary
 - **Bounded ReAct loop** per agent turn: K configurable utility-tool calls (`pot_odds`, `spr`, `hand_equity_vs_ranges`, `get_opponent_stats`) followed by a forced commit; 4 independent retry budgets
-- **Seven providers**: Anthropic (`AnthropicProvider`) + 6 via `OpenAICompatibleProvider` (OpenAI, DeepSeek, Qwen, Kimi, Grok, Gemini — all OpenAI Chat Completions–compatible). DeepSeek thinking-mode `reasoning_content` is round-tripped on multi-turn calls.
-- **Reasoning artifacts** captured per provider (raw text / summary / thinking_block / encrypted / redacted / unavailable) so post-hoc analysis can distinguish what the model actually emitted
+- **Seven providers**: Anthropic (`AnthropicProvider`) + 6 via `OpenAICompatibleProvider` (OpenAI, DeepSeek, Qwen, Kimi, Grok, Gemini — all OpenAI Chat Completions–compatible). DeepSeek + Kimi thinking-mode `reasoning_content` is round-tripped on multi-turn calls.
+- **Reasoning visibility for every seat** — three different surfaces, one API: GPT-5/o-series go through OpenAI's Responses API for reasoning summaries, Gemini's `extra_body.google.thinking_config.include_thoughts` exposes its `<thought>` blocks, DeepSeek/Kimi's `reasoning_content` is round-tripped, Anthropic and Qwen prose rationale is captured directly. All five forms collapse into one panel layout.
+- **Reasoning artifacts** classified per provider (raw / summary / thinking_block / encrypted / redacted / unavailable) so analysts can distinguish what the model actually emitted vs. what was a derived summary
 - **Cost guard**: `SessionConfig.max_total_tokens` aborts cleanly at the next hand boundary
 - **3-layer JSONL output**: canonical-private (engine truth, all hole cards), public-replay (UI-safe events), agent-view-snapshots (per-turn LLM iterations)
-- **465+ unit / integration tests**, gated real-API tests for every provider
+- **478+ unit / integration tests**, gated real-API tests for every provider
 
 ### Web UI
 - **Provider-aware seats**: every seat shows the actual brand logo (Anthropic / OpenAI / DeepSeek / Qwen / Kimi / Grok / Gemini) and trimmed model name
-- **Per-seat reasoning panel**: provider header → step-numbered iteration cards → tool-call code blocks → color-coded decision row. RuleBased agents show which rule fired (e.g. "PREMIUM hand AA → 3× BB open").
+- **Per-seat reasoning panel**: provider header → step-numbered iteration cards (markdown-rendered, all artifact kinds collapse to one "REASONING" label) → tool-call code blocks → color-coded decision row. RuleBased agents show which rule fired (e.g. "PREMIUM hand AA → 3× BB open").
 - **Stack-trajectory chart** (Tremor LineChart) — running bankroll per seat over time, smooth monotone curves, hover tooltip, signed delta legend
 - **Action timeline** grouped by street (PREFLOP / FLOP / TURN / RIVER), action-type color coding (fold faded, call indigo, raise emerald)
 - **god-view default**: every hole card visible — replay is for understanding, not guessing. Toggle to live spectator mode if you want to read the board yourself.
