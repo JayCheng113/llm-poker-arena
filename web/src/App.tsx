@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   parseCanonicalPrivate,
   parsePublicReplay,
@@ -11,6 +11,7 @@ import { HandSelector } from './components/HandSelector'
 import { PokerTable } from './components/PokerTable'
 import { ReasoningPanel } from './components/ReasoningPanel'
 import { ActionTimeline } from './components/ActionTimeline'
+import { useKeyboardNav } from './hooks/useKeyboardNav'
 import type {
   ParsedSession, SeatStatus, CardStr, ActionType,
 } from './types'
@@ -89,20 +90,38 @@ function App() {
       .catch((e: Error) => setError(`Failed to load session: ${e.message}`))
   }, [])
 
+  // Compute nav state (safe when session not loaded yet) — must be before
+  // early returns so hook order is stable.
+  const handIds = useMemo(
+    () => session ? Object.keys(session.hands).map(Number).sort((a, b) => a - b) : [],
+    [session]
+  )
+  const hand = session?.hands[ptr.handId]
+  const turnCount = hand?.agentSnapshots.length ?? 0
+  const safeTurnIdx = Math.min(ptr.turnIdx, Math.max(0, turnCount - 1))
+  const navTargets = useMemo(() => ({
+    onPrevTurn: () => ptr.setTurnIdx(Math.max(0, safeTurnIdx - 1)),
+    onNextTurn: () => ptr.setTurnIdx(Math.min(turnCount - 1, safeTurnIdx + 1)),
+    onPrevHand: () => {
+      const idx = handIds.indexOf(ptr.handId)
+      if (idx > 0) ptr.setHandId(handIds[idx - 1])
+    },
+    onNextHand: () => {
+      const idx = handIds.indexOf(ptr.handId)
+      if (idx >= 0 && idx < handIds.length - 1) ptr.setHandId(handIds[idx + 1])
+    },
+  }), [ptr, safeTurnIdx, turnCount, handIds])
+  useKeyboardNav(navTargets, !!hand)
+
   if (error) {
     return <div className="p-8 text-red-700">{error}</div>
   }
   if (!session) {
     return <div className="p-8">Loading session...</div>
   }
-
-  const handIds = Object.keys(session.hands).map(Number).sort((a, b) => a - b)
-  const hand = session.hands[ptr.handId]
   if (!hand) {
     return <div className="p-8">Hand {ptr.handId} not in session</div>
   }
-  const turnCount = hand.agentSnapshots.length
-  const safeTurnIdx = Math.min(ptr.turnIdx, turnCount - 1)
   const turn = getCurrentTurn(session, ptr.handId, safeTurnIdx)
   const handEnded = safeTurnIdx >= turnCount - 1
   const revealed = cardRevelation(session, ptr.handId, 'live', { handEnded })
