@@ -1,12 +1,13 @@
 // Import subcomponents directly — the brand's index.js re-exports Avatar,
-// which transitively requires @lobehub/ui (not installed). OpenAI / Grok
-// ship only Mono (their logos are monochrome by design); the others have
-// Color variants.
+// which transitively requires @lobehub/ui (not installed). OpenAI / Grok /
+// Kimi ship Color variants whose primary fill is white (#fff), which
+// disappears on our white seat cards — fall back to Mono (currentColor)
+// + slate-900 for those.
 import ClaudeColor from '@lobehub/icons/es/Claude/components/Color'
 import OpenAIMono from '@lobehub/icons/es/OpenAI/components/Mono'
 import DeepSeekColor from '@lobehub/icons/es/DeepSeek/components/Color'
 import QwenColor from '@lobehub/icons/es/Qwen/components/Color'
-import KimiColor from '@lobehub/icons/es/Kimi/components/Color'
+import KimiMono from '@lobehub/icons/es/Kimi/components/Mono'
 import GrokMono from '@lobehub/icons/es/Grok/components/Mono'
 import GeminiColor from '@lobehub/icons/es/Gemini/components/Color'
 import { Bot, HelpCircle } from 'lucide-react'
@@ -34,7 +35,7 @@ export function ProviderBadge({ agentId, size = 18, className }: Props) {
     case 'qwen':
       return <QwenColor size={size} className={className} />
     case 'kimi':
-      return <KimiColor size={size} className={className} />
+      return <KimiMono size={size} className={`text-slate-900 ${className ?? ''}`} />
     case 'grok':
       return <GrokMono size={size} className={`text-slate-900 ${className ?? ''}`} />
     case 'gemini':
