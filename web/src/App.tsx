@@ -339,6 +339,9 @@ function App() {
   const timelineTurns = hand.agentSnapshots.map((s) => ({
     actor: s.seat,
     actionLabel: _formatAction(s.final_action),
+    actionType: s.final_action.type,
+    street: s.street,
+    agentId: session.meta.seat_assignment[String(s.seat)],
   }))
 
   const actorPosition = _positionLabelForSeat(turn.actor, buttonSeat, 6)
@@ -387,6 +390,7 @@ function App() {
               iterations={turn.reasoning}
               commitAction={turn.commitAction}
               isRuleBased={(session.meta.seat_assignment[String(turn.actor)] ?? '').startsWith('rule_based')}
+              agentId={session.meta.seat_assignment[String(turn.actor)]}
               snapshot={currentSnap}
               showDebugBadges={ptr.devMode}
             />

@@ -34,7 +34,7 @@ test('screenshot session summary modal', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/?hand=0&turn=0')
   await page.waitForSelector('text=is acting', { timeout: 10_000 })
-  await page.click('text=📊 summary')
+  await page.getByLabel('open session summary').click()
   await page.waitForSelector('text=session summary', { timeout: 5_000 })
   await page.screenshot({ path: '/tmp/web-dogfood/session-summary.png', fullPage: false })
 })

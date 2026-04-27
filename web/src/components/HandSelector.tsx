@@ -202,7 +202,7 @@ export function HandSelector({
             {customLoaded ? (
               <ToggleButton
                 active
-                onClick={onClearCustom}
+                onClick={onClearCustom ?? (() => {})}
                 aria-label="clear custom session"
                 icon={<X className="w-3.5 h-3.5" />}
                 activeTone="fuchsia"

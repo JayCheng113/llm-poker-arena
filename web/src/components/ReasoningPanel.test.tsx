@@ -13,10 +13,12 @@ const _iter = (overrides: Partial<IterationRecord>): IterationRecord => ({
 
 describe('ReasoningPanel', () => {
   it('shows actor seat in header', () => {
-    const { getByText } = render(
+    const { container } = render(
       <ReasoningPanel actor={3} positionLabel="UTG" iterations={[]} commitAction={{ type: 'fold' }} />
     )
-    expect(getByText(/seat 3.*UTG/i)).toBeDefined()
+    // header is now: provider/agent label on top, "UTG · seat 3 · is acting" below
+    expect(container.textContent).toMatch(/UTG/)
+    expect(container.textContent).toMatch(/seat 3/)
   })
 
   it('renders text_content for each iteration', () => {
@@ -47,10 +49,12 @@ describe('ReasoningPanel', () => {
 
   it('renders commit action prominently', () => {
     const commit: { type: ActionType; amount?: number } = { type: 'raise_to', amount: 900 }
-    const { getByText } = render(
+    const { container } = render(
       <ReasoningPanel actor={3} positionLabel="UTG" iterations={[]} commitAction={commit} />
     )
-    expect(getByText(/raise_to.*900/)).toBeDefined()
+    // commit row now: lucide icon + action type text + formatted amount
+    expect(container.textContent).toMatch(/raise_to/)
+    expect(container.textContent).toMatch(/900/)
   })
 
   it('shows rule-based hint when isRuleBased and no iterations', () => {
