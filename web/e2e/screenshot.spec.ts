@@ -60,6 +60,20 @@ test('screenshot tournament last hand showdown', async ({ page }) => {
   await page.screenshot({ path: '/tmp/web-dogfood/tournament-last.png', fullPage: false })
 })
 
+test('screenshot 6-LLM smoke hand 0', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/?session=demo-6llm-smoke&hand=0&turn=0')
+  await page.waitForSelector('text=is acting', { timeout: 10_000 })
+  await page.screenshot({ path: '/tmp/web-dogfood/6llm-hand0.png', fullPage: false })
+})
+
+test('screenshot 6-LLM smoke last hand showdown', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/?session=demo-6llm-smoke&hand=5&turn=99')
+  await page.waitForSelector('text=is acting', { timeout: 10_000 })
+  await page.screenshot({ path: '/tmp/web-dogfood/6llm-last.png', fullPage: false })
+})
+
 test('screenshot mobile portrait', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })  // iPhone 14
   await page.goto('/?hand=0&turn=0')

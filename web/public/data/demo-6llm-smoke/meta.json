@@ -1,0 +1,296 @@
+{
+  "censored_hand_ids": [],
+  "censored_hands_count": 0,
+  "chip_pnl": {
+    "0": -900,
+    "1": -6150,
+    "2": -100,
+    "3": 150,
+    "4": 6900,
+    "5": 100
+  },
+  "ended_at": "2026-04-27T07:28:18.391Z",
+  "estimated_cost_breakdown": {},
+  "git_commit": "56a00caf906c622b35f161d13bac919d2ceabc13",
+  "hud_hands_counted": 6,
+  "hud_per_seat": {
+    "0": {
+      "af_aggressive": 1,
+      "af_passive": 1,
+      "pfr_actions": 1,
+      "three_bet_actions": 0,
+      "three_bet_chances": 1,
+      "vpip_actions": 2,
+      "wtsd_actions": 0,
+      "wtsd_chances": 2
+    },
+    "1": {
+      "af_aggressive": 2,
+      "af_passive": 2,
+      "pfr_actions": 1,
+      "three_bet_actions": 0,
+      "three_bet_chances": 2,
+      "vpip_actions": 1,
+      "wtsd_actions": 0,
+      "wtsd_chances": 1
+    },
+    "2": {
+      "af_aggressive": 1,
+      "af_passive": 2,
+      "pfr_actions": 0,
+      "three_bet_actions": 0,
+      "three_bet_chances": 2,
+      "vpip_actions": 2,
+      "wtsd_actions": 0,
+      "wtsd_chances": 2
+    },
+    "3": {
+      "af_aggressive": 1,
+      "af_passive": 0,
+      "pfr_actions": 1,
+      "three_bet_actions": 0,
+      "three_bet_chances": 1,
+      "vpip_actions": 1,
+      "wtsd_actions": 0,
+      "wtsd_chances": 1
+    },
+    "4": {
+      "af_aggressive": 3,
+      "af_passive": 0,
+      "pfr_actions": 1,
+      "three_bet_actions": 1,
+      "three_bet_chances": 2,
+      "vpip_actions": 1,
+      "wtsd_actions": 0,
+      "wtsd_chances": 1
+    },
+    "5": {
+      "af_aggressive": 1,
+      "af_passive": 0,
+      "pfr_actions": 0,
+      "three_bet_actions": 0,
+      "three_bet_chances": 1,
+      "vpip_actions": 0,
+      "wtsd_actions": 0,
+      "wtsd_chances": 0
+    }
+  },
+  "initial_button_seat": 0,
+  "planned_hands": 6,
+  "prompt_profile_version": "default-v2",
+  "provider_capabilities": {
+    "0": {
+      "extra_flags": {
+        "extended_thinking_enabled": false,
+        "tool_use_with_thinking_probed": false
+      },
+      "probed_at": "2026-04-27T07:20:11.177Z",
+      "provider": "anthropic",
+      "reasoning_kinds_observed": [
+        "unavailable"
+      ],
+      "seed_supported": false,
+      "tool_use_with_thinking_ok": false
+    },
+    "1": {
+      "extra_flags": {
+        "base_url": "https://api.deepseek.com/v1/",
+        "system_fingerprint": "fp_058df29938_prod0820_fp8_kvcache_20260402",
+        "tool_use_with_thinking_probed": false
+      },
+      "probed_at": "2026-04-27T07:20:12.289Z",
+      "provider": "deepseek",
+      "reasoning_kinds_observed": [
+        "unavailable"
+      ],
+      "seed_supported": true,
+      "tool_use_with_thinking_ok": false
+    },
+    "2": {
+      "extra_flags": {
+        "base_url": "https://api.openai.com/v1/",
+        "system_fingerprint": "",
+        "tool_use_with_thinking_probed": false
+      },
+      "probed_at": "2026-04-27T07:20:13.005Z",
+      "provider": "openai",
+      "reasoning_kinds_observed": [
+        "unavailable"
+      ],
+      "seed_supported": true,
+      "tool_use_with_thinking_ok": false
+    },
+    "3": {
+      "extra_flags": {
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1/",
+        "system_fingerprint": "",
+        "tool_use_with_thinking_probed": false
+      },
+      "probed_at": "2026-04-27T07:20:22.218Z",
+      "provider": "qwen",
+      "reasoning_kinds_observed": [
+        "raw"
+      ],
+      "seed_supported": true,
+      "tool_use_with_thinking_ok": false
+    },
+    "4": {
+      "extra_flags": {
+        "base_url": "https://api.moonshot.cn/v1/",
+        "system_fingerprint": "",
+        "tool_use_with_thinking_probed": false
+      },
+      "probed_at": "2026-04-27T07:20:25.903Z",
+      "provider": "kimi",
+      "reasoning_kinds_observed": [
+        "raw"
+      ],
+      "seed_supported": true,
+      "tool_use_with_thinking_ok": false
+    },
+    "5": {
+      "extra_flags": {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "system_fingerprint": "",
+        "tool_use_with_thinking_probed": false
+      },
+      "probed_at": "2026-04-27T07:20:26.623Z",
+      "provider": "gemini",
+      "reasoning_kinds_observed": [
+        "unavailable"
+      ],
+      "seed_supported": false,
+      "tool_use_with_thinking_ok": false
+    }
+  },
+  "retry_summary_per_seat": {
+    "0": {
+      "api_retry_count": 0,
+      "default_action_fallback_count": 0,
+      "illegal_action_retry_count": 0,
+      "no_tool_retry_count": 0,
+      "tool_usage_error_count": 0,
+      "total_turns": 8,
+      "turn_timeout_exceeded_count": 0
+    },
+    "1": {
+      "api_retry_count": 0,
+      "default_action_fallback_count": 0,
+      "illegal_action_retry_count": 0,
+      "no_tool_retry_count": 1,
+      "tool_usage_error_count": 0,
+      "total_turns": 11,
+      "turn_timeout_exceeded_count": 0
+    },
+    "2": {
+      "api_retry_count": 0,
+      "default_action_fallback_count": 0,
+      "illegal_action_retry_count": 0,
+      "no_tool_retry_count": 0,
+      "tool_usage_error_count": 0,
+      "total_turns": 9,
+      "turn_timeout_exceeded_count": 0
+    },
+    "3": {
+      "api_retry_count": 0,
+      "default_action_fallback_count": 0,
+      "illegal_action_retry_count": 0,
+      "no_tool_retry_count": 0,
+      "tool_usage_error_count": 0,
+      "total_turns": 5,
+      "turn_timeout_exceeded_count": 0
+    },
+    "4": {
+      "api_retry_count": 0,
+      "default_action_fallback_count": 1,
+      "illegal_action_retry_count": 0,
+      "no_tool_retry_count": 3,
+      "tool_usage_error_count": 0,
+      "total_turns": 9,
+      "turn_timeout_exceeded_count": 0
+    },
+    "5": {
+      "api_retry_count": 0,
+      "default_action_fallback_count": 0,
+      "illegal_action_retry_count": 0,
+      "no_tool_retry_count": 0,
+      "tool_usage_error_count": 0,
+      "total_turns": 7,
+      "turn_timeout_exceeded_count": 0
+    }
+  },
+  "schema_version": "v2.0",
+  "seat_assignment": {
+    "0": "anthropic:claude-haiku-4-5",
+    "1": "deepseek:deepseek-chat",
+    "2": "openai:gpt-5.4-mini",
+    "3": "qwen:qwen3.6-plus",
+    "4": "kimi:kimi-k2.5",
+    "5": "gemini:gemini-2.5-flash"
+  },
+  "seat_permutation_id": "phase2a_default",
+  "session_id": "demo-6llm-smoke",
+  "session_wall_time_sec": 487,
+  "started_at": "2026-04-27T07:20:10.498Z",
+  "stop_reason": "completed",
+  "tool_usage_summary": {
+    "0": {
+      "total_utility_calls": 1
+    },
+    "1": {
+      "total_utility_calls": 0
+    },
+    "2": {
+      "total_utility_calls": 0
+    },
+    "3": {
+      "total_utility_calls": 0
+    },
+    "4": {
+      "total_utility_calls": 0
+    },
+    "5": {
+      "total_utility_calls": 0
+    }
+  },
+  "total_hands_played": 6,
+  "total_tokens": {
+    "0": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 27939,
+      "output_tokens": 2853
+    },
+    "1": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 30540,
+      "output_tokens": 4235
+    },
+    "2": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 17581,
+      "output_tokens": 974
+    },
+    "3": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 12704,
+      "output_tokens": 2813
+    },
+    "4": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 24366,
+      "output_tokens": 7740
+    },
+    "5": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 15398,
+      "output_tokens": 555
+    }
+  },
+  "version": 2
+}

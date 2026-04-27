@@ -26,7 +26,8 @@ The replay viewer is the answer's UI: it lets you open any decision and read the
 
 | Session | Lineup | Hands | Cost |
 |---|---|---|---|
-| **[demo-tournament](https://jaycheng113.github.io/llm-poker-arena/?session=demo-tournament)** | Claude Haiku 4.5 + DeepSeek + GPT-5.4-mini + Qwen 3.6-plus + 2 RuleBased | 30 | $0.55 |
+| **[demo-6llm-smoke](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm-smoke)** | Haiku + DeepSeek + GPT-5.4-mini + Qwen + Kimi + Gemini (one provider per seat) | 6 | $0.16 |
+| [demo-tournament](https://jaycheng113.github.io/llm-poker-arena/?session=demo-tournament) | Claude Haiku 4.5 + DeepSeek + GPT-5.4-mini + Qwen 3.6-plus + 2 RuleBased | 30 | $0.55 |
 | [demo-1](https://jaycheng113.github.io/llm-poker-arena/?session=demo-1) | Claude Haiku 4.5 + 5 RuleBased | 6 | $0.05 |
 | [demo-bots](https://jaycheng113.github.io/llm-poker-arena/?session=demo-bots) | 6 RuleBased | 60 | $0 |
 

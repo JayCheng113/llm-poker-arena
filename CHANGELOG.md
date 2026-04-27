@@ -4,6 +4,40 @@ All notable user-facing changes are listed here. Dates are in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Polish round 3 — 6-LLM compatibility (April 27, 2026)
+
+Drove a 6-LLM tournament smoke (one provider per seat: Anthropic +
+DeepSeek + OpenAI + Qwen + Kimi + Gemini) and fixed every protocol
+incompatibility encountered along the way.
+
+- **Kimi region routing**: the user's key is China-region. The default
+  `api.moonshot.ai` (international) endpoint 401s on it; routing to
+  `api.moonshot.cn/v1` works. Documented in USAGE.
+- **Kimi forced temperature=1.0**: `kimi-k2.5` rejects any other
+  temperature with 400 "invalid temperature: only 1 is allowed for
+  this model". Tournament script now hardcodes 1.0 for the Kimi seat.
+- **Kimi total_turn_timeout 60→120s**: Kimi is observably slower than
+  the other providers (China-region latency + verbose internal
+  reasoning); 60s default censored 2/6 hands in early smoke runs.
+- **Kimi empty-content rejection on replay**: Kimi rejects any
+  assistant message whose content is null or `""` (even when
+  `tool_calls` is present, and even when Kimi itself produced the
+  empty turn). The provider's `_normalize_assistant_content` now
+  replaces empty content with a single space.
+- **Gemini "Value is not a struct: null" rejection on replay**:
+  Gemini's OpenAI-compat shim rejects assistant message dicts that
+  include legacy OpenAI null fields (`function_call: null`,
+  `audio: null`, `refusal: null`, `annotations: null`,
+  `tool_calls: null`). The normalizer now strips these whenever the
+  value is null.
+- **Gemini `Unknown name "seed"` not detected as seed-unsupported**:
+  The seed detector heuristic now matches Gemini's error format too
+  (in addition to OpenAI / DeepSeek phrasings).
+- **Demo session**: `web/public/data/demo-6llm-smoke/` ships a 6-hand
+  smoke (one hand per button rotation) so visitors can see all six
+  providers reasoning side-by-side. Full 30-hand `demo-6llm` will
+  follow once approved.
+
 ### Polish round 2 (April 27, 2026)
 
 - **More providers**: Kimi (Moonshot), Grok (xAI), Gemini (Google AI Studio

@@ -199,9 +199,27 @@ Cloud DashScope OpenAI-compatible endpoint). Current model IDs are
 `qwen3.*-*` (e.g. `qwen3.6-plus`, `qwen3.5-flash`).
 
 ### Kimi (Moonshot AI)
-Use base_url `https://api.moonshot.ai/v1`. Current flagship is
-`kimi-k2.6` (256K context, function calling). Legacy `kimi-k2.5` /
-`kimi-k2` are scheduled for deprecation 2026-05-25.
+Two endpoints — pick by your account region:
+- **International** (`api.moonshot.ai/v1`) — for keys provisioned via
+  the `.ai` console
+- **China** (`api.moonshot.cn/v1`) — for keys from the `.cn` console.
+  Wrong endpoint → 401 "Invalid Authentication" even on a valid key.
+
+Current models: `kimi-k2.6` (256K context flagship), `kimi-k2.5`
+(stable), `kimi-k2-thinking` (reasoning variant). Legacy `kimi-k2`
+deprecates 2026-05-25.
+
+Quirks observed in production:
+- `kimi-k2.5` enforces `temperature=1.0`. Any other value → 400
+  "invalid temperature: only 1 is allowed for this model".
+- Latency is noticeably higher than other providers (China-region +
+  verbose internal reasoning). Bump `total_turn_timeout_sec` to ≥120s
+  for stability.
+- Empty-content assistant messages (which Kimi itself sometimes emits
+  on a no-tool-call turn) get rejected on multi-turn replay with
+  "message at position N with role 'assistant' must not be empty" —
+  the `_normalize_assistant_content` helper in `OpenAICompatibleProvider`
+  handles this transparently for all OpenAI-compat providers.
 
 ### Grok (xAI)
 Use base_url `https://api.x.ai/v1`. Current models (April 2026):
@@ -212,16 +230,30 @@ Use base_url `https://api.x.ai/v1`. Current models (April 2026):
 Grok 5 is in training (Q2 2026 expected).
 
 ### Gemini (Google AI Studio)
-Use base_url `https://generativelanguage.googleapis.com/v1beta/openai`
-(OpenAI-compatible shim — no need for `google-genai` SDK). Current
-models (April 2026):
-- `gemini-3.1-pro` — flagship, paid only ($2.00/$12.00 per M tokens
-  for ≤200K context)
-- `gemini-3-flash` — default Flash, free tier (reduced quota)
-- `gemini-3.1-flash-lite` — cheapest Tier-1 ($0.25/$1.50 per M)
+Use base_url `https://generativelanguage.googleapis.com/v1beta/openai/`
+(trailing slash matters — without it the request can hit
+`/openai/chat/completions` or `/openai/v1/chat/completions` depending
+on the SDK and Google's edge has historically been strict). The
+OpenAI-compat shim removes the need for the `google-genai` SDK.
 
-`gemini-2.0-flash` and `gemini-2.0-flash-lite` are deprecated
-2026-06-01 — migrate to `gemini-3-flash` or `gemini-2.5-flash` first.
+Production-tested models on AI Studio (April 2026):
+- `gemini-2.5-pro` — flagship, paid tier
+- `gemini-2.5-flash` — Flash tier (recommended)
+- `gemini-2.0-flash` / `gemini-2.0-flash-lite` — deprecated 2026-06-01
+
+The `gemini-3.x` family that public docs reference is on Vertex AI,
+not AI Studio's OpenAI-compat endpoint — use `gemini-2.5-*` here.
+
+Quirks:
+- The shim rejects unknown OpenAI parameters (`seed` etc.) as
+  "Unknown name `seed`: Cannot find field". Our seed-unsupported
+  detector matches this format and falls back to a no-seed retry.
+- The shim also rejects assistant messages whose null OpenAI legacy
+  fields (`function_call: null`, `audio: null`, etc.) reach it with
+  "Value is not a struct: null" — `_normalize_assistant_content`
+  strips them before send.
+- Free / paid tiers can both hit transient 503 "high demand". Paid
+  tier hits it less frequently but doesn't eliminate it.
 
 ## Troubleshooting
 
