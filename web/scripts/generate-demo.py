@@ -12,6 +12,7 @@ Usage:
   source <(sed -n '3s/^#//p' ~/.zprofile)  # load ANTHROPIC_API_KEY
   python web/scripts/generate-demo.py
 """
+import argparse
 import asyncio
 import os
 import shutil
@@ -32,6 +33,14 @@ from llm_poker_arena.session.session import Session
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--force", action="store_true",
+        help="overwrite existing runs/demo-1/ and web/public/data/demo-1/. "
+             "Without this flag the script aborts if either dir exists.",
+    )
+    args = parser.parse_args()
+
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         sys.exit("ANTHROPIC_API_KEY not set; source your env vars first")
@@ -58,6 +67,14 @@ def main() -> None:
 
     output_root = _REPO / "runs"
     session_dir = output_root / "demo-1"
+    web_target = _REPO / "web" / "public" / "data" / "demo-1"
+    # Pre-flight 4 (rev): also guard the demo-1 generator (codex P2).
+    for d in (session_dir, web_target):
+        if d.exists() and not args.force:
+            sys.exit(
+                f"refusing to overwrite existing {d}\n"
+                f"pass --force to delete it."
+            )
     if session_dir.exists():
         shutil.rmtree(session_dir)
 
@@ -66,7 +83,6 @@ def main() -> None:
     asyncio.run(sess.run())
 
     # Copy to web/public/data/demo-1/ (overwrite if exists)
-    web_target = _REPO / "web" / "public" / "data" / "demo-1"
     if web_target.exists():
         shutil.rmtree(web_target)
     web_target.parent.mkdir(parents=True, exist_ok=True)

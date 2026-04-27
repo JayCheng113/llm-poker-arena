@@ -8,7 +8,7 @@ degenerate to zeros / empty dicts for clean analyst consumption.
 
 from __future__ import annotations
 
-import statistics
+import math
 import subprocess
 from typing import Any
 
@@ -37,6 +37,12 @@ def _latency_summary(
     """Reduce per-iteration wall_time_ms samples into p50/p95/max per seat.
 
     Empty sample list → all zeros (so downstream consumers don't crash).
+
+    Uses rank-based percentiles (nearest-rank / NIST method) instead of
+    `statistics.quantiles` because the latter's default exclusive method
+    extrapolates beyond the data on tiny samples — codex P2 caught a
+    case where p95 exited the [min, max] envelope. Rank-based always
+    returns one of the actual observations, so p95 ≤ max by construction.
     """
     if not samples_per_seat:
         return {}
@@ -46,20 +52,17 @@ def _latency_summary(
             out[str(seat)] = {"p50_ms": 0, "p95_ms": 0, "max_ms": 0, "count": 0}
             continue
         sorted_s = sorted(samples)
-        # statistics.quantiles uses inclusive interpolation; for tiny
-        # samples we fall back to manual indexing.
-        if len(sorted_s) >= 4:
-            quartiles = statistics.quantiles(sorted_s, n=20)
-            p50 = int(statistics.median(sorted_s))
-            p95 = int(quartiles[18])  # 95th percentile in 20-quantile split
-        else:
-            p50 = int(statistics.median(sorted_s))
-            p95 = int(sorted_s[-1])
+        n = len(sorted_s)
+        # Nearest-rank: pick the smallest index k such that k/n ≥ q.
+        # For p50 with n=4, ceil(0.50*4) = 2, so index 1 (0-based).
+        # For p95 with n=4, ceil(0.95*4) = 4, so index 3 = max.
+        p50 = int(sorted_s[max(0, math.ceil(0.50 * n) - 1)])
+        p95 = int(sorted_s[max(0, math.ceil(0.95 * n) - 1)])
         out[str(seat)] = {
             "p50_ms": p50,
             "p95_ms": p95,
             "max_ms": int(sorted_s[-1]),
-            "count": len(samples),
+            "count": n,
         }
     return out
 

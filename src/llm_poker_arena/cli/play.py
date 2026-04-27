@@ -93,13 +93,13 @@ def build_agents(
             env_name, factory = _PROVIDER_TABLE[provider_tag]
             api_key = os.environ[env_name]
             provider = factory(model, api_key)
-            # resolved_temperature pins Kimi to 1.0 (provider enforced),
-            # passes everything else through.
+            # resolved_temperature pins kimi:kimi-k2.5 to 1.0 (model-
+            # specific, not provider-wide), passes everything else through.
             agents.append(
                 LLMAgent(
                     provider=provider,
                     model=model,
-                    temperature=resolved_temperature(provider_tag, 0.7),
+                    temperature=resolved_temperature(provider_tag, 0.7, model=model),
                 )
             )
         elif i % 2 == 0:

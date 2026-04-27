@@ -25,16 +25,30 @@ class ProviderConfig:
     """One row in the registry.
 
     `is_anthropic` flips the provider class (Anthropic SDK vs. OpenAI-compat
-    shim). `enforced_temperature` lets a provider lock the sampling temp
-    (Kimi K2.5 only accepts 1.0, for example). `base_url=None` means the
-    SDK uses its own default (Anthropic, OpenAI).
+    shim). `base_url=None` means the SDK uses its own default (Anthropic,
+    OpenAI). Per-model temperature overrides live in `MODEL_OVERRIDES`,
+    not here — they're a model-specific quirk, not a provider-wide one.
     """
 
     provider_name: str
     env_var: str
     base_url: str | None = None
     is_anthropic: bool = False
-    enforced_temperature: float | None = None
+
+
+# Per-model overrides keyed by "provider:model". Today this is only used
+# for temperature locks (Kimi k2.5), but future model quirks (frequency
+# penalty caps, max-tokens minima, etc.) belong here too.
+#
+# Why not on ProviderConfig: a provider-wide lock is wrong — Kimi k2.5
+# specifically requires temperature=1.0, but there's no guarantee future
+# Kimi releases will. Locking by model means we don't accidentally clamp
+# `kimi-k2.6` or a future variant. (codex P1 finding 2026-04-27.)
+MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
+    # Kimi K2.5 enforces temperature=1.0 (any other value 400s with
+    # "invalid temperature: only 1 is allowed for this model").
+    "kimi:kimi-k2.5": {"enforced_temperature": 1.0},
+}
 
 
 PROVIDERS: dict[str, ProviderConfig] = {
@@ -65,9 +79,6 @@ PROVIDERS: dict[str, ProviderConfig] = {
         # locally; do not push the swap (most users on this codebase have
         # the .cn key).
         base_url="https://api.moonshot.cn/v1",
-        # Kimi K2.5 enforces temperature=1.0 (any other value 400s with
-        # "invalid temperature: only 1 is allowed for this model").
-        enforced_temperature=1.0,
     ),
     "grok": ProviderConfig(
         provider_name="grok",
@@ -117,11 +128,29 @@ def make_provider(provider_tag: str, model: str, api_key: str) -> Any:
     return OpenAICompatibleProvider(**kwargs)
 
 
-def resolved_temperature(provider_tag: str, requested: float) -> float:
-    """Pick the actual temperature: caller's choice unless the provider
-    enforces a fixed value (Kimi). Quietly overrides — log at the call
-    site if you want to surface the swap."""
-    cfg = PROVIDERS.get(provider_tag)
-    if cfg and cfg.enforced_temperature is not None:
-        return cfg.enforced_temperature
+def resolved_temperature(
+    provider_tag: str, requested: float, model: str | None = None
+) -> float:
+    """Pick the actual temperature: caller's choice unless a specific
+    `provider:model` row in MODEL_OVERRIDES enforces a fixed value
+    (e.g. kimi:kimi-k2.5 → 1.0). Quietly overrides — log at the call
+    site if you want to surface the swap.
+
+    `model=None` keeps backward compatibility with old callers that
+    don't pass model: in that case we look at all overrides for the
+    provider and apply only if there's exactly one (catches the common
+    case but won't silently clamp the wrong model when multiple exist)."""
+    if model is not None:
+        key = f"{provider_tag}:{model}"
+        if key in MODEL_OVERRIDES and "enforced_temperature" in MODEL_OVERRIDES[key]:
+            return MODEL_OVERRIDES[key]["enforced_temperature"]
+        return requested
+    # Legacy path: no model → only honor a lock if it's unambiguous
+    matches = [
+        v["enforced_temperature"]
+        for k, v in MODEL_OVERRIDES.items()
+        if k.startswith(f"{provider_tag}:") and "enforced_temperature" in v
+    ]
+    if len(matches) == 1:
+        return matches[0]
     return requested

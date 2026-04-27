@@ -108,15 +108,19 @@ def main() -> None:
         max_total_tokens=2_000_000,  # $2 budget cap (6 LLMs)
     )
 
-    # Pre-flight 2: timeout geometry. With MAX_API_RETRY=2 (one transient
-    # retry on top of the original call) and per_iteration_timeout=60s, the
-    # total_turn_timeout must be ≥ 2*60 + buffer ≈ 180s — otherwise the
-    # very first retry exceeds the cap and we get a false turn_timeout.
-    # 180s is the LLMAgent default; we set it explicitly here for clarity.
-    # Kimi gets 240s because it's observably slower (China-region latency
-    # + verbose internal reasoning).
-    NORMAL_TIMEOUT = 180.0
-    SLOW_TIMEOUT = 240.0
+    # Pre-flight 2 (rev): timeout geometry math.
+    #   MAX_API_RETRY=2 ⇒ 3 wait_for(per_iter_timeout) calls
+    #   per_iter_timeout = 60s (LLMAgent default)
+    #   inter-retry backoff ≈ 0.5–1.0s × 2 sleeps
+    # Worst case before total_turn_timeout fires: 3*60 + 2*1 = 182s.
+    # 180s (the LLMAgent default) RACES this and would false-positive
+    # TotalTurnTimeout exactly when a 3rd retry was about to succeed —
+    # codex P0 finding before the 30-hand official tournament.
+    # 200s gives ~18s of headroom for OS / network jitter.
+    # Kimi keeps a wider envelope because per-call latency p95 is ~45s
+    # (observed during smoke), so any retry burns most of one window.
+    NORMAL_TIMEOUT = 200.0
+    SLOW_TIMEOUT = 260.0
     SLOW_PROVIDERS = {"kimi"}  # observed to need extra headroom
 
     agents = []
@@ -127,9 +131,9 @@ def main() -> None:
             LLMAgent(
                 provider=make_provider(provider_tag, model, api_key),
                 model=model,
-                # resolved_temperature pins Kimi to 1.0; everything else
-                # passes the requested 0.7 through unchanged.
-                temperature=resolved_temperature(provider_tag, 0.7),
+                # resolved_temperature pins kimi:kimi-k2.5 to 1.0; every
+                # other (provider, model) pair gets the requested 0.7.
+                temperature=resolved_temperature(provider_tag, 0.7, model=model),
                 total_turn_timeout_sec=timeout,
             )
         )

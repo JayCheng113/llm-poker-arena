@@ -122,7 +122,7 @@ def main() -> None:
             LLMAgent(
                 provider=make_provider(provider_tag, model, api_key),
                 model=model,
-                temperature=resolved_temperature(provider_tag, 0.7),
+                temperature=resolved_temperature(provider_tag, 0.7, model=model),
                 total_turn_timeout_sec=60.0,
             )
         )
