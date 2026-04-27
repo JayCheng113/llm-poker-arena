@@ -230,9 +230,14 @@ class OpenAICompatibleProvider(LLMProvider):
         raw_blocks = response.raw_assistant_turn.blocks
         if raw_blocks:
             raw_msg = dict(raw_blocks[0])
-            # `reasoning_content` is informational only — strip it when
-            # replaying so OpenAI/DeepSeek don't see it back.
-            raw_msg.pop("reasoning_content", None)
+            # DeepSeek thinking mode (v4-flash, deepseek-reasoner) REQUIRES
+            # the reasoning_content field to be round-tripped on subsequent
+            # multi-turn calls — otherwise: 400 invalid_request_error,
+            # "the `reasoning_content` in the thinking mode must be passed
+            # back to the API." For other providers the field is informational
+            # only; strip it so they don't see noise.
+            if self._provider_name != "deepseek":
+                raw_msg.pop("reasoning_content", None)
             return raw_msg
         # Fallback: synthesize from text + tool_calls (used when raw is empty).
         out: dict[str, Any] = {
