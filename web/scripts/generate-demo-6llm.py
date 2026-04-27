@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 _REPO = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO / "src"))
@@ -55,24 +56,23 @@ from llm_poker_arena.agents.llm.providers.registry import (
 from llm_poker_arena.engine.config import SessionConfig
 from llm_poker_arena.session.session import Session
 
-# OpenAI's GPT-5 family is a reasoning-model line whose moderation +
-# system-prompt safety check rejects "first write reasoning" framing
-# with `invalid_prompt`. The first 6-LLM tournament censored hand 13
-# on seat 2 (gpt-5.4-mini) for exactly this reason — codex 2026-04-27.
-# Workaround: those models get rationale_required=False, letting them
-# rely on their built-in reasoning instead of an explicit text block.
-_NO_RATIONALE_MODELS = frozenset({
-    "gpt-5",
-    "gpt-5-mini",
-    "gpt-5.4",
-    "gpt-5.4-mini",
-    "gpt-5.5",
-    "o1",
-    "o1-mini",
-    "o3",
-    "o3-mini",
-    "o4-mini",
-})
+# OpenAI's GPT-5 family + o-series are reasoning-model lines whose
+# moderation + system-prompt safety check rejects "first write reasoning"
+# framing with `invalid_prompt`. The first 6-LLM tournament censored
+# hand 13 on seat 2 (gpt-5.4-mini) for exactly this reason —
+# codex 2026-04-27. Workaround: these models get rationale_required=False,
+# letting them rely on their built-in reasoning instead of an explicit
+# text block.
+#
+# Prefix-based instead of an exhaustive list (codex P1 follow-up):
+# `gpt-5.4-mini`, `gpt-5-nano`, `gpt-5.1`, `gpt-5.2-codex`, future
+# `gpt-5*`/`gpt-6*` — same family, same moderation behavior. An exact
+# allow-list silently regresses the moment a new variant ships.
+_NO_RATIONALE_PREFIXES = ("gpt-5", "gpt-6", "o1", "o3", "o4")
+
+
+def _is_no_rationale_model(model: str) -> bool:
+    return any(model.startswith(p) for p in _NO_RATIONALE_PREFIXES)
 
 # Six providers, one seat each — sourced from the registry so adding a
 # provider there auto-extends the env-key check.
@@ -146,6 +146,16 @@ def main() -> None:
     SLOW_TIMEOUT = 260.0
     SLOW_PROVIDERS = {"kimi"}  # observed to need extra headroom
 
+    # codex 2nd-pass: Gemini gets sdk_max_retries=5 (registry.py) so the
+    # AsyncOpenAI client backs off through ~30s of 503 spike before
+    # surfacing the error. That entire backoff burns inside ONE
+    # asyncio.wait_for(per_iteration_timeout) wrap. Default 60s is too
+    # tight: SDK backoff caps at 8s/step, but 503 + Retry-After header
+    # + slow refresh can push a single SDK call past 60s. Bump just
+    # this seat's per-iteration timeout to 90s so the SDK gets to
+    # finish its retry budget without the outer wrap pulling the rug.
+    GEMINI_PER_ITER_TIMEOUT = 90.0
+
     base_profile = load_default_prompt_profile()
 
     agents = []
@@ -155,21 +165,23 @@ def main() -> None:
         # GPT-5 reasoning models reject explicit chain-of-thought framing.
         # Override their profile to skip the rationale text and rely on
         # the model's built-in reasoning. Other seats keep the default.
-        if model in _NO_RATIONALE_MODELS:
+        if _is_no_rationale_model(model):
             profile = with_overrides(base_profile, rationale_required=False)
         else:
             profile = base_profile
-        agents.append(
-            LLMAgent(
-                provider=make_provider(provider_tag, model, api_key),
-                model=model,
-                # resolved_temperature pins kimi:kimi-k2.5 to 1.0; every
-                # other (provider, model) pair gets the requested 0.7.
-                temperature=resolved_temperature(provider_tag, 0.7, model=model),
-                total_turn_timeout_sec=timeout,
-                prompt_profile=profile,
-            )
-        )
+        agent_kwargs: dict[str, Any] = {
+            "provider": make_provider(provider_tag, model, api_key),
+            "model": model,
+            # resolved_temperature pins kimi:kimi-k2.5 to 1.0; every
+            # other (provider, model) pair gets the requested 0.7.
+            "temperature": resolved_temperature(provider_tag, 0.7, model=model),
+            "total_turn_timeout_sec": timeout,
+            "prompt_profile": profile,
+        }
+        # See GEMINI_PER_ITER_TIMEOUT comment above for rationale.
+        if provider_tag == "gemini":
+            agent_kwargs["per_iteration_timeout_sec"] = GEMINI_PER_ITER_TIMEOUT
+        agents.append(LLMAgent(**agent_kwargs))
 
     if session_dir.exists():
         shutil.rmtree(session_dir)
