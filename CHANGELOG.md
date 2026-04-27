@@ -4,6 +4,39 @@ All notable user-facing changes are listed here. Dates are in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Polish round 2 (April 27, 2026)
+
+- **More providers**: Kimi (Moonshot), Grok (xAI), Gemini (Google AI Studio
+  via OpenAI-compatible shim) added to CLI + agent label/icon mappings.
+  Total provider count: 7 (Anthropic, OpenAI, DeepSeek, Qwen, Kimi, Grok,
+  Gemini).
+- **DeepSeek thinking-mode roundtrip**: provider now preserves
+  `reasoning_content` on multi-turn replays for the `deepseek` provider —
+  unblocks `deepseek-v4-flash` direct usage before the legacy
+  `deepseek-chat` alias deprecation 2026-07-24.
+- **PnL chart switched to running-stack view**: Y axis now shows each
+  player's bankroll over time (starting + cumulative PnL) instead of a
+  centered-at-zero PnL delta. Smooth monotone curves replace linear lines.
+  More intuitive for "who's winning" at a glance; small swings stay
+  legible next to big spikes.
+- **RuleBased agent records the rule that fired**: reasoning panel now
+  shows e.g. "PREMIUM hand AA (UTG) → open-raise 300 (3× BB)" instead of
+  an opaque "(no LLM reasoning)" placeholder. Backend's
+  RuleBasedAgent.decide() emits a synthetic IterationRecord so the
+  existing rendering path picks it up unchanged.
+- **HUD persisted to meta.json + displayed**: per-seat VPIP / PFR / 3-bet /
+  AF / WTSD aggregates now serialize into `meta.hud_per_seat`. Session
+  Summary modal grows a per-seat HUD table and a per-hand outcomes
+  table (winner + pot + community).
+- **Bundle code-splitting**: React.lazy + Suspense around PnlChart,
+  SessionSummary, DevPanel. Initial JS payload dropped 296 KB → 79 KB
+  gzip (3× reduction in first-paint download).
+- **Keyboard shortcuts modal**: clicking the toolbar's keyboard icon now
+  opens a small popover listing all shortcuts (←/→ / ↑/↓ / Space). Esc
+  + backdrop click + × close.
+- **Updated provider docs**: USAGE.md per-provider notes refreshed for
+  April 2026 model lineups (Grok 4.x, Gemini 3.x, Kimi K2.6, DeepSeek V4).
+
 ### Web UI Polish (April 27, 2026)
 
 - Inter + JetBrains Mono fonts loaded from Google Fonts
