@@ -45,6 +45,15 @@ from llm_poker_arena.agents.llm.types import (
 )
 
 
+def _max_tokens_kwarg(model: str, value: int) -> dict[str, int]:
+    """gpt-5.x and o-series require 'max_completion_tokens' instead of
+    'max_tokens'. Other OpenAI-compatible providers (DeepSeek, Qwen,
+    older OpenAI) still use 'max_tokens'."""
+    if model.startswith("gpt-5") or model.startswith("o1") or model.startswith("o3"):
+        return {"max_completion_tokens": value}
+    return {"max_tokens": value}
+
+
 class OpenAICompatibleProvider(LLMProvider):
     def __init__(
         self,
@@ -101,7 +110,7 @@ class OpenAICompatibleProvider(LLMProvider):
 
         kwargs: dict[str, Any] = {
             "model": self._model,
-            "max_tokens": self._max_tokens,
+            **_max_tokens_kwarg(self._model, self._max_tokens),
             "temperature": temperature,
             "messages": cast("Any", oai_msgs),
         }
@@ -296,7 +305,7 @@ class OpenAICompatibleProvider(LLMProvider):
         observed_kinds: list[ReasoningArtifactKind] = []
         kwargs: dict[str, Any] = {
             "model": self._model,
-            "max_tokens": 8,
+            **_max_tokens_kwarg(self._model, 8),
             "messages": cast("Any", [{"role": "user", "content": "ok"}]),
             "seed": 42,
         }

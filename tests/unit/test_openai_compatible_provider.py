@@ -16,6 +16,7 @@ from llm_poker_arena.agents.llm.provider_base import (
 )
 from llm_poker_arena.agents.llm.providers.openai_compatible import (
     OpenAICompatibleProvider,
+    _max_tokens_kwarg,
 )
 from llm_poker_arena.agents.llm.types import (
     LLMResponse,
@@ -483,3 +484,24 @@ def test_deepseek_reasoner_probe_records_raw_kind() -> None:
     )
     cap = asyncio.run(p.probe())
     assert ReasoningArtifactKind.RAW in cap.reasoning_kinds
+
+
+@pytest.mark.parametrize(
+    "model,expected_key",
+    [
+        ("gpt-4o-mini", "max_tokens"),
+        ("gpt-4o", "max_tokens"),
+        ("gpt-5", "max_completion_tokens"),
+        ("gpt-5.4-mini", "max_completion_tokens"),
+        ("gpt-5.5", "max_completion_tokens"),
+        ("o1-mini", "max_completion_tokens"),
+        ("o3", "max_completion_tokens"),
+        ("deepseek-chat", "max_tokens"),
+        ("deepseek-v4-flash", "max_tokens"),
+        ("qwen3.6-plus", "max_tokens"),
+    ],
+)
+def test_max_tokens_kwarg_routes_by_model_family(model: str, expected_key: str) -> None:
+    """gpt-5.x and o-series require max_completion_tokens; others use max_tokens."""
+    out = _max_tokens_kwarg(model, 100)
+    assert out == {expected_key: 100}
