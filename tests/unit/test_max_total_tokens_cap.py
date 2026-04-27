@@ -116,6 +116,13 @@ def test_cap_aborts_after_hand_when_exceeded(tmp_path: Path) -> None:
     # Aborted before all 12 hands.
     assert meta["total_hands_played"] < 12
     assert meta["stop_reason"] == "max_total_tokens_exceeded"
+    # codex fairness audit P2-1: abort must land on a rotation boundary
+    # so position exposure stays balanced. With num_players=6 the only
+    # legal stop points are 6 (1 rotation) — never 1/2/3/4/5/7/8/...
+    assert meta["total_hands_played"] % cfg.num_players == 0, (
+        f"cap-triggered abort at {meta['total_hands_played']} hands violates "
+        f"rotation balance (must be a multiple of {cfg.num_players})"
+    )
 
 
 def test_cap_above_session_total_does_not_abort(tmp_path: Path) -> None:

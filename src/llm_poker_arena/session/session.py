@@ -198,8 +198,16 @@ class Session:
             for hand_id in range(self._config.num_hands):
                 await self._run_one_hand(hand_id)
                 self._total_hands_played += 1
-                # Cost cap check at hand boundary (clean abort, complete artifacts).
-                if self._config.max_total_tokens is not None:
+                # Cost cap check at hand boundary (clean abort, complete
+                # artifacts). codex fairness audit P2-1: only abort at the
+                # END of a button-rotation (every num_players hands) so
+                # position exposure stays balanced — otherwise an unlucky
+                # mid-rotation cap leaves some seats with extra BTN /
+                # missing BB / etc., which would bias the chip_pnl.
+                if (
+                    self._config.max_total_tokens is not None
+                    and (hand_id + 1) % self._config.num_players == 0
+                ):
                     total_tokens = sum(
                         seat["input_tokens"] + seat["output_tokens"]
                         for seat in self._total_tokens_per_seat.values()
@@ -360,8 +368,11 @@ class Session:
         turn_counter = 0
 
         # Phase 3c-hud: per-hand booleans for VPIP/PFR/3-bet/WTSD; flushed
-        # to _hud_counters at hand end. Per-action stats (AF) are updated
-        # immediately in the loop below.
+        # to _hud_counters at hand end. AF (aggression-factor) counters are
+        # ALSO staged per-hand (codex fairness audit P1-1) — previously they
+        # were mutated session-wide on each action, which left ghost actions
+        # in opponent_stats when a hand was later censored mid-way. Now we
+        # stage per-action increments here and only flush on clean completion.
         n_seats = self._config.num_players
         hand_state: dict[int, dict[str, bool]] = {
             i: {
@@ -372,6 +383,9 @@ class Session:
                 "preflop_raised": False,
             }
             for i in range(n_seats)
+        }
+        hand_af: dict[int, dict[str, int]] = {
+            i: {"af_aggressive": 0, "af_passive": 0} for i in range(n_seats)
         }
 
         while state._state.actor_index is not None:  # noqa: SLF001
@@ -464,13 +478,14 @@ class Session:
                     hand_state[actor]["preflop_raised"] = True
 
             # Phase 3c-hud: AF — individual action ratio across all streets.
-            # aggressive = bet + raise_to + all_in
-            # passive = call
-            # fold + check not in formula (Task 5).
+            # aggressive = bet + raise_to + all_in; passive = call.
+            # fold + check not in formula (Task 5). Per-hand staging — see
+            # the hand_af initialization comment for why; flushed alongside
+            # the hand_state booleans below on clean completion.
             if chosen.tool_name in ("bet", "raise_to", "all_in"):
-                self._hud_counters[actor]["af_aggressive"] += 1
+                hand_af[actor]["af_aggressive"] += 1
             elif chosen.tool_name == "call":
-                self._hud_counters[actor]["af_passive"] += 1
+                hand_af[actor]["af_passive"] += 1
 
             result = apply_action(state, actor, chosen)
             if not result.is_valid:
@@ -569,6 +584,10 @@ class Session:
                 self._hud_counters[seat]["three_bet_chances"] += 1
             if hand_state[seat]["did_3bet"]:
                 self._hud_counters[seat]["three_bet_actions"] += 1
+            # AF flush — fairness audit P1-1. Only commits per-action
+            # increments after the hand is known clean.
+            self._hud_counters[seat]["af_aggressive"] += hand_af[seat]["af_aggressive"]
+            self._hud_counters[seat]["af_passive"] += hand_af[seat]["af_passive"]
         showdown = len(showdown_seats) > 1
         if showdown:
             events.append(
