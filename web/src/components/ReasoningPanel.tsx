@@ -5,9 +5,12 @@ interface Props {
   positionLabel: string
   iterations: IterationRecord[]
   commitAction: { type: ActionType; amount?: number }
+  isRuleBased?: boolean
 }
 
-export function ReasoningPanel({ actor, positionLabel, iterations, commitAction }: Props) {
+export function ReasoningPanel({
+  actor, positionLabel, iterations, commitAction, isRuleBased,
+}: Props) {
   return (
     <div className="bg-slate-100 border-l border-slate-300 p-3 h-full overflow-auto text-sm">
       <div className="font-bold text-slate-700 mb-2">
@@ -15,7 +18,13 @@ export function ReasoningPanel({ actor, positionLabel, iterations, commitAction 
       </div>
       <div className="space-y-2">
         {iterations.length === 0 && (
-          <div className="text-slate-500 italic">(no iterations recorded)</div>
+          isRuleBased ? (
+            <div className="text-slate-500 italic">
+              Rule-based agent (no LLM reasoning)
+            </div>
+          ) : (
+            <div className="text-slate-500 italic">(no iterations recorded)</div>
+          )
         )}
         {iterations.map((it, i) => (
           <IterationItem key={i} iter={it} />

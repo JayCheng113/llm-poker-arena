@@ -52,4 +52,31 @@ describe('ReasoningPanel', () => {
     )
     expect(getByText(/raise_to.*900/)).toBeDefined()
   })
+
+  it('shows rule-based hint when isRuleBased and no iterations', () => {
+    const { getByText, queryByText } = render(
+      <ReasoningPanel
+        actor={2}
+        positionLabel="BB"
+        iterations={[]}
+        commitAction={{ type: 'fold' }}
+        isRuleBased
+      />
+    )
+    expect(getByText(/rule-based agent/i)).toBeDefined()
+    expect(queryByText(/no iterations recorded/i)).toBeNull()
+  })
+
+  it('shows generic empty hint when LLM with no iterations', () => {
+    const { getByText } = render(
+      <ReasoningPanel
+        actor={3}
+        positionLabel="UTG"
+        iterations={[]}
+        commitAction={{ type: 'fold' }}
+        isRuleBased={false}
+      />
+    )
+    expect(getByText(/no iterations recorded/i)).toBeDefined()
+  })
 })

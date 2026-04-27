@@ -185,6 +185,7 @@ function App() {
             positionLabel={actorPosition}
             iterations={turn.reasoning}
             commitAction={turn.commitAction}
+            isRuleBased={(session.meta.seat_assignment[String(turn.actor)] ?? '').startsWith('rule_based')}
           />
         </div>
       </div>
