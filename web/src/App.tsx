@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  parseCanonicalPrivate,
-  parsePublicReplay,
-  parseAgentSnapshots,
-  parseMeta,
-} from './parsers/parseJsonl'
+import { parseSessionFiles, parseSessionFromFiles } from './parsers/parseSessionFiles'
 import { getCurrentTurn } from './selectors/getCurrentTurn'
 import { cardRevelation } from './selectors/cardRevelation'
 import { HandSelector } from './components/HandSelector'
@@ -123,11 +118,24 @@ function App() {
   const [sessionData, setSessionData] = useState<
     { id: string; session: ParsedSession } | null
   >(null)
+  const [customSession, setCustomSession] = useState<ParsedSession | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [showSummary, setShowSummary] = useState(false)
   const ptr = useUrlPointer()
+
+  const loadCustomSession = useCallback(async (files: FileList) => {
+    try {
+      const parsed = await parseSessionFromFiles(files)
+      setCustomSession(parsed)
+      setError(null)
+    } catch (e) {
+      setError(`Failed to load custom session: ${(e as Error).message}`)
+    }
+  }, [])
+
+  const clearCustomSession = useCallback(() => setCustomSession(null), [])
 
   // Load manifest once
   useEffect(() => {
@@ -144,13 +152,16 @@ function App() {
     ?? manifest?.sessions[0]?.id
     ?? null
 
-  // Derived: session matching the active id (null while a different id is loading)
-  const session = sessionData && sessionData.id === effectiveSessionId
-    ? sessionData.session
-    : null
+  // Derived: custom session takes priority; else session matching the active id.
+  const session = customSession
+    ?? (sessionData && sessionData.id === effectiveSessionId
+      ? sessionData.session
+      : null)
 
-  // Load session data when id changes (gated on manifest being ready)
+  // Load session data when id changes (gated on manifest being ready, skipped
+  // when a custom session is active to avoid wasted fetches)
   useEffect(() => {
+    if (customSession) return
     if (!effectiveSessionId) return
     let cancelled = false
     const base = `${DATA_ROOT}/${effectiveSessionId}`
@@ -162,26 +173,19 @@ function App() {
     ])
       .then(([canonText, publicText, snapText, metaText]) => {
         if (cancelled) return
-        const meta = parseMeta(metaText)
-        const canonical = parseCanonicalPrivate(canonText)
-        const publicRecords = parsePublicReplay(publicText)
-        const snaps = parseAgentSnapshots(snapText)
-        const hands: ParsedSession['hands'] = {}
-        for (const hand of canonical) {
-          const pubRec = publicRecords.find((p) => p.hand_id === hand.hand_id)
-          hands[hand.hand_id] = {
-            canonical: hand,
-            publicEvents: pubRec ? pubRec.street_events : [],
-            agentSnapshots: snaps.filter((s) => s.hand_id === hand.hand_id),
-          }
-        }
-        setSessionData({ id: effectiveSessionId, session: { meta, hands } })
+        setSessionData({
+          id: effectiveSessionId,
+          session: parseSessionFiles({
+            canonical: canonText, public: publicText,
+            snapshots: snapText, meta: metaText,
+          }),
+        })
       })
       .catch((e: Error) => {
         if (!cancelled) setError(`Failed to load session: ${e.message}`)
       })
     return () => { cancelled = true }
-  }, [effectiveSessionId])
+  }, [effectiveSessionId, customSession])
 
   // Compute nav state (safe when session not loaded yet) — must be before
   // early returns so hook order is stable.
@@ -342,7 +346,10 @@ function App() {
         onOpenSummary={() => setShowSummary(true)}
         manifest={manifest}
         currentSessionId={effectiveSessionId ?? undefined}
-        onSelectSession={ptr.setSessionId}
+        onSelectSession={(s) => { clearCustomSession(); ptr.setSessionId(s) }}
+        customLoaded={!!customSession}
+        onLoadCustom={loadCustomSession}
+        onClearCustom={clearCustomSession}
       />
       {showSummary && (
         <SessionSummary meta={session.meta} onClose={() => setShowSummary(false)} />

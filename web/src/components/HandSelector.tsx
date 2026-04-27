@@ -1,5 +1,7 @@
 import type { SessionManifest } from '../types'
 
+import { useRef } from 'react'
+
 interface Props {
   handIds: number[]
   currentHandId: number
@@ -14,6 +16,9 @@ interface Props {
   manifest?: SessionManifest | null
   currentSessionId?: string
   onSelectSession?: (id: string) => void
+  customLoaded?: boolean
+  onLoadCustom?: (files: FileList) => void
+  onClearCustom?: () => void
 }
 
 export function HandSelector({
@@ -21,7 +26,9 @@ export function HandSelector({
   playbackSpeed, onChangeSpeed,
   devMode, onToggleDev, onOpenSummary,
   manifest, currentSessionId, onSelectSession,
+  customLoaded, onLoadCustom, onClearCustom,
 }: Props) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const idx = handIds.indexOf(currentHandId)
   const canPrev = idx > 0
   const canNext = idx >= 0 && idx < handIds.length - 1
@@ -96,6 +103,42 @@ export function HandSelector({
         >
           dev {devMode ? 'ON' : 'OFF'}
         </button>
+      )}
+      {devMode && onLoadCustom && (
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".jsonl,.json"
+            aria-label="custom session files"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0) {
+                onLoadCustom(e.target.files)
+                e.target.value = ''  // allow re-selecting same files
+              }
+            }}
+          />
+          {customLoaded ? (
+            <button
+              onClick={onClearCustom}
+              aria-label="clear custom session"
+              className="px-2 py-1 rounded text-xs bg-fuchsia-700 text-white hover:bg-fuchsia-600"
+            >
+              ✗ unload custom
+            </button>
+          ) : (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="load custom session"
+              title="select 4 files: canonical_private.jsonl, public_replay.jsonl, agent_view_snapshots.jsonl, meta.json"
+              className="px-2 py-1 rounded text-xs bg-slate-600 text-slate-200 hover:bg-slate-500"
+            >
+              📁 load custom
+            </button>
+          )}
+        </>
       )}
       {manifest && manifest.sessions.length > 1 && onSelectSession && (
         <select
