@@ -190,7 +190,16 @@ async def test_anthropic_provider_threads_system_param_to_sdk(
         temperature=0.7,
         seed=None,
     )
-    assert captured["system"] == "You are a poker bot."
+    # System prompt is wrapped as a structured block with cache_control
+    # so Anthropic's prompt cache treats it as a stable boundary across
+    # turns (every call after the first becomes a cache_read at 10% cost).
+    assert captured["system"] == [
+        {
+            "type": "text",
+            "text": "You are a poker bot.",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
 
 
 @pytest.mark.asyncio

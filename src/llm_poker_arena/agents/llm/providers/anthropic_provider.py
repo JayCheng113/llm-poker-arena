@@ -3,8 +3,14 @@
 Phase 3a scope: send messages + tools, normalize response into LLMResponse,
 translate APIStatusError into transient (5xx, 429) or permanent (4xx).
 
-Out of scope (3b): extended-thinking blocks, capability probe, system prompt
-caching headers.
+Phase 3a follow-up: enable Anthropic's prompt caching on the system prompt.
+The system block is static across all turns of all hands (>1100 tokens of
+poker rules + tool semantics), so marking it `cache_control={"type":
+"ephemeral"}` cuts ~75% of Claude input cost on a session — every turn
+after the first becomes a cache_read at 10% of the standard input rate.
+The cache TTL is 5 minutes; one hand's worth of turns easily fit.
+
+Out of scope: extended-thinking blocks, capability probe.
 """
 
 from __future__ import annotations
@@ -61,7 +67,19 @@ class AnthropicProvider(LLMProvider):
                 "tools": cast("Any", tools) if tools else cast("Any", None),
             }
             if system is not None:
-                create_kwargs["system"] = system
+                # Anthropic prompt caching: structured system block with
+                # cache_control marks this as a cacheable boundary. The
+                # system prompt is identical across all turns in a session
+                # (PromptProfile.render_system is deterministic in
+                # SessionConfig), so every turn after the first is a
+                # cache_read (10% of standard input cost).
+                create_kwargs["system"] = cast("Any", [
+                    {
+                        "type": "text",
+                        "text": system,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ])
             resp = await self._client.messages.create(**create_kwargs)
         except (APITimeoutError, RateLimitError) as e:
             raise ProviderTransientError(str(e)) from e
