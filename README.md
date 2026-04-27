@@ -2,7 +2,7 @@
 
 A multi-agent platform where modern LLMs compete head-to-head at 6-max No-Limit Texas Hold'em — and you can watch every hand they play, with full reasoning traces, in your browser.
 
-**[▶ Live demo](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm)** · 6 LLMs (Claude · DeepSeek · GPT-5 · Qwen · Kimi · Gemini), one per seat · 30-hand tournament · open every decision
+**[▶ Live demo](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm)** · 6 LLMs (Claude · DeepSeek · GPT · Qwen · Kimi · Gemini), one per seat · 30-hand tournament · open every decision
 
 ![hero](docs/images/hero.png)
 
@@ -10,7 +10,7 @@ A multi-agent platform where modern LLMs compete head-to-head at 6-max No-Limit 
 
 ## What it does
 
-- **Backend (Python).** A reproducible 6-max NLHE engine wraps PokerKit. Plug in any LLM as a player; the agent runs a bounded ReAct loop (think → tool → observe → commit) using a portable tool spec, with separate retry budgets for API errors / illegal actions / missing tool calls / tool misuse. **Seven providers** ship out of the box: Anthropic (Claude), OpenAI (GPT-5.x), DeepSeek (V4 + thinking-mode), Qwen, Kimi (Moonshot), Grok (xAI), Gemini (Google AI Studio).
+- **Backend (Python).** A reproducible 6-max NLHE engine wraps PokerKit. Plug in any LLM as a player; the agent runs a bounded ReAct loop (think → tool → observe → commit) using a portable tool spec, with separate retry budgets for API errors / illegal actions / missing tool calls / tool misuse. **Seven providers** ship out of the box: Anthropic / OpenAI / DeepSeek / Qwen / Kimi / Grok / Gemini.
 
 - **Replay viewer (React).** A static web UI that fetches the JSONL artifacts a session emits and renders a poker table where every seat shows the actual provider logo, every reasoning step shows the LLM's prose + tool calls + tool results, and every decision is color-coded. Per-seat cumulative PnL chart, hand-by-hand timeline grouped by street, dev mode for raw debugging — all client-side, deployable to GitHub Pages with no backend.
 
@@ -26,14 +26,14 @@ The replay viewer is the answer's UI: it lets you open any decision and read the
 
 [**demo-6llm — 30-hand 6-LLM showdown**](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm) (one provider per seat, $0.71, 51.6 min wall time, 30/30 clean — no censored hands).
 
-| Seat | Model | Provider | P&L |
-|---|---|---|---|
-| 0 | claude-haiku-4-5 | Anthropic | **−17,100** ❌ |
-| 1 | deepseek-chat | DeepSeek | +1,250 |
-| 2 | gpt-5.4-mini | OpenAI | −12,800 |
-| 3 | qwen3.6-plus | Alibaba | +6,300 🥉 (third) |
-| 4 | kimi-k2.5 | Moonshot | **+20,150** 🥇 (winner) |
-| 5 | gemini-2.5-flash | Google AI Studio | +2,200 |
+| Rank | Seat | Model | Provider | P&L (chips) |
+|---|---|---|---|---|
+| 🥇 1 | 4 | kimi-k2.5 | Moonshot | **+20,150** |
+| 🥈 2 | 3 | qwen3.6-plus | Alibaba | +6,300 |
+| 🥉 3 | 5 | gemini-2.5-flash | Google AI Studio | +2,200 |
+| 4 | 1 | deepseek-chat | DeepSeek | +1,250 |
+| 5 | 2 | gpt-5.4-mini | OpenAI | −12,800 |
+| 6 | 0 | claude-haiku-4-5 | Anthropic | **−17,100** |
 
 Stake: 50/100 with 10,000-chip starting stacks (auto-rebuy each hand). Seed 23.
 
@@ -50,7 +50,7 @@ Earlier / smaller demos (4-LLM mixed lineup, single-LLM walk-through, all-bot ba
 - **Reasoning artifacts** captured per provider (raw text / summary / thinking_block / encrypted / redacted / unavailable) so post-hoc analysis can distinguish what the model actually emitted
 - **Cost guard**: `SessionConfig.max_total_tokens` aborts cleanly at the next hand boundary
 - **3-layer JSONL output**: canonical-private (engine truth, all hole cards), public-replay (UI-safe events), agent-view-snapshots (per-turn LLM iterations)
-- **460+ unit / integration tests**, gated real-API tests for every provider
+- **465+ unit / integration tests**, gated real-API tests for every provider
 
 ### Web UI
 - **Provider-aware seats**: every seat shows the actual brand logo (Anthropic / OpenAI / DeepSeek / Qwen / Kimi / Grok / Gemini) and trimmed model name
@@ -80,12 +80,13 @@ Earlier / smaller demos (4-LLM mixed lineup, single-LLM walk-through, all-bot ba
 
 ```
 ┌─ engine ─────────────────────────────────┐    ┌─ agents ──────────────────────────┐
-│ PokerKit canonical state                 │    │ RuleBasedAgent                    │
+│ PokerKit canonical state                 │    │ RuleBasedAgent · RandomAgent      │
 │ ↓                                        │    │ HumanCLIAgent                     │
 │ PlayerView / PublicView projections      │ ←→ │ LLMAgent                          │
 │  (frozen Pydantic, trust-boundary DTOs)  │    │  ├ AnthropicProvider              │
 │ ↓                                        │    │  └ OpenAICompatibleProvider       │
-│ Session orchestrator                     │    │     (OpenAI / DeepSeek / Qwen)    │
+│ Session orchestrator                     │    │     (OpenAI · DeepSeek · Qwen ·   │
+│                                          │    │      Kimi · Grok · Gemini)        │
 └───┬──────────────────────────────────────┘    └───────────────────────────────────┘
     │ writes 3-layer JSONL
     ▼
@@ -151,7 +152,7 @@ For more on session-config knobs, agent types, the cost guard, and the JSONL sch
 ## Tech stack
 
 - **Backend**: Python 3.12 · PokerKit 0.7.3 · Pydantic 2 · `pytest` · `mypy` · `ruff`
-- **Providers**: `anthropic` · `openai` (used for OpenAI + DeepSeek + Qwen via base_url override)
+- **Providers**: `anthropic` SDK · `openai` SDK (also drives DeepSeek / Qwen / Kimi / Grok / Gemini via `base_url` override)
 - **Web**: React 19 · Vite 8 · TypeScript 6 · Tailwind CSS v3 · [Tremor](https://www.tremor.so/) · [@lobehub/icons](https://github.com/lobehub/lobe-icons) · `lucide-react`
 - **Test**: Vitest · `@testing-library/react` · Playwright
 - **Deploy**: GitHub Actions → GitHub Pages
