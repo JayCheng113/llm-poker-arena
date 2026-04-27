@@ -226,6 +226,8 @@ class Session:
                 retry_summary_per_seat=self._retry_summary_per_seat,
                 tool_usage_summary=self._tool_usage_summary,
                 total_tokens_per_seat=self._total_tokens_per_seat,
+                hud_per_seat=self._hud_counters,
+                hud_hands_counted=self._hud_hands_counted,
                 stop_reason=stop_reason,
             )
             (self._output_dir / "meta.json").write_text(json.dumps(meta, sort_keys=True, indent=2))

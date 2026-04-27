@@ -44,6 +44,8 @@ def build_session_meta(
     retry_summary_per_seat: dict[int, dict[str, int]] | None = None,
     tool_usage_summary: dict[int, dict[str, int]] | None = None,
     total_tokens_per_seat: dict[int, dict[str, int]] | None = None,
+    hud_per_seat: dict[int, dict[str, int]] | None = None,
+    hud_hands_counted: int = 0,
     stop_reason: str = "completed",
 ) -> dict[str, Any]:
     return {
@@ -60,6 +62,12 @@ def build_session_meta(
         "chip_pnl": {str(s): int(v) for s, v in chip_pnl.items()},
         "retry_summary_per_seat": ({str(s): v for s, v in (retry_summary_per_seat or {}).items()}),
         "tool_usage_summary": ({str(s): v for s, v in (tool_usage_summary or {}).items()}),
+        # Phase 3c-hud follow-up: persist raw counters + denominator so the
+        # web UI can derive VPIP/PFR/3-bet/AF/WTSD ratios without re-running
+        # the engine. hud_hands_counted is the denominator for VPIP/PFR
+        # (clean-completion hands only — does NOT include censored hands).
+        "hud_per_seat": ({str(s): v for s, v in (hud_per_seat or {}).items()}),
+        "hud_hands_counted": int(hud_hands_counted),
         "censored_hands_count": 0,
         "censored_hand_ids": [],
         "total_tokens": ({str(s): v for s, v in (total_tokens_per_seat or {}).items()}),
