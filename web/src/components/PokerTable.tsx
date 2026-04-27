@@ -11,6 +11,7 @@ interface SeatProps {
   holeCards: 'face-down' | [CardStr, CardStr]
   lastAction?: string
   lastActionAmount?: number
+  agentId?: string
 }
 
 interface Props {

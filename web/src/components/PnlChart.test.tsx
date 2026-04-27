@@ -18,11 +18,11 @@ describe('PnlChart', () => {
     expect(container.querySelectorAll('[data-seat]').length).toBe(3)
   })
 
-  it('renders chart wrapper with title and current-hand caption', () => {
+  it('renders chart caption with viewing hand', () => {
     const series = [{ seat: 0, values: [0, 100, 200] }]
-    const { getByText } = render(<PnlChart series={series} currentHandIdx={1} />)
-    expect(getByText(/cumulative PnL/i)).toBeDefined()
-    expect(getByText(/currently viewing hand 1/i)).toBeDefined()
+    const { container } = render(<PnlChart series={series} currentHandIdx={1} />)
+    expect(container.textContent).toMatch(/cumulative PnL/i)
+    expect(container.textContent).toMatch(/viewing hand 1/i)
   })
 
   it('shows last cumulative value with formatted sign', () => {
@@ -32,14 +32,8 @@ describe('PnlChart', () => {
     ]
     const { container } = render(<PnlChart series={series} currentHandIdx={2} />)
     const text = container.textContent ?? ''
-    expect(text).toMatch(/seat 0\s*\+200/)
-    // formatted with the unicode minus sign for negatives
-    expect(text).toMatch(/seat 1\s*[-−]300/)
-  })
-
-  it('singularizes "hand" when only one data point', () => {
-    const series = [{ seat: 0, values: [0] }]
-    const { getByText } = render(<PnlChart series={series} currentHandIdx={0} />)
-    expect(getByText(/over 1 hand /i)).toBeDefined()
+    // legend label is "s{N}" + signed value (with unicode minus for negatives)
+    expect(text).toMatch(/s0\s*\+200/)
+    expect(text).toMatch(/s1\s*[-−]300/)
   })
 })

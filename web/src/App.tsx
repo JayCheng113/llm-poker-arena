@@ -312,6 +312,7 @@ function App() {
       holeCards,
       lastAction,
       lastActionAmount,
+      agentId: session.meta.seat_assignment[String(seatIdx)],
     }
   })
 

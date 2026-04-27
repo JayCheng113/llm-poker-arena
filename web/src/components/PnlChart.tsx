@@ -46,18 +46,14 @@ export function PnlChart({ series, currentHandIdx }: Props) {
   return (
     <div
       data-pnl-chart
-      className="bg-white rounded-lg border border-slate-200 shadow-sm p-4 w-full"
+      className="bg-white border-y border-slate-200 px-4 py-2"
     >
-      <div className="flex items-baseline justify-between mb-3">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900">
-            cumulative PnL
-          </h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            chip delta per seat over {numHands} hand{numHands === 1 ? '' : 's'}
-            {' · '}
-            currently viewing hand {currentHandIdx}
-          </p>
+      <div className="flex items-center justify-between gap-4 mb-1">
+        <div className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+          cumulative PnL
+          <span className="ml-2 font-normal text-slate-400 normal-case">
+            · viewing hand {currentHandIdx} of {numHands}
+          </span>
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-1 justify-end">
           {series.map((s) => {
@@ -67,14 +63,14 @@ export function PnlChart({ series, currentHandIdx }: Props) {
               <div key={s.seat} className="flex items-center gap-1.5 text-xs">
                 <span
                   data-seat={s.seat}
-                  className={`w-2.5 h-2.5 rounded-full bg-${color}-500`}
+                  className={`w-2 h-2 rounded-full bg-${color}-500`}
                 />
-                <span className="text-slate-600 font-medium">seat {s.seat}</span>
+                <span className="text-slate-500 font-medium">s{s.seat}</span>
                 <span
-                  className={`font-mono ${
+                  className={`font-mono tabular-nums ${
                     last > 0 ? 'text-emerald-600'
                     : last < 0 ? 'text-rose-600'
-                    : 'text-slate-500'
+                    : 'text-slate-400'
                   }`}
                 >
                   {fmt(last)}
@@ -85,7 +81,7 @@ export function PnlChart({ series, currentHandIdx }: Props) {
         </div>
       </div>
       <LineChart
-        className="h-32"
+        className="h-20"
         data={data}
         index="hand"
         categories={categories}
@@ -93,8 +89,9 @@ export function PnlChart({ series, currentHandIdx }: Props) {
         valueFormatter={fmt}
         showLegend={false}
         showAnimation={false}
-        yAxisWidth={56}
+        yAxisWidth={48}
         connectNulls
+        showGridLines={false}
         startEndOnly={numHands > 12}
         autoMinValue
       />

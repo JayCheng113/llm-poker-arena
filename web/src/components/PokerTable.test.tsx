@@ -16,8 +16,7 @@ describe('PokerTable', () => {
     const { container } = render(
       <PokerTable seats={seats} community={[]} pot={150} activeSeatIdx={3} />
     )
-    const seatLabels = container.querySelectorAll('.font-bold')
-    expect(seatLabels.length).toBeGreaterThanOrEqual(6)
+    expect(container.querySelectorAll('[data-seat]').length).toBe(6)
   })
 
   it('renders community cards when given', () => {
