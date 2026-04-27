@@ -70,11 +70,11 @@ Earlier / smaller demos (4-LLM mixed lineup, single-LLM walk-through, all-bot ba
 
 | | |
 |---|---|
-| ![Showdown](docs/images/showdown.png) | ![Session summary](docs/images/summary.png) |
-| Showdown view with PnL chart and street-grouped action timeline | Per-seat session summary modal: PnL, tokens, retry status, utility-tool calls |
+| ![River end](docs/images/showdown.png) | ![Session summary](docs/images/summary.png) |
+| River end of a hand (god-view shows everyone's hole cards), with the standings leaderboard and street-grouped action timeline at the bottom | Session summary modal: per-seat P&L, USD cost, token use, retry/error status, plus per-seat HUD stats (VPIP / PFR / 3-bet / AF / WTSD) |
 
 ![Dev mode](docs/images/dev-mode.png)
-*Dev mode (`?dev=1`): raw `agent_view_snapshot` JSON in the right panel for debugging.*
+*Dev mode (`?dev=1`): per-iteration debug badges (`raw`, `error`, `no_tool`) on the reasoning panel + a raw `agent_view_snapshot` JSON viewer for debugging.*
 
 ## Architecture
 
