@@ -10,16 +10,15 @@ test('load demo session and navigate', async ({ page }) => {
 
   await page.goto('/')
 
-  // Wait for session to load (HandSelector renders "hand 0" once data fetched)
-  await expect(page.getByText(/hand 0/i).first()).toBeVisible({ timeout: 10_000 })
+  // Wait for session to load — `is acting` lives in the reasoning panel and
+  // only renders once both manifest + session JSONL have arrived.
+  await expect(page.getByText(/is acting/i)).toBeVisible({ timeout: 10_000 })
 
-  // Should show poker table — at least 6 'seat N' labels visible
-  for (let i = 0; i < 6; i++) {
-    await expect(page.getByText(`seat ${i}`).first()).toBeVisible()
-  }
+  // Header brand visible
+  await expect(page.getByText(/LLM Poker Arena/i)).toBeVisible()
 
-  // Reasoning panel: should show some actor seat
-  await expect(page.getByText(/is acting/i)).toBeVisible()
+  // Should show 6 seats — count the data-seat attribute set by Seat root
+  await expect(page.locator('[data-seat]')).toHaveCount(6)
 
   // Switch to hand 1 via the dropdown (avoids layout overlap issues with
   // the prev/next buttons that can be intercepted by the poker table at

@@ -62,7 +62,7 @@ export function PnlChart({ series, currentHandIdx }: Props) {
             return (
               <div key={s.seat} className="flex items-center gap-1.5 text-xs">
                 <span
-                  data-seat={s.seat}
+                  data-pnl-seat={s.seat}
                   className={`w-2 h-2 rounded-full bg-${color}-500`}
                 />
                 <span className="text-slate-500 font-medium">s{s.seat}</span>

@@ -15,7 +15,7 @@ describe('PnlChart', () => {
       { seat: 2, values: [0, -50, -150] },
     ]
     const { container } = render(<PnlChart series={series} currentHandIdx={1} />)
-    expect(container.querySelectorAll('[data-seat]').length).toBe(3)
+    expect(container.querySelectorAll('[data-pnl-seat]').length).toBe(3)
   })
 
   it('renders chart caption with viewing hand', () => {
