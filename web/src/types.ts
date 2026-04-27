@@ -24,6 +24,8 @@ export interface SessionMeta {
   seat_assignment: { [seatStr: string]: string }
   initial_button_seat: number
   stop_reason: string
+  session_wall_time_sec?: number
+  estimated_cost_breakdown?: { [k: string]: unknown }
 }
 
 export interface TokenCounts {

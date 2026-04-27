@@ -29,3 +29,12 @@ test('screenshot dev mode god-view hand 0 turn 0', async ({ page }) => {
   await page.waitForSelector('text=is acting', { timeout: 10_000 })
   await page.screenshot({ path: '/tmp/web-dogfood/hand0-turn0-dev.png', fullPage: false })
 })
+
+test('screenshot session summary modal', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/?hand=0&turn=0')
+  await page.waitForSelector('text=is acting', { timeout: 10_000 })
+  await page.click('text=📊 summary')
+  await page.waitForSelector('text=session summary', { timeout: 5_000 })
+  await page.screenshot({ path: '/tmp/web-dogfood/session-summary.png', fullPage: false })
+})

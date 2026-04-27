@@ -6,11 +6,12 @@ interface Props {
   onTogglePlay?: () => void
   devMode?: boolean
   onToggleDev?: () => void
+  onOpenSummary?: () => void
 }
 
 export function HandSelector({
   handIds, currentHandId, onSelect, isPlaying, onTogglePlay,
-  devMode, onToggleDev,
+  devMode, onToggleDev, onOpenSummary,
 }: Props) {
   const idx = handIds.indexOf(currentHandId)
   const canPrev = idx > 0
@@ -51,6 +52,15 @@ export function HandSelector({
       <span className="text-slate-400 text-xs hidden md:inline">
         ←/→ turn · ↑/↓ hand · space play
       </span>
+      {onOpenSummary && (
+        <button
+          onClick={onOpenSummary}
+          aria-label="open session summary"
+          className="px-2 py-1 rounded text-xs bg-slate-600 text-slate-200 hover:bg-slate-500"
+        >
+          📊 summary
+        </button>
+      )}
       {onToggleDev && (
         <button
           onClick={onToggleDev}

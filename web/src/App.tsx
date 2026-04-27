@@ -13,6 +13,7 @@ import { ReasoningPanel } from './components/ReasoningPanel'
 import { ActionTimeline } from './components/ActionTimeline'
 import { DevPanel } from './components/DevPanel'
 import { PnlChart, type SeatSeries } from './components/PnlChart'
+import { SessionSummary } from './components/SessionSummary'
 import { useKeyboardNav } from './hooks/useKeyboardNav'
 import { useAutoPlay } from './hooks/useAutoPlay'
 
@@ -78,6 +79,7 @@ function App() {
   const [session, setSession] = useState<ParsedSession | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [showSummary, setShowSummary] = useState(false)
   const ptr = useUrlPointer()
 
   useEffect(() => {
@@ -243,7 +245,11 @@ function App() {
         onTogglePlay={togglePlay}
         devMode={ptr.devMode}
         onToggleDev={ptr.toggleDev}
+        onOpenSummary={() => setShowSummary(true)}
       />
+      {showSummary && (
+        <SessionSummary meta={session.meta} onClose={() => setShowSummary(false)} />
+      )}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex items-center justify-center p-4">
           <PokerTable
