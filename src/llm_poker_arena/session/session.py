@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -54,6 +55,7 @@ from llm_poker_arena.storage.layer_builders import (
     build_public_street_reveal_event,
 )
 from llm_poker_arena.storage.meta import build_session_meta
+from llm_poker_arena.storage.pricing import estimate_cost_usd
 from llm_poker_arena.storage.schemas import (
     ActionRecordPrivate,
     PublicEvent,
@@ -193,6 +195,8 @@ class Session:
     async def run(self) -> None:
         started_at_iso = _now_iso()
         started_at_monotonic = time.monotonic()
+        # Stashed so _print_progress can compute elapsed without an arg.
+        self._started_at_monotonic = started_at_monotonic
         initial_button_seat = 0
         # Initialize capabilities BEFORE the try so that even probe failure
         # reaches the finally cleanup (writers close, partial meta.json
@@ -208,6 +212,11 @@ class Session:
             for hand_id in range(self._config.num_hands):
                 await self._run_one_hand(hand_id)
                 self._total_hands_played += 1
+                # Per-hand progress line so a multi-hour 6-LLM tournament
+                # isn't a black box. Goes to stderr (won't pollute meta /
+                # JSONL artifacts piped via stdout) and stays one short
+                # line — `[hand 5/30] 423s · censored 2 · ~$0.18`.
+                self._print_progress(hand_id)
                 # Cost cap check at hand boundary (clean abort, complete
                 # artifacts). codex fairness audit P2-1: only abort at the
                 # END of a button-rotation (every num_players hands) so
@@ -262,6 +271,31 @@ class Session:
                 self._censor_writer,
             ):
                 w.close()
+
+    def _print_progress(self, hand_id: int) -> None:
+        """One-line per-hand progress to stderr.
+
+        Format: `[hand 5/30] 423s · censored 2 · ~$0.18`
+
+        Goes to stderr so it doesn't pollute stdout (which the demo
+        generators may want to keep clean for "session generated:" path
+        lines that downstream tooling parses). Stays one short line so a
+        30-hand tournament's progress output fits comfortably in any
+        terminal pane. ~$ figure is computed lazily from the same pricing
+        table meta.json uses, so what you see during the run matches
+        what's persisted at the end."""
+        elapsed = max(0, int(time.monotonic() - self._started_at_monotonic))
+        seat_assignment = {i: a.provider_id() for i, a in enumerate(self._agents)}
+        usd = estimate_cost_usd(
+            seat_assignment=seat_assignment,
+            total_tokens_per_seat=self._total_tokens_per_seat,
+        )["total_usd"]
+        line = (
+            f"[hand {hand_id + 1}/{self._config.num_hands}] "
+            f"{elapsed}s · censored {len(self._censored_hand_ids)} · "
+            f"~${usd:.3f}"
+        )
+        print(line, file=sys.stderr, flush=True)
 
     async def _probe_providers(self) -> dict[str, dict[str, Any]]:
         """For each LLMAgent in the seat list, call provider.probe() once
