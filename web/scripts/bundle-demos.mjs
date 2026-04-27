@@ -34,12 +34,18 @@ function lineupLabel(seatAssignment) {
 // shows whatever is first (App.tsx's `manifest.sessions[0]?.id`), so
 // putting the headline 6-LLM tournament first makes it the default
 // landing demo without forcing the user to re-pick on every page load.
+//
+// As of 2026-04-27 the GitHub Pages deploy ships only `demo-6llm`
+// (30-hand official tournament with one LLM per seat). Other ids stay
+// in the list so a contributor regenerating an older demo locally still
+// gets it placed sensibly without an extra picker hunt — but those
+// directories are not bundled into the pages deploy.
 const MARQUEE_ORDER = [
-  'demo-6llm',         // the headline 6-provider tournament
-  'demo-tournament',   // 4-LLM mixed lineup
-  'demo-6llm-smoke',   // smoke variant of the 6-LLM tournament
-  'demo-1',            // single-LLM walk-through
-  'demo-bots',         // all-bot baseline
+  'demo-6llm',         // headline 6-provider tournament — the shipped demo
+  'demo-tournament',   // 4-LLM mixed lineup (local-only)
+  'demo-6llm-smoke',   // smoke variant (local-only)
+  'demo-1',            // single-LLM walk-through (local-only)
+  'demo-bots',         // all-bot baseline (local-only)
 ]
 
 function priority(id) {

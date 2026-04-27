@@ -4,6 +4,54 @@ All notable user-facing changes are listed here. Dates are in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### 6-LLM showdown shipped (April 27, 2026)
+
+Official 30-hand 6-LLM tournament now lives at
+`web/public/data/demo-6llm/` and is the GitHub Pages landing demo.
+Took three runs to drive censor count to zero (4 → 4 → 0):
+
+- **Run 1** (commit `13b88bb` baseline): 4/30 censored. Investigation
+  revealed two real protocol bugs (Kimi K2.5 reasoning_content stripping,
+  GPT-5 invalid_prompt) plus one Gemini 503 capacity spike.
+- **Run 2** (commits `ced6534` + `d4dac42`): the Kimi reasoning fix
+  worked; GPT-5 still censored hand 2 because the user.j2 template had
+  a hard-coded "explain your reasoning" instruction independent of the
+  `rationale_required` flag.
+- **Run 3** (commit `2cae85c`): user.j2 also respects `rationale_required`.
+  30/30 clean, 51.6 min wall time, $0.71 total cost (cap was $2).
+
+P&L (final stacks − 10,000 starting):
+
+  🥇 kimi-k2.5         +20,150
+  🥈 qwen3.6-plus       +6,300
+  🥉 gemini-2.5-flash   +2,200
+     deepseek-chat      +1,250
+     gpt-5.4-mini      −12,800
+  ❌ claude-haiku-4-5  −17,100
+
+Pre-flight infrastructure that made this practical:
+
+- `meta.censored_hand_ids`, `meta.estimated_cost_breakdown`,
+  `meta.latency_per_seat_ms`, `meta.agent_config_per_seat`,
+  `meta.session_config` for full reproducibility (commits `13b88bb`,
+  `cca5457`)
+- Per-hand progress line on stderr so a 50-min run isn't a black box
+  (commit `2bf937f`)
+- Provider registry centralization with per-model temperature locks
+  (commit `13b88bb`)
+- USD pricing table corrected to match April 2026 official rates
+  (commit `cca5457`)
+- Generator `--force` guards to prevent silent overwrites of finished
+  tournaments (commit `13b88bb`)
+- `bundle-demos.mjs` MARQUEE_ORDER puts the headline demo first
+  automatically (commit `13b88bb`)
+- Frontend action labels switched from raw enum (`raise_to 250`) to
+  human-readable (`Raise to 250`) (commit `13b88bb`)
+
+The Pages deploy now ships only `demo-6llm/`. Other generator scripts
+(`generate-demo-tournament.py`, `generate-demo-bots.py`,
+`generate-demo.py`) remain in the repo for local experimentation.
+
 ### Polish round 3 — 6-LLM compatibility (April 27, 2026)
 
 Drove a 6-LLM tournament smoke (one provider per seat: Anthropic +

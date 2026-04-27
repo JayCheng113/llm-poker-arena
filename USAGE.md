@@ -41,27 +41,9 @@ poker-play \
                                                  --llm-base-url https://api.deepseek.com/v1
 ```
 
-### 4-LLM tournament demo
+### 6-LLM showdown demo (the one shipped on Pages)
 
-The 4-LLM mixed lineup (2 RuleBased + 4 LLM):
-
-```bash
-# all four keys required
-export ANTHROPIC_API_KEY=sk-ant-...
-export DEEPSEEK_API_KEY=sk-...
-export OPENAI_API_KEY=sk-...
-export QWEN_API_KEY=sk-...
-
-.venv/bin/python web/scripts/generate-demo-tournament.py --hands 30
-# → runs/demo-tournament/ + web/public/data/demo-tournament/ + manifest auto-rebuilt
-```
-
-Cost: ~$0.55 for 30 hands at April 2026 prices (Haiku $0.24 + DeepSeek
-$0.06 + GPT-5.4-mini $0.13 + Qwen 3.6-plus $0.12).
-
-### 6-LLM showdown demo
-
-Headline lineup — every seat is a different provider:
+The headline tournament — every seat is a different provider:
 
 ```bash
 # all six keys required
@@ -77,13 +59,27 @@ export GEMINI_API_KEY=AIza...
 ```
 
 Seats: Claude Haiku 4.5 / deepseek-chat / gpt-5.4-mini / qwen3.6-plus /
-kimi-k2.5 / gemini-2.5-flash. Cost: ~$0.80–$1.60 for 30 hands at April
-2026 prices (token cap is set to 2M = ~$2 ceiling). The exact USD
-breakdown lands in `meta.estimated_cost_breakdown` after the run.
+kimi-k2.5 / gemini-2.5-flash. The shipped reference run cost **$0.71** and
+took **51.6 min** wall time with **30/30 clean hands** (no censors). Token
+cap is set to 2M ≈ $2 budget ceiling; the exact per-seat USD breakdown lands
+in `meta.estimated_cost_breakdown`. Per-hand progress prints to stderr so
+the run isn't a black box.
 
-Both generators refuse to overwrite an existing run by default — pass
-`--force` to clobber it (useful when iterating on a test, dangerous for
-finished tournaments). Use `--hands 6` for a smoke test (one rotation).
+The generator refuses to overwrite an existing run unless you pass
+`--force` — useful when iterating on a test, dangerous for finished
+tournaments. Use `--hands 6` for a one-rotation smoke check.
+
+### Other demo scripts (local only)
+
+Three smaller generators ship for offline experimentation but are not bundled
+into the Pages deploy:
+
+- `web/scripts/generate-demo-tournament.py` — 4-LLM mixed lineup (2 RuleBased
+  + Claude/DeepSeek/GPT-mini/Qwen), 30 hands, ~$0.55
+- `web/scripts/generate-demo-bots.py` — 6 RuleBased agents, no API cost
+- `web/scripts/generate-demo.py` — single Claude Haiku seat among 5 bots, ~$0.05
+
+All three accept `--force` and auto-rebuild the manifest the same way.
 
 ## Agent types
 
@@ -111,7 +107,7 @@ boundary so all artifacts stay consistent. `meta.json.stop_reason` records
 `"max_total_tokens_exceeded"`.
 
 CLI flag for this is not yet exposed — set programmatically via
-`SessionConfig` in a Python script (see `web/scripts/generate-demo-tournament.py`
+`SessionConfig` in a Python script (see `web/scripts/generate-demo-6llm.py`
 for an end-to-end example).
 
 ## Log file structure
@@ -131,7 +127,7 @@ For analysis with DuckDB:
 
 ```python
 from llm_poker_arena.storage.duckdb_query import open_session
-con = open_session("runs/demo-tournament", access_token=...)
+con = open_session("runs/demo-6llm", access_token=...)
 con.execute("SELECT seat, COUNT(*) FROM actions GROUP BY seat").fetchall()
 ```
 
@@ -162,11 +158,11 @@ npm run build        # static build → dist/
 
 ### Adding a new session to the bundled site
 
-The bundled `web/scripts/generate-demo-*.py` generators handle all three
-steps (run, copy to `web/public/data/`, rebuild manifest) automatically:
+All `web/scripts/generate-demo-*.py` generators handle the three steps
+(run → copy to `web/public/data/` → rebuild manifest) automatically:
 
 ```bash
-.venv/bin/python web/scripts/generate-demo-bots.py     # 60-hand all-bot baseline
+.venv/bin/python web/scripts/generate-demo-6llm.py --hands 30
 cd web && npm run dev
 ```
 
@@ -177,10 +173,11 @@ cp -r runs/<your-id> web/public/data/
 node web/scripts/bundle-demos.mjs                      # writes web/public/data/manifest.json
 ```
 
-The manifest sorts by a curated marquee order (`demo-6llm` first, then
-`demo-tournament`, then `demo-6llm-smoke`, then alphabetical for
-anything else) — adjust `MARQUEE_ORDER` in `bundle-demos.mjs` if you
-want a different default landing demo.
+The manifest sorts by a curated marquee order (`demo-6llm` floats to
+the top, others fall to alphabetical) — adjust `MARQUEE_ORDER` in
+`bundle-demos.mjs` if you want a different default landing demo. The
+shipped Pages deploy contains only `demo-6llm`; other ids are
+local-experiment scaffolding.
 
 ### GitHub Pages deploy
 
