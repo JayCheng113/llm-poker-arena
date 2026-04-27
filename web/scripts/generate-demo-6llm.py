@@ -76,15 +76,33 @@ def _is_no_rationale_model(model: str) -> bool:
 
 # Six providers, one seat each — sourced from the registry so adding a
 # provider there auto-extends the env-key check.
-SEAT_LINEUP: tuple[tuple[str, str], ...] = (
-    ("anthropic", "claude-haiku-4-5"),       # seat 0
-    ("deepseek", "deepseek-chat"),           # seat 1
-    ("openai", "gpt-5.4-mini"),              # seat 2
-    ("qwen", "qwen3.6-plus"),                # seat 3
-    ("kimi", "kimi-k2.5"),                   # seat 4
-    ("gemini", "gemini-2.5-flash"),          # seat 5
-)
-REQUIRED_ENV = tuple(PROVIDERS[tag].env_var for tag, _ in SEAT_LINEUP)
+#
+# Two named lineups to date:
+#   - "mini" (default): the cost-balanced "small/fast" tier across the
+#     six provider families. Shipped as `demo-6llm` on Pages.
+#   - "flagship": single-variable change — Anthropic's seat upgraded
+#     from Haiku 4.5 to Sonnet 4.6 to test whether Sonnet's stronger
+#     decision-making narrows the gap with the field. The other five
+#     seats stay at the mini-tier model so any P&L delta isolates the
+#     Anthropic-side change. Shipped as `demo-6llm-flagship`.
+LINEUPS: dict[str, tuple[tuple[str, str], ...]] = {
+    "mini": (
+        ("anthropic", "claude-haiku-4-5"),       # seat 0
+        ("deepseek", "deepseek-chat"),           # seat 1
+        ("openai", "gpt-5.4-mini"),              # seat 2
+        ("qwen", "qwen3.6-plus"),                # seat 3
+        ("kimi", "kimi-k2.5"),                   # seat 4
+        ("gemini", "gemini-2.5-flash"),          # seat 5
+    ),
+    "flagship": (
+        ("anthropic", "claude-sonnet-4-6"),      # seat 0 — upgraded
+        ("deepseek", "deepseek-chat"),           # seat 1 — same
+        ("openai", "gpt-5.4-mini"),              # seat 2 — same
+        ("qwen", "qwen3.6-plus"),                # seat 3 — same
+        ("kimi", "kimi-k2.5"),                   # seat 4 — same
+        ("gemini", "gemini-2.5-flash"),          # seat 5 — same
+    ),
+}
 
 
 def main() -> None:
@@ -93,6 +111,19 @@ def main() -> None:
                         help="hands to play (must be multiple of 6; default 30)")
     parser.add_argument("--out", default="demo-6llm",
                         help="session id / output dir name")
+    parser.add_argument(
+        "--lineup", choices=tuple(LINEUPS), default="mini",
+        help="seat lineup preset (default 'mini' = the cost-balanced "
+             "small/fast tier across all 6 providers; 'flagship' upgrades "
+             "the Anthropic seat to claude-sonnet-4-6 to test stronger-"
+             "model decision quality at the same field).",
+    )
+    parser.add_argument(
+        "--max-tokens-cap", type=int, default=2_000_000,
+        help="SessionConfig.max_total_tokens (USD-equivalent budget cap; "
+             "default 2,000,000 ≈ $0.83 with the mini lineup, ≈ $1.7 with "
+             "flagship). 100-hand flagship runs need ~8M.",
+    )
     parser.add_argument(
         "--force", action="store_true",
         help="overwrite existing runs/<out>/ and web/public/data/<out>/. "
@@ -104,7 +135,9 @@ def main() -> None:
     if args.hands % 6 != 0:
         sys.exit(f"--hands ({args.hands}) must be a multiple of 6 (6 players)")
 
-    for k in REQUIRED_ENV:
+    seat_lineup = LINEUPS[args.lineup]
+    required_env = tuple(PROVIDERS[tag].env_var for tag, _ in seat_lineup)
+    for k in required_env:
         if not os.environ.get(k):
             sys.exit(f"{k} not set; check .env")
 
@@ -128,7 +161,7 @@ def main() -> None:
         rationale_required=True,
         opponent_stats_min_samples=10,
         rng_seed=23,
-        max_total_tokens=2_000_000,  # $2 budget cap (6 LLMs)
+        max_total_tokens=args.max_tokens_cap,
     )
 
     # Pre-flight 2 (rev): timeout geometry math.
@@ -159,7 +192,7 @@ def main() -> None:
     base_profile = load_default_prompt_profile()
 
     agents = []
-    for provider_tag, model in SEAT_LINEUP:
+    for provider_tag, model in seat_lineup:
         api_key = os.environ[PROVIDERS[provider_tag].env_var]
         timeout = SLOW_TIMEOUT if provider_tag in SLOW_PROVIDERS else NORMAL_TIMEOUT
         # GPT-5 reasoning models reject explicit chain-of-thought framing.
@@ -207,7 +240,7 @@ def main() -> None:
         print(f"warning: manifest rebuild skipped ({e}); "
               f"run `node {bundle_script}` manually.", file=sys.stderr)
 
-    print(f"6-LLM session generated:")
+    print(f"6-LLM session generated (lineup={args.lineup}):")
     print(f"  runs/{args.out}/")
     print(f"  web/public/data/{args.out}/")
 
