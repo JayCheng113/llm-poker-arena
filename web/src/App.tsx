@@ -176,6 +176,7 @@ function App() {
             community={community}
             pot={turn.pot}
             activeSeatIdx={turn.actor}
+            handResult={handEnded ? cfg.result : undefined}
           />
         </div>
         <div className="w-96">

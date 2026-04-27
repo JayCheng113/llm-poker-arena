@@ -78,8 +78,8 @@ export interface HandResultPrivate {
 
 export interface WinnerInfo {
   seat: number
-  amount: number
-  hand_label?: string
+  winnings: number
+  best_hand_desc: string
 }
 
 export interface SidePotSummary {

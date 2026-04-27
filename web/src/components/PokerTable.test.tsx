@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
 import { PokerTable } from './PokerTable'
-import type { CardStr, SeatStatus } from '../types'
+import type { CardStr, HandResultPrivate, SeatStatus } from '../types'
 
 const seats = Array.from({ length: 6 }, (_, i) => ({
   seatIdx: i,
@@ -34,5 +34,36 @@ describe('PokerTable', () => {
       <PokerTable seats={seats} community={[]} pot={1234} activeSeatIdx={3} />
     )
     expect(getByText(/1234/)).toBeDefined()
+  })
+
+  it('shows placeholder card outlines when community is empty', () => {
+    const { container, queryByText } = render(
+      <PokerTable seats={seats} community={[]} pot={150} activeSeatIdx={3} />
+    )
+    // No "no community cards" text clutter
+    expect(queryByText(/no community cards/i)).toBeNull()
+    // 5 placeholder outline divs in the community area
+    expect(container.querySelectorAll('[data-community-placeholder]').length).toBe(5)
+  })
+
+  it('renders winner banner when handResult provided', () => {
+    const handResult: HandResultPrivate = {
+      showdown: true,
+      winners: [{ seat: 3, winnings: 450, best_hand_desc: 'Two Pair' }],
+      side_pots: [],
+      final_invested: {},
+      net_pnl: {},
+    }
+    const { getByText } = render(
+      <PokerTable
+        seats={seats}
+        community={['As', 'Kh', '2c', '7d', '9s']}
+        pot={450}
+        activeSeatIdx={3}
+        handResult={handResult}
+      />
+    )
+    expect(getByText(/seat 3 wins \+450/i)).toBeDefined()
+    expect(getByText(/Two Pair/)).toBeDefined()
   })
 })
