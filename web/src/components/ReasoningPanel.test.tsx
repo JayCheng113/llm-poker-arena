@@ -79,4 +79,72 @@ describe('ReasoningPanel', () => {
     )
     expect(getByText(/no iterations recorded/i)).toBeDefined()
   })
+
+  it('renders snapshot-level badges when showDebugBadges + retry counts > 0', () => {
+    const snapshot = {
+      api_retry_count: 2,
+      illegal_action_retry_count: 1,
+      no_tool_retry_count: 0,
+      tool_usage_error_count: 0,
+      default_action_fallback: true,
+      api_error: { type: 'rate_limit', detail: 'too many' },
+      turn_timeout_exceeded: false,
+    } as never as import('../types').AgentViewSnapshot
+    const { container, getByText } = render(
+      <ReasoningPanel
+        actor={3} positionLabel="UTG"
+        iterations={[]}
+        commitAction={{ type: 'fold' }}
+        snapshot={snapshot}
+        showDebugBadges
+      />
+    )
+    expect(container.querySelector('[data-snapshot-badges]')).not.toBeNull()
+    expect(getByText(/api_error: rate_limit/)).toBeDefined()
+    expect(getByText(/api_retry × 2/)).toBeDefined()
+    expect(getByText(/illegal × 1/)).toBeDefined()
+    expect(getByText(/fallback/)).toBeDefined()
+  })
+
+  it('hides snapshot badges when showDebugBadges=false', () => {
+    const snapshot = {
+      api_retry_count: 5, illegal_action_retry_count: 0, no_tool_retry_count: 0,
+      tool_usage_error_count: 0, default_action_fallback: false,
+      api_error: null, turn_timeout_exceeded: false,
+    } as never as import('../types').AgentViewSnapshot
+    const { container } = render(
+      <ReasoningPanel
+        actor={3} positionLabel="UTG" iterations={[]}
+        commitAction={{ type: 'fold' }}
+        snapshot={snapshot}
+      />
+    )
+    expect(container.querySelector('[data-snapshot-badges]')).toBeNull()
+  })
+
+  it('renders provider_response_kind=error badge when showDebugBadges', () => {
+    const iters = [
+      _iter({ provider_response_kind: 'error', text_content: 'err' }),
+    ]
+    const { getByText } = render(
+      <ReasoningPanel actor={3} positionLabel="UTG" iterations={iters}
+                      commitAction={{ type: 'fold' }} showDebugBadges />
+    )
+    expect(getByText(/^error$/)).toBeDefined()
+  })
+
+  it('renders reasoning_artifacts.kind labels when showDebugBadges', () => {
+    const iters = [
+      _iter({
+        text_content: 't',
+        reasoning_artifacts: [{ kind: 'thinking_block' }, { kind: 'redacted' }],
+      }),
+    ]
+    const { getByText } = render(
+      <ReasoningPanel actor={3} positionLabel="UTG" iterations={iters}
+                      commitAction={{ type: 'fold' }} showDebugBadges />
+    )
+    expect(getByText(/thinking_block/)).toBeDefined()
+    expect(getByText(/redacted/)).toBeDefined()
+  })
 })
