@@ -12,6 +12,9 @@ import { PokerTable } from './components/PokerTable'
 import { ReasoningPanel } from './components/ReasoningPanel'
 import { ActionTimeline } from './components/ActionTimeline'
 import { useKeyboardNav } from './hooks/useKeyboardNav'
+import { useAutoPlay } from './hooks/useAutoPlay'
+
+const AUTO_PLAY_INTERVAL_MS = 1500
 import type {
   ParsedSession, SeatStatus, CardStr, ActionType,
 } from './types'
@@ -62,6 +65,7 @@ function _formatAction(action: { type: ActionType; amount?: number }): string {
 function App() {
   const [session, setSession] = useState<ParsedSession | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
   const ptr = useUrlPointer()
 
   useEffect(() => {
@@ -99,6 +103,7 @@ function App() {
   const hand = session?.hands[ptr.handId]
   const turnCount = hand?.agentSnapshots.length ?? 0
   const safeTurnIdx = Math.min(ptr.turnIdx, Math.max(0, turnCount - 1))
+  const togglePlay = useMemo(() => () => setIsPlaying((p) => !p), [])
   const navTargets = useMemo(() => ({
     onPrevTurn: () => ptr.setTurnIdx(Math.max(0, safeTurnIdx - 1)),
     onNextTurn: () => ptr.setTurnIdx(Math.min(turnCount - 1, safeTurnIdx + 1)),
@@ -110,8 +115,24 @@ function App() {
       const idx = handIds.indexOf(ptr.handId)
       if (idx >= 0 && idx < handIds.length - 1) ptr.setHandId(handIds[idx + 1])
     },
-  }), [ptr, safeTurnIdx, turnCount, handIds])
+    onTogglePlay: togglePlay,
+  }), [ptr, safeTurnIdx, turnCount, handIds, togglePlay])
   useKeyboardNav(navTargets, !!hand)
+
+  // Auto-advance: turn → next turn → next hand → stop at end of session
+  const autoTick = useMemo(() => () => {
+    if (safeTurnIdx < turnCount - 1) {
+      ptr.setTurnIdx(safeTurnIdx + 1)
+      return
+    }
+    const idx = handIds.indexOf(ptr.handId)
+    if (idx >= 0 && idx < handIds.length - 1) {
+      ptr.setHandId(handIds[idx + 1])
+      return
+    }
+    setIsPlaying(false)
+  }, [ptr, safeTurnIdx, turnCount, handIds])
+  useAutoPlay({ isPlaying: isPlaying && !!hand, intervalMs: AUTO_PLAY_INTERVAL_MS, onTick: autoTick })
 
   if (error) {
     return <div className="p-8 text-red-700">{error}</div>
@@ -188,6 +209,8 @@ function App() {
         handIds={handIds}
         currentHandId={ptr.handId}
         onSelect={ptr.setHandId}
+        isPlaying={isPlaying}
+        onTogglePlay={togglePlay}
       />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex items-center justify-center p-4">

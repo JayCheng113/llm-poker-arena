@@ -2,9 +2,13 @@ interface Props {
   handIds: number[]
   currentHandId: number
   onSelect: (handId: number) => void
+  isPlaying?: boolean
+  onTogglePlay?: () => void
 }
 
-export function HandSelector({ handIds, currentHandId, onSelect }: Props) {
+export function HandSelector({
+  handIds, currentHandId, onSelect, isPlaying, onTogglePlay,
+}: Props) {
   const idx = handIds.indexOf(currentHandId)
   const canPrev = idx > 0
   const canNext = idx >= 0 && idx < handIds.length - 1
@@ -28,6 +32,22 @@ export function HandSelector({ handIds, currentHandId, onSelect }: Props) {
       >
         next →
       </button>
+      {onTogglePlay && (
+        <button
+          onClick={onTogglePlay}
+          aria-label={isPlaying ? 'pause' : 'play'}
+          className={`px-3 py-1 rounded font-semibold ${
+            isPlaying
+              ? 'bg-amber-500 hover:bg-amber-400 text-slate-900'
+              : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+          }`}
+        >
+          {isPlaying ? '⏸ pause' : '▶ play'}
+        </button>
+      )}
+      <span className="text-slate-400 text-xs hidden md:inline">
+        ←/→ turn · ↑/↓ hand · space play
+      </span>
       <select
         value={currentHandId}
         onChange={(e) => onSelect(Number(e.target.value))}
