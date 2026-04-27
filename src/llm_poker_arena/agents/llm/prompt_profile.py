@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import tomllib
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -133,4 +133,17 @@ def load_default_prompt_profile() -> PromptProfile:
     return PromptProfile.from_toml(_DEFAULT_TOML)
 
 
-__all__ = ["PromptProfile", "load_default_prompt_profile"]
+def with_overrides(base: PromptProfile, **overrides: Any) -> PromptProfile:
+    """Build a new PromptProfile from `base` with one or more fields
+    overridden — used by per-seat configuration like "gpt-5 reasoning
+    models reject explicit chain-of-thought, set rationale_required=False
+    for that seat only."
+
+    Wraps `dataclasses.replace` so callers don't have to import the
+    field name twice; the Jinja env (a non-replaceable shared resource)
+    is preserved automatically since `replace` only swaps the named
+    fields. Returns a new immutable instance — caller must reassign."""
+    return replace(base, **overrides)
+
+
+__all__ = ["PromptProfile", "load_default_prompt_profile", "with_overrides"]

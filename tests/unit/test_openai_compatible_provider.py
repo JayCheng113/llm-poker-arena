@@ -455,6 +455,64 @@ def test_deepseek_chat_no_reasoning_content_returns_empty_tuple() -> None:
     assert p.extract_reasoning_artifact(out) == ()
 
 
+def test_kimi_replay_preserves_reasoning_content_for_multi_turn() -> None:
+    """Regression: Kimi K2.5 (and the K2.x family) defaults to thinking
+    mode and 400s with `thinking is enabled but reasoning_content is
+    missing in assistant tool call message at index N` if we strip the
+    field on the replay path. The first 6-LLM tournament censored 2
+    hands on Kimi seat 4 before this whitelist was added — codex P1
+    2026-04-27. Mirrors `test_deepseek_replay_preserves_reasoning_content`
+    intent for the deepseek branch."""
+    msg = _FakeMessage(
+        content="Calling, pot odds favor it.",
+        tool_calls=[_FakeToolCall("call_kimi_1", "call", "{}")],
+        reasoning_content="(internal chain of thought elided by Kimi)",
+    )
+    resp = _FakeChatResp(_FakeChoice(msg), model="kimi-k2.5")
+    p, _ = _make_provider_with_fake_create(
+        resp,
+        base_url="https://api.moonshot.cn/v1",
+        provider_name_value="kimi",
+        model="kimi-k2.5",
+    )
+    out = asyncio.run(
+        p.complete(
+            system=None,
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            temperature=1.0,
+            seed=None,
+        )
+    )
+    replay = p.build_assistant_message_for_replay(out)
+    assert replay["reasoning_content"] == "(internal chain of thought elided by Kimi)"
+
+
+def test_openai_replay_strips_reasoning_content() -> None:
+    """Counter-test: pure OpenAI (gpt-4o-mini, no thinking mode) should
+    NOT carry reasoning_content into replay messages. Whitelist must be
+    deepseek+kimi-only — adding more providers without API verification
+    risks per-call token bloat / unsupported field errors."""
+    msg = _FakeMessage(
+        content="ok",
+        tool_calls=[_FakeToolCall("c1", "fold", "{}")],
+        reasoning_content="should-not-roundtrip",
+    )
+    resp = _FakeChatResp(_FakeChoice(msg), model="gpt-4o-mini")
+    p, _ = _make_provider_with_fake_create(resp)
+    out = asyncio.run(
+        p.complete(
+            system=None,
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            temperature=0.5,
+            seed=None,
+        )
+    )
+    replay = p.build_assistant_message_for_replay(out)
+    assert "reasoning_content" not in replay
+
+
 def test_openai_probe_returns_observed_capability() -> None:
     msg = _FakeMessage(content="ok", tool_calls=None)
     resp = _FakeChatResp(_FakeChoice(msg, finish_reason="stop"), model="gpt-4o-mini")

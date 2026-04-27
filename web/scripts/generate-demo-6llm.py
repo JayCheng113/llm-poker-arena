@@ -43,6 +43,10 @@ if _env_file.exists():
         os.environ[k.strip()] = v.strip()
 
 from llm_poker_arena.agents.llm.llm_agent import LLMAgent
+from llm_poker_arena.agents.llm.prompt_profile import (
+    load_default_prompt_profile,
+    with_overrides,
+)
 from llm_poker_arena.agents.llm.providers.registry import (
     PROVIDERS,
     make_provider,
@@ -50,6 +54,25 @@ from llm_poker_arena.agents.llm.providers.registry import (
 )
 from llm_poker_arena.engine.config import SessionConfig
 from llm_poker_arena.session.session import Session
+
+# OpenAI's GPT-5 family is a reasoning-model line whose moderation +
+# system-prompt safety check rejects "first write reasoning" framing
+# with `invalid_prompt`. The first 6-LLM tournament censored hand 13
+# on seat 2 (gpt-5.4-mini) for exactly this reason — codex 2026-04-27.
+# Workaround: those models get rationale_required=False, letting them
+# rely on their built-in reasoning instead of an explicit text block.
+_NO_RATIONALE_MODELS = frozenset({
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.5",
+    "o1",
+    "o1-mini",
+    "o3",
+    "o3-mini",
+    "o4-mini",
+})
 
 # Six providers, one seat each — sourced from the registry so adding a
 # provider there auto-extends the env-key check.
@@ -123,10 +146,19 @@ def main() -> None:
     SLOW_TIMEOUT = 260.0
     SLOW_PROVIDERS = {"kimi"}  # observed to need extra headroom
 
+    base_profile = load_default_prompt_profile()
+
     agents = []
     for provider_tag, model in SEAT_LINEUP:
         api_key = os.environ[PROVIDERS[provider_tag].env_var]
         timeout = SLOW_TIMEOUT if provider_tag in SLOW_PROVIDERS else NORMAL_TIMEOUT
+        # GPT-5 reasoning models reject explicit chain-of-thought framing.
+        # Override their profile to skip the rationale text and rely on
+        # the model's built-in reasoning. Other seats keep the default.
+        if model in _NO_RATIONALE_MODELS:
+            profile = with_overrides(base_profile, rationale_required=False)
+        else:
+            profile = base_profile
         agents.append(
             LLMAgent(
                 provider=make_provider(provider_tag, model, api_key),
@@ -135,6 +167,7 @@ def main() -> None:
                 # other (provider, model) pair gets the requested 0.7.
                 temperature=resolved_temperature(provider_tag, 0.7, model=model),
                 total_turn_timeout_sec=timeout,
+                prompt_profile=profile,
             )
         )
 

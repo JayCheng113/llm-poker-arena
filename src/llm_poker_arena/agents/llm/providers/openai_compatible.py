@@ -230,13 +230,21 @@ class OpenAICompatibleProvider(LLMProvider):
         raw_blocks = response.raw_assistant_turn.blocks
         if raw_blocks:
             raw_msg = dict(raw_blocks[0])
-            # DeepSeek thinking mode (v4-flash, deepseek-reasoner) REQUIRES
-            # the reasoning_content field to be round-tripped on subsequent
-            # multi-turn calls — otherwise: 400 invalid_request_error,
-            # "the `reasoning_content` in the thinking mode must be passed
-            # back to the API." For other providers the field is informational
-            # only; strip it so they don't see noise.
-            if self._provider_name != "deepseek":
+            # Both DeepSeek (v4-flash / deepseek-reasoner) and Kimi K2.5
+            # default to thinking mode and REQUIRE the reasoning_content
+            # field to be round-tripped on subsequent multi-turn calls.
+            # Stripping it produces 400 invalid_request_error like:
+            #   - DeepSeek: "the `reasoning_content` in the thinking mode
+            #     must be passed back to the API."
+            #   - Kimi:     "thinking is enabled but reasoning_content is
+            #     missing in assistant tool call message at index N"
+            # (The first 6-LLM tournament censored 2 hands on Kimi seat 4
+            # before this whitelist was extended — codex 2026-04-27.)
+            # Whitelist (not blacklist) is intentional: a new provider
+            # that emits reasoning_content but doesn't require roundtrip
+            # would add cost / token bloat for no reason; opt-in keeps
+            # the surface tight.
+            if self._provider_name not in {"deepseek", "kimi"}:
                 raw_msg.pop("reasoning_content", None)
             _normalize_assistant_content(raw_msg)
             return raw_msg
