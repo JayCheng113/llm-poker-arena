@@ -1,3 +1,5 @@
+import type { SessionManifest } from '../types'
+
 interface Props {
   handIds: number[]
   currentHandId: number
@@ -7,11 +9,15 @@ interface Props {
   devMode?: boolean
   onToggleDev?: () => void
   onOpenSummary?: () => void
+  manifest?: SessionManifest | null
+  currentSessionId?: string
+  onSelectSession?: (id: string) => void
 }
 
 export function HandSelector({
   handIds, currentHandId, onSelect, isPlaying, onTogglePlay,
   devMode, onToggleDev, onOpenSummary,
+  manifest, currentSessionId, onSelectSession,
 }: Props) {
   const idx = handIds.indexOf(currentHandId)
   const canPrev = idx > 0
@@ -75,10 +81,24 @@ export function HandSelector({
           dev {devMode ? 'ON' : 'OFF'}
         </button>
       )}
+      {manifest && manifest.sessions.length > 1 && onSelectSession && (
+        <select
+          value={currentSessionId ?? manifest.sessions[0].id}
+          onChange={(e) => onSelectSession(e.target.value)}
+          aria-label="select session"
+          className="ml-auto bg-slate-800 border border-slate-500 rounded px-2 py-1 text-xs"
+        >
+          {manifest.sessions.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      )}
       <select
         value={currentHandId}
         onChange={(e) => onSelect(Number(e.target.value))}
-        className="ml-auto bg-slate-600 border border-slate-500 rounded px-2 py-1 text-sm"
+        className={`${manifest && manifest.sessions.length > 1 ? '' : 'ml-auto'} bg-slate-600 border border-slate-500 rounded px-2 py-1 text-sm`}
       >
         {handIds.map((h) => (
           <option key={h} value={h}>

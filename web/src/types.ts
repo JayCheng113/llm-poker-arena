@@ -247,6 +247,17 @@ export interface ApiErrorInfo {
   detail: string
 }
 
+// === manifest.json (multi-session selector) ===
+export interface SessionManifest {
+  sessions: SessionManifestEntry[]
+}
+
+export interface SessionManifestEntry {
+  id: string
+  label: string
+  hands: number
+}
+
 // === Top-level container after parsing all 4 files ===
 export interface ParsedSession {
   meta: SessionMeta

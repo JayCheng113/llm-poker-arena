@@ -19,10 +19,10 @@ import { useAutoPlay } from './hooks/useAutoPlay'
 
 const AUTO_PLAY_INTERVAL_MS = 1500
 import type {
-  ParsedSession, SeatStatus, CardStr, ActionType,
+  ParsedSession, SessionManifest, SeatStatus, CardStr, ActionType,
 } from './types'
 
-const DATA_BASE = `${import.meta.env.BASE_URL}data/demo-1`
+const DATA_ROOT = `${import.meta.env.BASE_URL}data`
 const POSITION_LABELS = ['BTN', 'SB', 'BB', 'UTG', 'HJ', 'CO']
 
 function _positionLabelForSeat(seat: number, buttonSeat: number, n: number): string {
@@ -31,9 +31,11 @@ function _positionLabelForSeat(seat: number, buttonSeat: number, n: number): str
 }
 
 function useUrlPointer(): {
+  sessionId: string | null
   handId: number
   turnIdx: number
   devMode: boolean
+  setSessionId: (s: string) => void
   setHandId: (h: number) => void
   setTurnIdx: (t: number) => void
   toggleDev: () => void
@@ -41,6 +43,7 @@ function useUrlPointer(): {
   const [pointer, setPointer] = useState(() => {
     const params = new URLSearchParams(window.location.search)
     return {
+      sessionId: params.get('session'),
       handId: Number(params.get('hand') ?? '0'),
       turnIdx: Number(params.get('turn') ?? '0'),
       devMode: params.get('dev') === '1',
@@ -49,6 +52,8 @@ function useUrlPointer(): {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
+    if (pointer.sessionId) params.set('session', pointer.sessionId)
+    else params.delete('session')
     params.set('hand', String(pointer.handId))
     params.set('turn', String(pointer.turnIdx))
     if (pointer.devMode) {
@@ -61,9 +66,11 @@ function useUrlPointer(): {
   }, [pointer])
 
   return {
+    sessionId: pointer.sessionId,
     handId: pointer.handId,
     turnIdx: pointer.turnIdx,
     devMode: pointer.devMode,
+    setSessionId: (s: string) => setPointer((p) => ({ ...p, sessionId: s, handId: 0, turnIdx: 0 })),
     setHandId: (h: number) => setPointer((p) => ({ ...p, handId: h, turnIdx: 0 })),
     setTurnIdx: (t: number) => setPointer((p) => ({ ...p, turnIdx: t })),
     toggleDev: () => setPointer((p) => ({ ...p, devMode: !p.devMode })),
@@ -76,20 +83,46 @@ function _formatAction(action: { type: ActionType; amount?: number }): string {
 }
 
 function App() {
-  const [session, setSession] = useState<ParsedSession | null>(null)
+  const [manifest, setManifest] = useState<SessionManifest | null>(null)
+  const [sessionData, setSessionData] = useState<
+    { id: string; session: ParsedSession } | null
+  >(null)
   const [error, setError] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
   const ptr = useUrlPointer()
 
+  // Load manifest once
   useEffect(() => {
+    fetch(`${DATA_ROOT}/manifest.json`)
+      .then((r) => r.json() as Promise<SessionManifest>)
+      .then(setManifest)
+      .catch((e: Error) => setError(`Failed to load manifest: ${e.message}`))
+  }, [])
+
+  // Resolve effective session id: ?session=, else first manifest entry, else 'demo-1'
+  const effectiveSessionId =
+    ptr.sessionId
+    ?? manifest?.sessions[0]?.id
+    ?? 'demo-1'
+
+  // Derived: session matching the active id (null while a different id is loading)
+  const session = sessionData && sessionData.id === effectiveSessionId
+    ? sessionData.session
+    : null
+
+  // Load session data when id changes
+  useEffect(() => {
+    let cancelled = false
+    const base = `${DATA_ROOT}/${effectiveSessionId}`
     Promise.all([
-      fetch(`${DATA_BASE}/canonical_private.jsonl`).then((r) => r.text()),
-      fetch(`${DATA_BASE}/public_replay.jsonl`).then((r) => r.text()),
-      fetch(`${DATA_BASE}/agent_view_snapshots.jsonl`).then((r) => r.text()),
-      fetch(`${DATA_BASE}/meta.json`).then((r) => r.text()),
+      fetch(`${base}/canonical_private.jsonl`).then((r) => r.text()),
+      fetch(`${base}/public_replay.jsonl`).then((r) => r.text()),
+      fetch(`${base}/agent_view_snapshots.jsonl`).then((r) => r.text()),
+      fetch(`${base}/meta.json`).then((r) => r.text()),
     ])
       .then(([canonText, publicText, snapText, metaText]) => {
+        if (cancelled) return
         const meta = parseMeta(metaText)
         const canonical = parseCanonicalPrivate(canonText)
         const publicRecords = parsePublicReplay(publicText)
@@ -103,10 +136,13 @@ function App() {
             agentSnapshots: snaps.filter((s) => s.hand_id === hand.hand_id),
           }
         }
-        setSession({ meta, hands })
+        setSessionData({ id: effectiveSessionId, session: { meta, hands } })
       })
-      .catch((e: Error) => setError(`Failed to load session: ${e.message}`))
-  }, [])
+      .catch((e: Error) => {
+        if (!cancelled) setError(`Failed to load session: ${e.message}`)
+      })
+    return () => { cancelled = true }
+  }, [effectiveSessionId])
 
   // Compute nav state (safe when session not loaded yet) — must be before
   // early returns so hook order is stable.
@@ -246,6 +282,9 @@ function App() {
         devMode={ptr.devMode}
         onToggleDev={ptr.toggleDev}
         onOpenSummary={() => setShowSummary(true)}
+        manifest={manifest}
+        currentSessionId={effectiveSessionId}
+        onSelectSession={ptr.setSessionId}
       />
       {showSummary && (
         <SessionSummary meta={session.meta} onClose={() => setShowSummary(false)} />

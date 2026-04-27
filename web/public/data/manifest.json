@@ -1,0 +1,14 @@
+{
+  "sessions": [
+    {
+      "id": "demo-1",
+      "label": "5 RuleBased + claude-haiku-4-5 (6 hands)",
+      "hands": 6
+    },
+    {
+      "id": "demo-bots",
+      "label": "6 RuleBased (60 hands)",
+      "hands": 60
+    }
+  ]
+}
