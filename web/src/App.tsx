@@ -7,6 +7,7 @@ import { PokerTable } from './components/PokerTable'
 import { ReasoningPanel } from './components/ReasoningPanel'
 import { ActionTimeline } from './components/ActionTimeline'
 import type { SeatSeries } from './components/PnlChart'
+import { shortAgentLabel } from './components/agentLabel'
 // Lazy-load heavy / conditional components to keep the initial JS chunk
 // lean. Tremor + Recharts (PnlChart) is the biggest, ~200KB gzipped.
 // SessionSummary + DevPanel only render on user action / dev mode.
@@ -245,7 +246,13 @@ function App() {
         cum += pnl
         values.push(start + cum)
       }
-      return { seat, values }
+      const agentId = session.meta.seat_assignment[String(seat)] ?? ''
+      return {
+        seat,
+        values,
+        label: agentId ? shortAgentLabel(agentId) : `seat ${seat}`,
+        agentId,
+      }
     })
   }, [session, handIds])
   const hand = session?.hands[ptr.handId]

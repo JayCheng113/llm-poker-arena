@@ -64,6 +64,7 @@ test('screenshot 6-LLM smoke hand 0', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/?session=demo-6llm-smoke&hand=0&turn=0')
   await page.waitForSelector('text=is acting', { timeout: 10_000 })
+  await page.waitForSelector('text=standings', { timeout: 5_000 })
   await page.screenshot({ path: '/tmp/web-dogfood/6llm-hand0.png', fullPage: false })
 })
 
@@ -71,6 +72,9 @@ test('screenshot 6-LLM smoke last hand showdown', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/?session=demo-6llm-smoke&hand=5&turn=99')
   await page.waitForSelector('text=is acting', { timeout: 10_000 })
+  // Wait for the lazy-loaded PnL chart to hydrate so the leaderboard
+  // is in the screenshot.
+  await page.waitForSelector('text=standings', { timeout: 5_000 })
   await page.screenshot({ path: '/tmp/web-dogfood/6llm-last.png', fullPage: false })
 })
 
