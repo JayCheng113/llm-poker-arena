@@ -4,10 +4,13 @@ interface Props {
   onSelect: (handId: number) => void
   isPlaying?: boolean
   onTogglePlay?: () => void
+  devMode?: boolean
+  onToggleDev?: () => void
 }
 
 export function HandSelector({
   handIds, currentHandId, onSelect, isPlaying, onTogglePlay,
+  devMode, onToggleDev,
 }: Props) {
   const idx = handIds.indexOf(currentHandId)
   const canPrev = idx > 0
@@ -48,6 +51,20 @@ export function HandSelector({
       <span className="text-slate-400 text-xs hidden md:inline">
         ←/→ turn · ↑/↓ hand · space play
       </span>
+      {onToggleDev && (
+        <button
+          onClick={onToggleDev}
+          aria-label="toggle dev mode"
+          title="dev mode: god-view + raw JSON viewer"
+          className={`px-2 py-1 rounded text-xs font-mono ${
+            devMode
+              ? 'bg-fuchsia-600 text-white'
+              : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+          }`}
+        >
+          dev {devMode ? 'ON' : 'OFF'}
+        </button>
+      )}
       <select
         value={currentHandId}
         onChange={(e) => onSelect(Number(e.target.value))}

@@ -31,14 +31,17 @@ function _positionLabelForSeat(seat: number, buttonSeat: number, n: number): str
 function useUrlPointer(): {
   handId: number
   turnIdx: number
+  devMode: boolean
   setHandId: (h: number) => void
   setTurnIdx: (t: number) => void
+  toggleDev: () => void
 } {
   const [pointer, setPointer] = useState(() => {
     const params = new URLSearchParams(window.location.search)
     return {
       handId: Number(params.get('hand') ?? '0'),
       turnIdx: Number(params.get('turn') ?? '0'),
+      devMode: params.get('dev') === '1',
     }
   })
 
@@ -46,6 +49,11 @@ function useUrlPointer(): {
     const params = new URLSearchParams(window.location.search)
     params.set('hand', String(pointer.handId))
     params.set('turn', String(pointer.turnIdx))
+    if (pointer.devMode) {
+      params.set('dev', '1')
+    } else {
+      params.delete('dev')
+    }
     const newUrl = `${window.location.pathname}?${params.toString()}`
     window.history.replaceState(null, '', newUrl)
   }, [pointer])
@@ -53,8 +61,10 @@ function useUrlPointer(): {
   return {
     handId: pointer.handId,
     turnIdx: pointer.turnIdx,
-    setHandId: (h: number) => setPointer({ handId: h, turnIdx: 0 }),
+    devMode: pointer.devMode,
+    setHandId: (h: number) => setPointer((p) => ({ ...p, handId: h, turnIdx: 0 })),
     setTurnIdx: (t: number) => setPointer((p) => ({ ...p, turnIdx: t })),
+    toggleDev: () => setPointer((p) => ({ ...p, devMode: !p.devMode })),
   }
 }
 
@@ -160,7 +170,11 @@ function App() {
   }
   const turn = getCurrentTurn(session, ptr.handId, safeTurnIdx)
   const handEnded = safeTurnIdx >= turnCount - 1
-  const revealed = cardRevelation(session, ptr.handId, 'live', { handEnded })
+  const revealed = cardRevelation(
+    session, ptr.handId,
+    ptr.devMode ? 'god-view' : 'live',
+    { handEnded },
+  )
 
   const cfg = hand.canonical
   const buttonSeat = cfg.button_seat
@@ -226,6 +240,8 @@ function App() {
         onSelect={ptr.setHandId}
         isPlaying={isPlaying}
         onTogglePlay={togglePlay}
+        devMode={ptr.devMode}
+        onToggleDev={ptr.toggleDev}
       />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex items-center justify-center p-4">
