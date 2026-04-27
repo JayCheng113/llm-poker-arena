@@ -32,4 +32,8 @@ seat {{ seat }}: VPIP={{ '%.2f' | format(s.vpip) }} PFR={{ '%.2f' | format(s.pfr
 {% endif %}
 
 === YOUR TURN ===
+{% if rationale_required -%}
 The legal action tools are listed below this message. Briefly explain your reasoning, then call exactly one tool.
+{%- else -%}
+The legal action tools are listed below this message. Call exactly one tool.
+{%- endif %}

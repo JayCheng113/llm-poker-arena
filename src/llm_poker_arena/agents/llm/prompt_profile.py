@@ -124,6 +124,15 @@ class PromptProfile:
             seats_yet_to_act_after_me=tuple(seats_yet_to_act_after_me),
             seats_public=tuple(seats_public),
             opponent_stats=opponent_stats or {},
+            # Per-hand "explain your reasoning, then call tool" framing
+            # has to track the per-profile flag — same as system.j2.
+            # Otherwise GPT-5 reasoning models that we set to
+            # rationale_required=False still see a user-prompt request
+            # for explicit reasoning every turn, which both wastes their
+            # tokens AND can re-trigger OpenAI's invalid_prompt
+            # moderation. The first re-run after the system.j2 fix still
+            # censored hand 2 / seat 2 for exactly this reason.
+            rationale_required=self.rationale_required,
         )
 
 

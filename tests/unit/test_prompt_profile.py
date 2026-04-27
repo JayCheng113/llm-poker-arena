@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from llm_poker_arena.agents.llm.prompt_profile import (
     PromptProfile,
@@ -130,3 +131,42 @@ def test_render_user_prompt_includes_seats_table() -> None:
     assert "← me" in text
     assert "(BTN)" in text
     assert "stack=9950" in text
+
+
+def test_render_user_prompt_respects_rationale_required(tmp_path: Path) -> None:
+    """The user.j2 "explain your reasoning, then call exactly one tool"
+    line is the per-turn equivalent of the system.j2 reasoning block,
+    and must track the same per-profile flag — otherwise GPT-5 reasoning
+    models that we explicitly switch to rationale_required=False still
+    receive an explicit "explain your reasoning" instruction every turn,
+    which both wastes their tokens and re-triggers OpenAI's
+    invalid_prompt moderation. Regression test for the second 30-hand
+    re-run censoring hand 2 / seat 2 (codex 2026-04-27 follow-up)."""
+    user_kwargs: dict[str, Any] = dict(  # noqa: C408
+        hand_id=0, street="preflop", my_seat=3, my_position_short="UTG",
+        my_position_full="Under the Gun", my_hole_cards=("As", "Kd"),
+        community=(), pot=150, my_stack=10_000, to_call=100,
+        pot_odds_required=0.4, effective_stack=10_000, button_seat=0,
+        opponent_seats_in_hand=(0,), seats_yet_to_act_after_me=(),
+        seats_public=(),
+    )
+
+    # Default (rationale_required=True): the explain instruction is shown.
+    default_profile = load_default_prompt_profile()
+    default_text = default_profile.render_user(**user_kwargs)
+    assert "Briefly explain your reasoning" in default_text
+
+    # Custom toml flips the flag — the per-turn instruction collapses.
+    custom_toml = tmp_path / "no_rat.toml"
+    custom_toml.write_text(
+        'name = "no-rat"\nlanguage = "en"\npersona = ""\n'
+        'reasoning_prompt = "light"\nrationale_required = false\n'
+        'stats_min_samples = 30\ncard_format = "Ah Kh"\n'
+        'player_label_format = "Player_{seat}"\n'
+        'position_label_format = "{short} ({full})"\n'
+        '[templates]\nsystem = "system.j2"\nuser = "user.j2"\n'
+    )
+    no_rat_profile = PromptProfile.from_toml(custom_toml)
+    no_rat_text = no_rat_profile.render_user(**user_kwargs)
+    assert "Briefly explain your reasoning" not in no_rat_text
+    assert "Call exactly one tool" in no_rat_text
