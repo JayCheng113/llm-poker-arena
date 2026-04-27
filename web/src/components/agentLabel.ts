@@ -36,8 +36,11 @@ export function shortAgentLabel(agentId: string): string {
       return model.replace(/^qwen/, 'Qwen ').replace(/-/g, ' ')
     }
     case 'kimi': {
-      // "kimi-k2.6" → "Kimi K2.6"
-      return model.replace(/^kimi-?/, 'Kimi ').replace(/-/g, ' ').trim()
+      // "kimi-k2.6" → "Kimi K2.6"; strip prefix, then upper-case the
+      // leading letter of the remainder (Moonshot naming: K1/K2/K2.5/K2.6).
+      const rest = model.replace(/^kimi-?/, '').replace(/-/g, ' ')
+      const head = rest.charAt(0).toUpperCase() + rest.slice(1)
+      return `Kimi ${head}`.trim()
     }
     case 'grok': {
       // "grok-2" / "grok-3-mini" → "Grok 2" / "Grok 3 mini"

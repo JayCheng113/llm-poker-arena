@@ -184,19 +184,44 @@ keep `max_tokens`. Reasoning models (o-series) emit `reasoning_content`
 which is captured into `reasoning_artifacts`.
 
 ### DeepSeek
-Use base_url `https://api.deepseek.com/v1`. The legacy aliases `deepseek-chat`
-(non-thinking-mode) and `deepseek-reasoner` (thinking-mode) work today but
-**will be deprecated 2026-07-24** in favor of `deepseek-v4-flash` /
-`deepseek-v4-pro`. The current provider implementation does not yet round-trip
-`reasoning_content` between turns, so calling `deepseek-v4-flash` directly
-can intermittently 400 with "the `reasoning_content` in the thinking mode
-must be passed back to the API." Workaround: stay on `deepseek-chat` until
-the multi-turn handler ships.
+Use base_url `https://api.deepseek.com/v1`. Current model IDs:
+`deepseek-v4-flash` (non-thinking + thinking-mode capable) and
+`deepseek-v4-pro` (premium). The legacy aliases `deepseek-chat` /
+`deepseek-reasoner` are deprecated 2026-07-24.
+
+DeepSeek thinking-mode roundtrips `reasoning_content` on multi-turn
+calls. The provider preserves this field for replay (other OpenAI-
+compatible providers strip it, since it's informational only).
 
 ### Qwen
 Use base_url `https://dashscope.aliyuncs.com/compatible-mode/v1` (Alibaba
-Cloud DashScope OpenAI-compatible endpoint). All model IDs are `qwen3.*-*`
-(e.g. `qwen3.6-plus`, `qwen3.5-flash`).
+Cloud DashScope OpenAI-compatible endpoint). Current model IDs are
+`qwen3.*-*` (e.g. `qwen3.6-plus`, `qwen3.5-flash`).
+
+### Kimi (Moonshot AI)
+Use base_url `https://api.moonshot.ai/v1`. Current flagship is
+`kimi-k2.6` (256K context, function calling). Legacy `kimi-k2.5` /
+`kimi-k2` are scheduled for deprecation 2026-05-25.
+
+### Grok (xAI)
+Use base_url `https://api.x.ai/v1`. Current models (April 2026):
+- `grok-4.3` — flagship (Beta), supports video input + slides generation
+- `grok-4.20-beta-2` — public flagship, multi-agent architecture
+- `grok-4.1-fast` — non-reasoning, latency-sensitive (cheapest)
+
+Grok 5 is in training (Q2 2026 expected).
+
+### Gemini (Google AI Studio)
+Use base_url `https://generativelanguage.googleapis.com/v1beta/openai`
+(OpenAI-compatible shim — no need for `google-genai` SDK). Current
+models (April 2026):
+- `gemini-3.1-pro` — flagship, paid only ($2.00/$12.00 per M tokens
+  for ≤200K context)
+- `gemini-3-flash` — default Flash, free tier (reduced quota)
+- `gemini-3.1-flash-lite` — cheapest Tier-1 ($0.25/$1.50 per M)
+
+`gemini-2.0-flash` and `gemini-2.0-flash-lite` are deprecated
+2026-06-01 — migrate to `gemini-3-flash` or `gemini-2.5-flash` first.
 
 ## Troubleshooting
 

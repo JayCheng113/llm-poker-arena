@@ -29,7 +29,9 @@ describe('shortAgentLabel', () => {
 
   it('formats kimi / grok / gemini', () => {
     expect(shortAgentLabel('kimi:kimi-k2.6')).toBe('Kimi K2.6')
-    expect(shortAgentLabel('grok:grok-3-mini')).toBe('Grok 3 mini')
+    expect(shortAgentLabel('grok:grok-4.1-fast')).toBe('Grok 4.1 fast')
+    expect(shortAgentLabel('gemini:gemini-3.1-pro')).toBe('Gemini 3.1 pro')
+    // legacy versions still format correctly
     expect(shortAgentLabel('gemini:gemini-2.0-flash')).toBe('Gemini 2.0 flash')
   })
 
