@@ -3,7 +3,7 @@
 
 Recipe:
   - Lineup: 6 RuleBasedAgent
-  - 50 hands, seed=7
+  - 60 hands (10 button rotations), seed=7
   - Cost: $0 (no LLM calls)
 
 Output: runs/demo-bots/ then copy to web/public/data/demo-bots/

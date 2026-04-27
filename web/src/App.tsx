@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   parseCanonicalPrivate,
   parsePublicReplay,
@@ -30,6 +30,16 @@ function _positionLabelForSeat(seat: number, buttonSeat: number, n: number): str
   return POSITION_LABELS[offset]
 }
 
+function readPointerFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+  return {
+    sessionId: params.get('session'),
+    handId: Number(params.get('hand') ?? '0'),
+    turnIdx: Number(params.get('turn') ?? '0'),
+    devMode: params.get('dev') === '1',
+  }
+}
+
 function useUrlPointer(): {
   sessionId: string | null
   handId: number
@@ -40,15 +50,7 @@ function useUrlPointer(): {
   setTurnIdx: (t: number) => void
   toggleDev: () => void
 } {
-  const [pointer, setPointer] = useState(() => {
-    const params = new URLSearchParams(window.location.search)
-    return {
-      sessionId: params.get('session'),
-      handId: Number(params.get('hand') ?? '0'),
-      turnIdx: Number(params.get('turn') ?? '0'),
-      devMode: params.get('dev') === '1',
-    }
-  })
+  const [pointer, setPointer] = useState(readPointerFromUrl)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -65,16 +67,50 @@ function useUrlPointer(): {
     window.history.replaceState(null, '', newUrl)
   }, [pointer])
 
+  // Listen for browser back/forward (codex IMPORTANT-1) — re-parse URL.
+  useEffect(() => {
+    const onPop = () => setPointer(readPointerFromUrl())
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  // Stable setters so consumers can list them in effect deps without churn.
+  const setSessionId = useCallback(
+    (s: string) => setPointer((p) => ({ ...p, sessionId: s, handId: 0, turnIdx: 0 })),
+    [],
+  )
+  const setHandId = useCallback(
+    (h: number) => setPointer((p) => ({ ...p, handId: h, turnIdx: 0 })),
+    [],
+  )
+  const setTurnIdx = useCallback(
+    (t: number) => setPointer((p) => ({ ...p, turnIdx: t })),
+    [],
+  )
+  const toggleDev = useCallback(
+    () => setPointer((p) => ({ ...p, devMode: !p.devMode })),
+    [],
+  )
+
   return {
     sessionId: pointer.sessionId,
     handId: pointer.handId,
     turnIdx: pointer.turnIdx,
     devMode: pointer.devMode,
-    setSessionId: (s: string) => setPointer((p) => ({ ...p, sessionId: s, handId: 0, turnIdx: 0 })),
-    setHandId: (h: number) => setPointer((p) => ({ ...p, handId: h, turnIdx: 0 })),
-    setTurnIdx: (t: number) => setPointer((p) => ({ ...p, turnIdx: t })),
-    toggleDev: () => setPointer((p) => ({ ...p, devMode: !p.devMode })),
+    setSessionId, setHandId, setTurnIdx, toggleDev,
   }
+}
+
+function useWindowWidth(): number {
+  const [w, setW] = useState(() =>
+    typeof window === 'undefined' ? 1024 : window.innerWidth
+  )
+  useEffect(() => {
+    const onResize = () => setW(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  return w
 }
 
 function _formatAction(action: { type: ActionType; amount?: number }): string {
@@ -101,19 +137,21 @@ function App() {
       .catch((e: Error) => setError(`Failed to load manifest: ${e.message}`))
   }, [])
 
-  // Resolve effective session id: ?session=, else first manifest entry, else 'demo-1'
+  // Resolve effective session id: ?session=, else first manifest entry.
+  // Stays null until manifest loads → session-load effect waits (codex IMPORTANT-2).
   const effectiveSessionId =
     ptr.sessionId
     ?? manifest?.sessions[0]?.id
-    ?? 'demo-1'
+    ?? null
 
   // Derived: session matching the active id (null while a different id is loading)
   const session = sessionData && sessionData.id === effectiveSessionId
     ? sessionData.session
     : null
 
-  // Load session data when id changes
+  // Load session data when id changes (gated on manifest being ready)
   useEffect(() => {
+    if (!effectiveSessionId) return
     let cancelled = false
     const base = `${DATA_ROOT}/${effectiveSessionId}`
     Promise.all([
@@ -151,6 +189,19 @@ function App() {
     () => session ? Object.keys(session.hands).map(Number).sort((a, b) => a - b) : [],
     [session]
   )
+
+  // Snap handId to first available when current isn't in the loaded session's
+  // hand list (codex IMPORTANT-3 — sessions with non-contiguous hand_ids).
+  const { handId: ptrHandId, setHandId: ptrSetHandId } = ptr
+  useEffect(() => {
+    if (handIds.length > 0 && !handIds.includes(ptrHandId)) {
+      ptrSetHandId(handIds[0])
+    }
+  }, [handIds, ptrHandId, ptrSetHandId])
+
+  // Responsive table scale: fit width below 850px viewport (codex NIT-4: live resize)
+  const winW = useWindowWidth()
+  const tableScale = winW >= 850 ? 1 : Math.max(0.4, (winW - 32) / 800)
   const pnlSeries = useMemo<SeatSeries[]>(() => {
     if (!session) return []
     const seats = [0, 1, 2, 3, 4, 5]
@@ -276,16 +327,6 @@ function App() {
 
   const actorPosition = _positionLabelForSeat(turn.actor, buttonSeat, 6)
 
-  // Responsive table scale: fit width below 850px viewport
-  const tableScale = (() => {
-    if (typeof window === 'undefined') return 1
-    const w = window.innerWidth
-    if (w >= 850) return 1
-    // 16px padding on each side, panel grows on md
-    const usable = w - 32
-    return Math.max(0.4, usable / 800)
-  })()
-
   return (
     <div className="flex flex-col h-screen bg-slate-50">
       <HandSelector
@@ -300,7 +341,7 @@ function App() {
         onToggleDev={ptr.toggleDev}
         onOpenSummary={() => setShowSummary(true)}
         manifest={manifest}
-        currentSessionId={effectiveSessionId}
+        currentSessionId={effectiveSessionId ?? undefined}
         onSelectSession={ptr.setSessionId}
       />
       {showSummary && (

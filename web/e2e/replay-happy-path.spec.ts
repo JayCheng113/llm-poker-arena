@@ -24,7 +24,7 @@ test('load demo session and navigate', async ({ page }) => {
   // Switch to hand 1 via the dropdown (avoids layout overlap issues with
   // the prev/next buttons that can be intercepted by the poker table at
   // certain viewport sizes — see Phase 2 polish for proper z-index fix).
-  await page.locator('select').selectOption('1')
+  await page.getByLabel('select hand').selectOption('1')
   await expect(page).toHaveURL(/hand=1/)
 
   // Action timeline rendered — sanity check there's at least 1 turn card.

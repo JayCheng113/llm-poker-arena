@@ -114,6 +114,7 @@ export function HandSelector({
       <select
         value={currentHandId}
         onChange={(e) => onSelect(Number(e.target.value))}
+        aria-label="select hand"
         className={`${manifest && manifest.sessions.length > 1 ? '' : 'ml-auto'} bg-slate-600 border border-slate-500 rounded px-2 py-1 text-sm`}
       >
         {handIds.map((h) => (
