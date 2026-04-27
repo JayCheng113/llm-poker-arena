@@ -26,6 +26,19 @@ export interface SessionMeta {
   stop_reason: string
   session_wall_time_sec?: number
   estimated_cost_breakdown?: { [k: string]: unknown }
+  hud_per_seat?: { [seatStr: string]: HudCounters }
+  hud_hands_counted?: number
+}
+
+export interface HudCounters {
+  vpip_actions: number
+  pfr_actions: number
+  three_bet_chances: number
+  three_bet_actions: number
+  af_aggressive: number
+  af_passive: number
+  wtsd_chances: number
+  wtsd_actions: number
 }
 
 export interface TokenCounts {

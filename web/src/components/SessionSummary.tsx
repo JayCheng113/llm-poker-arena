@@ -1,7 +1,10 @@
-import type { SessionMeta, RetrySummary, TokenCounts } from '../types'
+import type {
+  SessionMeta, RetrySummary, TokenCounts, HudCounters, ParsedSession,
+} from '../types'
 
 interface Props {
   meta: SessionMeta
+  session?: ParsedSession
   onClose: () => void
 }
 
@@ -32,9 +35,12 @@ function shortAgent(s: string): string {
   return s.split(':').slice(1).join(':') || s
 }
 
-export function SessionSummary({ meta, onClose }: Props) {
+export function SessionSummary({ meta, session, onClose }: Props) {
   const seats = Object.keys(meta.seat_assignment)
     .map(Number).sort((a, b) => a - b)
+  const handIds = session
+    ? Object.keys(session.hands).map(Number).sort((a, b) => a - b)
+    : []
   return (
     <div
       data-session-summary
@@ -106,8 +112,148 @@ export function SessionSummary({ meta, onClose }: Props) {
               })}
             </tbody>
           </table>
+
+          {meta.hud_per_seat && Object.keys(meta.hud_per_seat).length > 0 && (
+            <HudTable
+              hud={meta.hud_per_seat}
+              hands={meta.hud_hands_counted ?? 0}
+              seats={seats}
+              seatAssignment={meta.seat_assignment}
+            />
+          )}
+
+          {session && handIds.length > 0 && (
+            <PerHandTable session={session} handIds={handIds} />
+          )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function PerHandTable({
+  session, handIds,
+}: { session: ParsedSession; handIds: number[] }) {
+  return (
+    <div className="mt-4">
+      <h3 className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">
+        per-hand outcomes ({handIds.length} hands)
+      </h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-100 text-slate-700">
+            <tr>
+              <th className="text-left p-2">hand</th>
+              <th className="text-left p-2">btn</th>
+              <th className="text-left p-2">winner(s)</th>
+              <th className="text-right p-2">pot</th>
+              <th className="text-left p-2">community</th>
+            </tr>
+          </thead>
+          <tbody>
+            {handIds.map((hid) => {
+              const c = session.hands[hid].canonical
+              const winners = c.result.winners
+              const pot = winners.reduce((s, w) => s + w.winnings, 0)
+              return (
+                <tr key={hid} className="border-b border-slate-200">
+                  <td className="p-2 font-mono tabular-nums text-slate-700">{hid}</td>
+                  <td className="p-2 font-mono tabular-nums text-slate-500">s{c.button_seat}</td>
+                  <td className="p-2 font-mono text-slate-700">
+                    {winners.length === 0
+                      ? <span className="text-slate-400">—</span>
+                      : winners.map((w, i) => (
+                          <span key={i} className="mr-2">
+                            s{w.seat} <span className="text-emerald-600">+{w.winnings}</span>
+                            {w.best_hand_desc ? (
+                              <span className="text-slate-400 text-xs ml-1">
+                                ({w.best_hand_desc})
+                              </span>
+                            ) : null}
+                          </span>
+                        ))}
+                  </td>
+                  <td className="p-2 text-right font-mono tabular-nums text-slate-700">{pot}</td>
+                  <td className="p-2 font-mono text-xs text-slate-500">
+                    {c.community.length > 0 ? c.community.join(' ') : '—'}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+interface HudRowsProps {
+  hud: { [seatStr: string]: HudCounters }
+  hands: number
+  seats: number[]
+  seatAssignment: { [seatStr: string]: string }
+}
+
+function pct(num: number, denom: number): string {
+  if (denom <= 0) return '—'
+  return `${Math.round((num / denom) * 100)}%`
+}
+
+function af(c: HudCounters): string {
+  if (c.af_passive <= 0) {
+    return c.af_aggressive > 0 ? '∞' : '—'
+  }
+  return (c.af_aggressive / c.af_passive).toFixed(1)
+}
+
+function HudTable({ hud, hands, seats, seatAssignment }: HudRowsProps) {
+  return (
+    <div className="mt-4">
+      <h3 className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">
+        per-seat HUD ({hands} hands counted)
+      </h3>
+      <table className="w-full text-sm">
+        <thead className="bg-slate-100 text-slate-700">
+          <tr>
+            <th className="text-left p-2">seat</th>
+            <th className="text-left p-2">agent</th>
+            <th className="text-right p-2" title="voluntary $ in pot %">VPIP</th>
+            <th className="text-right p-2" title="preflop raise %">PFR</th>
+            <th className="text-right p-2" title="3-bet %">3-bet</th>
+            <th className="text-right p-2" title="aggression factor (bets+raises)/calls">AF</th>
+            <th className="text-right p-2" title="went-to-showdown when saw flop %">WTSD</th>
+          </tr>
+        </thead>
+        <tbody>
+          {seats.map((seat) => {
+            const c = hud[String(seat)]
+            const agent = seatAssignment[String(seat)] ?? ''
+            const isRule = agent.startsWith('rule_based')
+            return (
+              <tr key={seat} className="border-b border-slate-200">
+                <td className="p-2 font-mono">seat {seat}</td>
+                <td className="p-2 font-mono text-slate-600">
+                  {agent.split(':')[1] ?? agent}
+                </td>
+                {!c ? (
+                  <td colSpan={5} className="p-2 text-slate-400 text-center">—</td>
+                ) : (
+                  <>
+                    <td className="p-2 text-right font-mono tabular-nums text-slate-700">{pct(c.vpip_actions, hands)}</td>
+                    <td className="p-2 text-right font-mono tabular-nums text-slate-700">{pct(c.pfr_actions, hands)}</td>
+                    <td className="p-2 text-right font-mono tabular-nums text-slate-700">{pct(c.three_bet_actions, c.three_bet_chances)}</td>
+                    <td className="p-2 text-right font-mono tabular-nums text-slate-700">{af(c)}</td>
+                    <td className="p-2 text-right font-mono tabular-nums text-slate-700">{pct(c.wtsd_actions, c.wtsd_chances)}</td>
+                  </>
+                )}
+                {isRule && (
+                  <td className="p-2 text-[10px] text-slate-400 italic">(rule-based)</td>
+                )}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }

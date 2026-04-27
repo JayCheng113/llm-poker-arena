@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { parseSessionFiles, parseSessionFromFiles } from './parsers/parseSessionFiles'
 import { getCurrentTurn } from './selectors/getCurrentTurn'
 import { cardRevelation } from './selectors/cardRevelation'
@@ -6,9 +6,16 @@ import { HandSelector } from './components/HandSelector'
 import { PokerTable } from './components/PokerTable'
 import { ReasoningPanel } from './components/ReasoningPanel'
 import { ActionTimeline } from './components/ActionTimeline'
-import { DevPanel } from './components/DevPanel'
-import { PnlChart, type SeatSeries } from './components/PnlChart'
-import { SessionSummary } from './components/SessionSummary'
+import type { SeatSeries } from './components/PnlChart'
+// Lazy-load heavy / conditional components to keep the initial JS chunk
+// lean. Tremor + Recharts (PnlChart) is the biggest, ~200KB gzipped.
+// SessionSummary + DevPanel only render on user action / dev mode.
+const PnlChart = lazy(() =>
+  import('./components/PnlChart').then((m) => ({ default: m.PnlChart })))
+const DevPanel = lazy(() =>
+  import('./components/DevPanel').then((m) => ({ default: m.DevPanel })))
+const SessionSummary = lazy(() =>
+  import('./components/SessionSummary').then((m) => ({ default: m.SessionSummary })))
 import { useKeyboardNav } from './hooks/useKeyboardNav'
 import { useAutoPlay } from './hooks/useAutoPlay'
 
@@ -369,7 +376,13 @@ function App() {
         onClearCustom={clearCustomSession}
       />
       {showSummary && (
-        <SessionSummary meta={session.meta} onClose={() => setShowSummary(false)} />
+        <Suspense fallback={<div className="fixed inset-0 z-50 bg-black/40" />}>
+          <SessionSummary
+            meta={session.meta}
+            session={session}
+            onClose={() => setShowSummary(false)}
+          />
+        </Suspense>
       )}
       <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
         <div className="flex-1 flex items-center justify-center p-2 md:p-4 overflow-auto">
@@ -396,19 +409,27 @@ function App() {
             />
           </div>
           {ptr.devMode && currentSnap && (
-            <DevPanel
-              snapshot={currentSnap}
-              canonicalAction={cfg.actions.find((a) => a.turn_index === safeTurnIdx)}
-            />
+            <Suspense fallback={null}>
+              <DevPanel
+                snapshot={currentSnap}
+                canonicalAction={cfg.actions.find((a) => a.turn_index === safeTurnIdx)}
+              />
+            </Suspense>
           )}
         </div>
       </div>
-      <div className="bg-slate-800 px-3 py-2 flex justify-center">
+      <Suspense
+        fallback={
+          <div className="bg-white border-y border-slate-200 px-4 py-2 h-[88px] flex items-center text-xs text-slate-400">
+            loading PnL chart…
+          </div>
+        }
+      >
         <PnlChart
           series={pnlSeries}
           currentHandIdx={handIds.indexOf(ptr.handId)}
         />
-      </div>
+      </Suspense>
       <ActionTimeline
         turns={timelineTurns}
         currentTurnIdx={safeTurnIdx}
