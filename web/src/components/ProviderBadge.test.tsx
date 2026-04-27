@@ -27,6 +27,12 @@ describe('shortAgentLabel', () => {
     expect(shortAgentLabel('qwen:qwen3.6-plus')).toBe('Qwen 3.6 plus')
   })
 
+  it('formats kimi / grok / gemini', () => {
+    expect(shortAgentLabel('kimi:kimi-k2.6')).toBe('Kimi K2.6')
+    expect(shortAgentLabel('grok:grok-3-mini')).toBe('Grok 3 mini')
+    expect(shortAgentLabel('gemini:gemini-2.0-flash')).toBe('Gemini 2.0 flash')
+  })
+
   it('returns "Rule-based" for rule_based agents', () => {
     expect(shortAgentLabel('rule_based:tag_v1')).toBe('Rule-based')
   })

@@ -34,6 +34,8 @@ from llm_poker_arena.engine.config import SessionConfig
 from llm_poker_arena.session.session import Session
 
 # Provider tag → (env_var_name, factory(model, api_key) -> Provider).
+# Many providers ship an OpenAI-compatible /chat/completions endpoint; for
+# those we just point OpenAICompatibleProvider at the right base_url.
 _PROVIDER_TABLE: dict[str, tuple[str, Any]] = {
     "anthropic": (
         "ANTHROPIC_API_KEY",
@@ -54,6 +56,45 @@ _PROVIDER_TABLE: dict[str, tuple[str, Any]] = {
             model=model,
             api_key=key,
             base_url="https://api.deepseek.com/v1",
+        ),
+    ),
+    "qwen": (
+        "QWEN_API_KEY",
+        lambda model, key: OpenAICompatibleProvider(
+            provider_name_value="qwen",
+            model=model,
+            api_key=key,
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        ),
+    ),
+    "kimi": (
+        "KIMI_API_KEY",
+        lambda model, key: OpenAICompatibleProvider(
+            provider_name_value="kimi",
+            model=model,
+            api_key=key,
+            base_url="https://api.moonshot.ai/v1",
+        ),
+    ),
+    "grok": (
+        "GROK_API_KEY",
+        lambda model, key: OpenAICompatibleProvider(
+            provider_name_value="grok",
+            model=model,
+            api_key=key,
+            base_url="https://api.x.ai/v1",
+        ),
+    ),
+    "gemini": (
+        # Google AI Studio ships an OpenAI-compatible /chat/completions
+        # endpoint as of 2024; using it lets us reuse the same provider
+        # adapter instead of pulling in google-genai SDK.
+        "GEMINI_API_KEY",
+        lambda model, key: OpenAICompatibleProvider(
+            provider_name_value="gemini",
+            model=model,
+            api_key=key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai",
         ),
     ),
 }

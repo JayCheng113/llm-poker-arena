@@ -35,6 +35,18 @@ export function shortAgentLabel(agentId: string): string {
       // "qwen3.6-plus" → "Qwen 3.6 plus"
       return model.replace(/^qwen/, 'Qwen ').replace(/-/g, ' ')
     }
+    case 'kimi': {
+      // "kimi-k2.6" → "Kimi K2.6"
+      return model.replace(/^kimi-?/, 'Kimi ').replace(/-/g, ' ').trim()
+    }
+    case 'grok': {
+      // "grok-2" / "grok-3-mini" → "Grok 2" / "Grok 3 mini"
+      return model.replace(/^grok-?/, 'Grok ').replace(/-/g, ' ').trim()
+    }
+    case 'gemini': {
+      // "gemini-2.0-flash" → "Gemini 2.0 flash"
+      return model.replace(/^gemini-?/, 'Gemini ').replace(/-/g, ' ').trim()
+    }
     case 'rule_based':
       return 'Rule-based'
     default:
