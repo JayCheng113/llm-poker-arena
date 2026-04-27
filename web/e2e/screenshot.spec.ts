@@ -46,6 +46,20 @@ test('screenshot all-bot baseline session', async ({ page }) => {
   await page.screenshot({ path: '/tmp/web-dogfood/demo-bots.png', fullPage: false })
 })
 
+test('screenshot tournament hand 0', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/?session=demo-tournament&hand=0&turn=0')
+  await page.waitForSelector('text=is acting', { timeout: 10_000 })
+  await page.screenshot({ path: '/tmp/web-dogfood/tournament-hand0.png', fullPage: false })
+})
+
+test('screenshot tournament last hand showdown', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/?session=demo-tournament&hand=29&turn=99')
+  await page.waitForSelector('text=is acting', { timeout: 10_000 })
+  await page.screenshot({ path: '/tmp/web-dogfood/tournament-last.png', fullPage: false })
+})
+
 test('screenshot mobile portrait', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })  // iPhone 14
   await page.goto('/?hand=0&turn=0')
