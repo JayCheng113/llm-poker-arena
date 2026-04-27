@@ -19,20 +19,20 @@ describe('PnlChart', () => {
   })
 
   it('renders chart caption with viewing hand', () => {
-    const series = [{ seat: 0, values: [0, 100, 200] }]
+    const series = [{ seat: 0, values: [10000, 10100, 10200] }]
     const { container } = render(<PnlChart series={series} currentHandIdx={1} />)
-    expect(container.textContent).toMatch(/cumulative PnL/i)
+    expect(container.textContent).toMatch(/stack trajectory/i)
     expect(container.textContent).toMatch(/viewing hand 1/i)
+    expect(container.textContent).toMatch(/starting 10,?000/i)
   })
 
-  it('shows last cumulative value with formatted sign', () => {
+  it('shows delta from starting stack with formatted sign in legend', () => {
     const series = [
-      { seat: 0, values: [0, 50, 200] },
-      { seat: 1, values: [0, -100, -300] },
+      { seat: 0, values: [10000, 10050, 10200] },  // +200
+      { seat: 1, values: [10000, 9900, 9700] },    // -300
     ]
     const { container } = render(<PnlChart series={series} currentHandIdx={2} />)
     const text = container.textContent ?? ''
-    // legend label is "s{N}" + signed value (with unicode minus for negatives)
     expect(text).toMatch(/s0\s*\+200/)
     expect(text).toMatch(/s1\s*[-−]300/)
   })

@@ -227,13 +227,23 @@ function App() {
   const pnlSeries = useMemo<SeatSeries[]>(() => {
     if (!session) return []
     const seats = [0, 1, 2, 3, 4, 5]
+    // Render running stack (starting + cumulative PnL), not raw PnL deltas.
+    // All seats start at the same value so the chart is read as
+    // "trajectory of each player's bankroll" — much more intuitive than
+    // a centered-at-zero PnL plot where small swings vanish next to big ones.
+    // Stack is allowed to go negative (we don't model rebuys).
+    const firstHand = handIds.length > 0 ? session.hands[handIds[0]] : null
+    const startingStacks: Record<string, number> = firstHand
+      ? firstHand.canonical.starting_stacks
+      : {}
     return seats.map((seat) => {
+      const start = startingStacks[String(seat)] ?? 0
       const values: number[] = []
       let cum = 0
       for (const h of handIds) {
         const pnl = session.hands[h].canonical.result.net_pnl[String(seat)] ?? 0
         cum += pnl
-        values.push(cum)
+        values.push(start + cum)
       }
       return { seat, values }
     })
