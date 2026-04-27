@@ -19,6 +19,7 @@ interface Props {
   pot: number
   activeSeatIdx: number
   handResult?: HandResultPrivate
+  scale?: number
 }
 
 const TABLE_WIDTH = 800
@@ -28,11 +29,21 @@ const RY = 180
 const COMMUNITY_CARD_WIDTH = 48
 const COMMUNITY_CARD_HEIGHT = Math.round(COMMUNITY_CARD_WIDTH * 1.4)
 
-export function PokerTable({ seats, community, pot, activeSeatIdx, handResult }: Props) {
+export function PokerTable({
+  seats, community, pot, activeSeatIdx, handResult, scale = 1,
+}: Props) {
   return (
     <div
       className="relative mx-auto"
-      style={{ width: TABLE_WIDTH, height: TABLE_HEIGHT }}
+      style={{ width: TABLE_WIDTH * scale, height: TABLE_HEIGHT * scale }}
+    >
+    <div
+      className="relative"
+      style={{
+        width: TABLE_WIDTH, height: TABLE_HEIGHT,
+        transform: scale === 1 ? undefined : `scale(${scale})`,
+        transformOrigin: 'top left',
+      }}
     >
       <div
         className="absolute inset-0 bg-gradient-radial from-emerald-700 to-emerald-900 border-8 border-emerald-950"
@@ -94,6 +105,7 @@ export function PokerTable({ seats, community, pot, activeSeatIdx, handResult }:
           </div>
         )
       })}
+    </div>
     </div>
   )
 }

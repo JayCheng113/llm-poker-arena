@@ -45,3 +45,10 @@ test('screenshot all-bot baseline session', async ({ page }) => {
   await page.waitForSelector('text=is acting', { timeout: 10_000 })
   await page.screenshot({ path: '/tmp/web-dogfood/demo-bots.png', fullPage: false })
 })
+
+test('screenshot mobile portrait', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })  // iPhone 14
+  await page.goto('/?hand=0&turn=0')
+  await page.waitForSelector('text=is acting', { timeout: 10_000 })
+  await page.screenshot({ path: '/tmp/web-dogfood/mobile.png', fullPage: false })
+})

@@ -276,6 +276,16 @@ function App() {
 
   const actorPosition = _positionLabelForSeat(turn.actor, buttonSeat, 6)
 
+  // Responsive table scale: fit width below 850px viewport
+  const tableScale = (() => {
+    if (typeof window === 'undefined') return 1
+    const w = window.innerWidth
+    if (w >= 850) return 1
+    // 16px padding on each side, panel grows on md
+    const usable = w - 32
+    return Math.max(0.4, usable / 800)
+  })()
+
   return (
     <div className="flex flex-col h-screen bg-slate-50">
       <HandSelector
@@ -296,17 +306,18 @@ function App() {
       {showSummary && (
         <SessionSummary meta={session.meta} onClose={() => setShowSummary(false)} />
       )}
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 flex items-center justify-center p-4">
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+        <div className="flex-1 flex items-center justify-center p-2 md:p-4 overflow-auto">
           <PokerTable
             seats={seats}
             community={community}
             pot={turn.pot}
             activeSeatIdx={turn.actor}
             handResult={handEnded ? cfg.result : undefined}
+            scale={tableScale}
           />
         </div>
-        <div className="w-96 flex flex-col">
+        <div className="w-full md:w-96 max-h-72 md:max-h-none flex flex-col border-t-2 md:border-t-0 md:border-l-2 border-slate-200">
           <div className="flex-1 overflow-auto">
             <ReasoningPanel
               actor={turn.actor}
