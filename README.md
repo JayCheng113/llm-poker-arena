@@ -1,189 +1,146 @@
 # ♠ LLM Poker Arena
 
-A multi-agent platform where modern LLMs compete head-to-head at 6-max No-Limit Texas Hold'em — and you can watch every hand they play, with full reasoning traces, in your browser.
+Six general-purpose LLMs sit at a No-Limit Hold'em table with the same tools a human pro would use — pot odds, equity vs. range, opponent stats — and play it out for chips. Every decision, every prose rationale, every tool call is replayable in a browser, side by side with the table state.
 
-**[▶ Live demo](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm)** · 6 LLMs (Claude · DeepSeek · GPT · Qwen · Kimi · Gemini), one per seat · 30-hand tournament · open every decision
+**[▶ Live demo (baseline 30-hand)](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm)** · **[Flagship 102-hand](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm-flagship)** · 6 LLMs, one per seat, every reasoning step open
 
 ![hero](docs/images/hero.png)
 
 ---
 
-## What it does
+## The experiment
 
-- **Backend (Python).** A reproducible 6-max NLHE engine wraps PokerKit. Plug in any LLM as a player; the agent runs a bounded ReAct loop (think → tool → observe → commit) using a portable tool spec, with separate retry budgets for API errors / illegal actions / missing tool calls / tool misuse. **Seven providers** ship out of the box: Anthropic / OpenAI / DeepSeek / Qwen / Kimi / Grok / Gemini.
+Existing poker-AI work (Pluribus, ReBeL) uses purpose-built solvers. This project asks a different question: **how well do general-purpose LLMs play when given the same tools a human pro would use, and how does that competence vary across providers?**
 
-- **Replay viewer (React).** A static web UI that fetches the JSONL artifacts a session emits and renders a poker table where every seat shows the actual provider logo, every reasoning step shows the LLM's prose + tool calls + tool results, and every decision is color-coded. Per-seat cumulative PnL chart, hand-by-hand timeline grouped by street, dev mode for raw debugging — all client-side, deployable to GitHub Pages with no backend.
+The setup is intentionally controlled. Six providers, one per seat — Anthropic / OpenAI / DeepSeek / Qwen / Kimi / Gemini — same engine, same RNG seed, same utility tools (`pot_odds`, `spr`, `hand_equity_vs_ranges`, `get_opponent_stats`), same bounded ReAct loop. The only thing that changes is the model.
 
-The framework is designed for two end users: an engineer who wants to benchmark how well current LLMs play poker (open-ended, observable, reproducible), and a portfolio visitor who wants to see what a "research-grade" multi-agent LLM project looks like in practice.
+Two parallel demos are shipped:
 
-## Why?
+| | Lineup | Hands | Cost | Wall time |
+|---|---|---|---|---|
+| **[Baseline](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm)** | mini-tier across all 6 (Haiku 4.5, GPT-5.4-mini, etc.) | 30 | $0.83 | 54 min |
+| **[Flagship](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm-flagship)** | same field, but Anthropic upgraded to Sonnet 4.6 | 102 | $3.85 | 3 h 4 min |
 
-Existing poker AI work (Pluribus, ReBeL) uses purpose-built solvers. This project asks a different question: **how well do general-purpose LLMs play when given the same tools a human pro would use** (pot odds, equity, opponent stats), and how does that competence vary across providers?
+Both ran 100 % clean — zero censored hands, zero protocol failures, every seat surfaces its reasoning to the panel.
 
-The replay viewer is the answer's UI: it lets you open any decision and read the model's actual reasoning side-by-side with the table state, instead of treating the LLM as a black box.
+## Headline finding
 
-## Live demos
+Anthropic's seat went from **dead last** in the baseline (Haiku, −13,750 chips over 30 hands) to **first** in the flagship variant (Sonnet, +9,908 chips over 102 hands) **against the same five opponents**. That's a +24 k chip swing from a single-model upgrade.
 
-Two parallel sessions — same six providers, but the Anthropic seat is the controlled variable:
+The baseline's tighter spread — and its surprising "GPT-5.4-mini wins" headline — was mostly 30-hand variance. Once sample size grows past one button rotation × 17 and the field stays fixed, the strong-vs-weak gap opens up.
 
-### Baseline: [demo-6llm](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm) — 30 hands, mini-tier across the field
-$0.83, 54 min, 30/30 clean.
-
-| Rank | Seat | Model | P&L (chips) |
+| Rank | Baseline (30 h, mini Haiku) | Flagship (102 h, Sonnet) | Δ |
 |---|---|---|---|
-| 🥇 1 | 2 | gpt-5.4-mini | **+19,200** |
-| 🥈 2 | 3 | qwen3.6-plus | +2,550 |
-| 🥉 3 | 1 | deepseek-chat | −200 |
-| 4 | 5 | gemini-2.5-flash | −1,600 |
-| 5 | 4 | kimi-k2.5 | −6,200 |
-| 6 | 0 | claude-haiku-4-5 | **−13,750** |
+| 🥇 | gpt-5.4-mini  +19,200 | **claude-sonnet-4-6  +9,908** | Sonnet last → first |
+| 🥈 | qwen3.6-plus   +2,550 | qwen3.6-plus       +7,950 | Qwen consistent |
+| 🥉 | deepseek-chat    −200 | gpt-5.4-mini         −258 | GPT regressed to mean |
+| 4 | gemini-2.5-flash −1,600 | deepseek-chat     −1,300 | – |
+| 5 | kimi-k2.5      −6,200 | kimi-k2.5         −6,500 | Kimi consistently bad |
+| 6 | **claude-haiku-4-5 −13,750** | gemini-2.5-flash **−9,800** | Haiku → Gemini |
 
-### Flagship variant: [demo-6llm-flagship](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm-flagship) — 102 hands, Anthropic upgraded to Sonnet 4.6
-$3.85, 3h 4min, 102/102 clean. Five mini-tier seats unchanged; only seat 0 moved from `claude-haiku-4-5` → `claude-sonnet-4-6`.
+## How each LLM actually played
 
-| Rank | Seat | Model | P&L (chips) |
+Three numbers tell most of the story per seat:
+
+| LLM (flagship lineup) | Utility-tool calls / hand | VPIP / PFR / AF | Style |
 |---|---|---|---|
-| 🥇 1 | 0 | **claude-sonnet-4-6** | **+9,908** |
-| 🥈 2 | 3 | qwen3.6-plus | +7,950 |
-| 🥉 3 | 2 | gpt-5.4-mini | −258 |
-| 4 | 1 | deepseek-chat | −1,300 |
-| 5 | 4 | kimi-k2.5 | −6,500 |
-| 6 | 5 | gemini-2.5-flash | **−9,800** |
+| **Claude Sonnet 4.6** | 0.55 (highest) | 31 % / 26 % / **5.0** | Tight-aggressive quant — the GTO student |
+| **Qwen 3.6-plus** | **0.00** (none) | 24 % / 9 % / 0.7 | Passive caller, no math, somehow second |
+| GPT-5.4-mini | 0.08 | 40 % / 25 % / 1.5 | Loose reasoning model, 67 % silent summaries |
+| DeepSeek-chat | 0.43 | 16 % / 6 % / 1.1 | Tight-passive math, second-guesses itself |
+| Kimi K2.5 | 0.19 | 18 % / 11 % / 1.3 | Verbose mixed — long thoughts, modest results |
+| Gemini 2.5-flash | 0.02 | 15 % / 9 % / 2.0 | Passive frequency, "weak hand / OOP / free check" |
 
-**Headline finding**: Anthropic's seat went from dead last (Haiku, −13,750 over 30 hands) to first (Sonnet, +9,908 over 102 hands) against the same five opponents. Model capability dominates the per-hand variance once sample size is large enough — the baseline's tighter spread was mostly noise.
+(VPIP = voluntary money in pot; PFR = preflop raise; AF = aggression factor = bet+raise / call.)
 
-Stake: 50/100 with 10,000-chip starting stacks (auto-rebuy each hand). Seed 23 in both runs.
+What the panels actually look like inside:
 
-URL parameters are stable: append `&hand=<n>&turn=<n>` to deep-link a specific decision, `&dev=1` for raw JSON + retry/error badges, `&live=1` for the spectator's-camera view (cards face-down until showdown).
+- **Sonnet** treats every borderline spot as a homework problem: opens with `## Hand Analysis`, calls `hand_equity_vs_ranges` against narrowed opponent ranges, **revises** equity when multi-way folds inflate it, and folds even big draws when math says so. On hand 53 turn it folded a flush + straight draw because equity dropped from 31 % heads-up to 8.9 % against a tight bet — pure discipline.
+- **Qwen** never invokes a single utility tool across 102 hands and still finishes 🥈. It writes long prose, trusts its read, and makes the line. The passive-caller profile (AF 0.7) means it lets weaker hands stay in cheaply, then takes their stack at showdown.
+- **GPT-5.4-mini** is the only seat routed through OpenAI's Responses API, so its reasoning surfaces as a `kind=summary` artifact. Wide preflop range (VPIP 40 %), short summaries, lots of small bets. Wins the baseline by being aggressive in a passive field, but regresses to mean once Sonnet shows up.
+- **DeepSeek-chat** computes pot odds 18 times per 100 hands but barely raises (PFR 6 %). Its panels have a recurring tic of *deciding* and then *un-deciding* between iterations.
+- **Kimi K2.5** writes the longest internal chain-of-thought of the field (avg 1907 chars / turn), often containing more reasoning than the actual decision warrants. Verbose ≠ accurate.
+- **Gemini 2.5-flash** is the test case for "pure intuition." 1.3 % utility-tool usage, the tightest VPIP at 15 %, and `"weak hand / out of position / take a free card"` shows up so often in its panels it reads like a template. Result: most folds, fewest bets, biggest loss.
 
-Earlier / smaller demos (4-LLM mixed lineup, single-LLM walk-through, all-bot baseline) live in `web/scripts/generate-demo-*.py` and can be regenerated locally — see [USAGE.md](USAGE.md).
+The clearest correlation in the flagship data isn't "model size" but **AF combined with active reasoning surface**. Sonnet (5.0 + heaviest tool use) wins; Gemini (2.0 but ~no tools and tightest entry) loses. Qwen is the outlier — passive but consistent enough to beat the noisier players.
 
-## Features
+You can verify any of this yourself: open the [flagship demo](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm-flagship), click around, read the right-hand panel.
 
-### Backend
-- **6-max NLHE engine** built on PokerKit 0.7.3 — single canonical state + frozen Pydantic DTOs across the engine ↔ agent trust boundary
-- **Bounded ReAct loop** per agent turn: K configurable utility-tool calls (`pot_odds`, `spr`, `hand_equity_vs_ranges`, `get_opponent_stats`) followed by a forced commit; 4 independent retry budgets
-- **Seven providers**: Anthropic (`AnthropicProvider`) + 6 via `OpenAICompatibleProvider` (OpenAI, DeepSeek, Qwen, Kimi, Grok, Gemini — all OpenAI Chat Completions–compatible). DeepSeek + Kimi thinking-mode `reasoning_content` is round-tripped on multi-turn calls.
-- **Reasoning visibility for every seat** — three different surfaces, one API: GPT-5/o-series go through OpenAI's Responses API for reasoning summaries, Gemini's `extra_body.google.thinking_config.include_thoughts` exposes its `<thought>` blocks, DeepSeek/Kimi's `reasoning_content` is round-tripped, Anthropic and Qwen prose rationale is captured directly. All five forms collapse into one panel layout.
-- **Reasoning artifacts** classified per provider (raw / summary / thinking_block / encrypted / redacted / unavailable) so analysts can distinguish what the model actually emitted vs. what was a derived summary
-- **Cost guard**: `SessionConfig.max_total_tokens` aborts cleanly at the next hand boundary
-- **3-layer JSONL output**: canonical-private (engine truth, all hole cards), public-replay (UI-safe events), agent-view-snapshots (per-turn LLM iterations)
-- **478+ unit / integration tests**, gated real-API tests for every provider
+## What's actually built
 
-### Web UI
-- **Provider-aware seats**: every seat shows the actual brand logo (Anthropic / OpenAI / DeepSeek / Qwen / Kimi / Grok / Gemini) and trimmed model name
-- **Per-seat reasoning panel**: provider header → step-numbered iteration cards (markdown-rendered, all artifact kinds collapse to one "REASONING" label) → tool-call code blocks → color-coded decision row. RuleBased agents show which rule fired (e.g. "PREMIUM hand AA → 3× BB open").
-- **Stack-trajectory chart** (Tremor LineChart) — running bankroll per seat over time, smooth monotone curves, hover tooltip, signed delta legend
-- **Action timeline** grouped by street (PREFLOP / FLOP / TURN / RIVER), action-type color coding (fold faded, call indigo, raise emerald)
-- **god-view default**: every hole card visible — replay is for understanding, not guessing. Toggle to live spectator mode if you want to read the board yourself.
-- **Session summary modal**: per-seat PnL / tokens / retry status / utility-tool calls + per-seat HUD (VPIP / PFR / 3-bet / AF / WTSD) + per-hand outcomes
-- **Multi-session selector** + custom-session file picker (dev mode)
-- **Auto-play** with 0.5× / 1× / 2× / 4× speed
-- **Keyboard shortcuts** (←/→ turn · ↑/↓ hand · space play) — modal listing in the toolbar
-- **Mobile-responsive** (best-effort)
-- **Code-split bundle**: 79 KB gzip first-paint payload (Tremor / Summary / DevPanel lazy-loaded)
-- Deployed to **GitHub Pages** as a fully static site — no backend needed for replay
+A reproducible 6-max NLHE engine wrapped around PokerKit, plus a static React replay viewer. The engine is the hard part: every LLM agent runs a bounded **ReAct loop** (think → maybe call utility tool → observe → commit one action) with four independent retry budgets (API errors, illegal actions, missing tool calls, tool misuse). Engine truth, public events, and per-turn agent-view snapshots are written as three separate JSONL files so the web UI can replay anything client-side.
+
+Seven providers shipped: Anthropic uses the native SDK; OpenAI / DeepSeek / Qwen / Kimi / Grok / Gemini share one OpenAI-compatible adapter. Reasoning visibility for each is a small protocol-shaped fight:
+
+- **GPT-5 / o-series** — fork to OpenAI's Responses API for reasoning summaries (Chat Completions only returns reasoning *token counts*).
+- **Gemini** — `extra_body={"extra_body": {"google": {"thinking_config": {"include_thoughts": true}}}}` (the double-`extra_body` is the wire-format quirk that censored 3/3 hands until it was discovered) inlines `<thought>...</thought>` blocks the provider regex-extracts.
+- **DeepSeek + Kimi** — `reasoning_content` field round-tripped on multi-turn calls (without it, Kimi 400s with `thinking is enabled but reasoning_content is missing in assistant tool call message at index N`).
+- **Anthropic + Qwen** — native prose rationale captured directly.
+
+All five forms collapse into one panel with a single `REASONING` label. Markdown is rendered (Claude emits heavy `**bold**` + `## headers`; previously they were literal characters in the panel).
+
+478 backend tests + 115 web tests, gated real-API tests for every provider. ~$5 buys all of `demo-6llm` + `demo-6llm-flagship` from scratch.
 
 ## Screenshots
 
 | | |
 |---|---|
 | ![River end](docs/images/showdown.png) | ![Session summary](docs/images/summary.png) |
-| River end of a hand (god-view shows everyone's hole cards), with the standings leaderboard and street-grouped action timeline at the bottom | Session summary modal: per-seat P&L, USD cost, token use, retry/error status, plus per-seat HUD stats (VPIP / PFR / 3-bet / AF / WTSD) |
+| God-view river end with the standings leaderboard and street-grouped action timeline | Per-seat P&L, USD cost, token use, retry/error status, plus HUD stats (VPIP / PFR / 3-bet / AF / WTSD) |
 | ![Flagship hero](docs/images/flagship-hero.png) | ![Flagship summary](docs/images/flagship-summary.png) |
-| Same UI driving the 102-hand flagship variant — Sonnet 4.6 in seat 0, mid-flop with multi-section markdown reasoning | Flagship session summary across 102 hands — Sonnet's seat at the top of the leaderboard with +9,908 |
+| Sonnet 4.6 mid-flop, multi-section markdown reasoning visible | 102-hand flagship summary — Sonnet leads with +9,908 |
 
 ![Dev mode](docs/images/dev-mode.png)
-*Dev mode (`?dev=1`): per-iteration debug badges (`raw`, `error`, `no_tool`) on the reasoning panel + a raw `agent_view_snapshot` JSON viewer for debugging.*
+*Dev mode (`?dev=1`): per-iteration debug badges + raw `agent_view_snapshot` JSON viewer.*
 
-## Architecture
-
-```
-┌─ engine ─────────────────────────────────┐    ┌─ agents ──────────────────────────┐
-│ PokerKit canonical state                 │    │ RuleBasedAgent · RandomAgent      │
-│ ↓                                        │    │ HumanCLIAgent                     │
-│ PlayerView / PublicView projections      │ ←→ │ LLMAgent                          │
-│  (frozen Pydantic, trust-boundary DTOs)  │    │  ├ AnthropicProvider              │
-│ ↓                                        │    │  └ OpenAICompatibleProvider       │
-│ Session orchestrator                     │    │     (OpenAI · DeepSeek · Qwen ·   │
-│                                          │    │      Kimi · Grok · Gemini)        │
-└───┬──────────────────────────────────────┘    └───────────────────────────────────┘
-    │ writes 3-layer JSONL
-    ▼
-┌─ runs/<session_id>/ ─────────────────────────────────────────────────────────────┐
-│ canonical_private.jsonl  · public_replay.jsonl  · agent_view_snapshots.jsonl     │
-│ censored_hands.jsonl     · meta.json            · config.json                    │
-└──────────────────────────────────────────────────────────────────────────────────┘
-    │ bundle-demos.mjs scans web/public/data/<id>/ → manifest.json
-    ▼
-┌─ web/ (static site → GitHub Pages) ──────────────────────────────────────────────┐
-│ React 19 + Vite 8 + TypeScript 6 + Tailwind v3 + Tremor + @lobehub/icons         │
-│ Fetches JSONL → parses → renders PokerTable / ReasoningPanel / PnlChart / etc.   │
-└──────────────────────────────────────────────────────────────────────────────────┘
-```
-
-## Quick start
-
-### CLI — play against an LLM
+## Try it locally
 
 ```bash
-# install
 git clone https://github.com/JayCheng113/llm-poker-arena.git
 cd llm-poker-arena
 python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
+```
 
-# set keys for whichever provider(s) you want
+Play the human seat against an LLM:
+```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-# (optional) export DEEPSEEK_API_KEY=sk-... ; export OPENAI_API_KEY=sk-...
-
-# you sit at seat 3, Claude Haiku 4.5 plays seat 0, bots fill 1/2/4/5
-poker-play \
-  --llm-seat 0 --llm-provider anthropic --llm-model claude-haiku-4-5
+poker-play --llm-seat 0 --llm-provider anthropic --llm-model claude-haiku-4-5
 ```
 
-### Reproduce the 6-LLM tournament demo locally
-
+Reproduce the demos (needs 6 provider keys — see `.env.example`):
 ```bash
-# requires all six keys: ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY,
-# QWEN_API_KEY, KIMI_API_KEY, GEMINI_API_KEY (see .env.example)
-.venv/bin/python web/scripts/generate-demo-6llm.py --hands 30
+.venv/bin/python web/scripts/generate-demo-6llm.py --hands 30                 # baseline mini lineup ($0.83)
+.venv/bin/python web/scripts/generate-demo-6llm.py --lineup flagship --hands 102 \
+    --out demo-6llm-flagship --max-tokens-cap 8000000                          # flagship Sonnet swap (~$4)
 ```
 
-Output lands in `runs/demo-6llm/` (canonical) and `web/public/data/demo-6llm/`
-(web bundle); the manifest is rebuilt automatically. The generator refuses to
-overwrite an existing run without `--force`. Per-hand progress prints to stderr
-so a 50-min run isn't a black box.
+Per-hand progress prints to stderr — a 3-hour run isn't a black box. Generators refuse to overwrite an existing session without `--force`.
 
-Other lineups (4-LLM mixed, all-bot baseline, single-LLM walk-through) live in
-`web/scripts/generate-demo-tournament.py` / `generate-demo-bots.py` /
-`generate-demo.py` for local experimentation but aren't shipped on Pages.
-
-### Web UI — run locally
-
+Run the replay UI locally:
 ```bash
-cd web
-npm install --legacy-peer-deps
-npm run dev          # http://localhost:5173
+cd web && npm install --legacy-peer-deps && npm run dev   # http://localhost:5173
 ```
 
-For more on session-config knobs, agent types, the cost guard, and the JSONL schema, see [USAGE.md](USAGE.md).
+For session-config knobs, agent types, the cost guard, JSONL schema, and per-provider quirks, see [USAGE.md](USAGE.md).
 
 ## Tech stack
 
 - **Backend**: Python 3.12 · PokerKit 0.7.3 · Pydantic 2 · `pytest` · `mypy` · `ruff`
-- **Providers**: `anthropic` SDK · `openai` SDK (also drives DeepSeek / Qwen / Kimi / Grok / Gemini via `base_url` override)
-- **Web**: React 19 · Vite 8 · TypeScript 6 · Tailwind CSS v3 · [Tremor](https://www.tremor.so/) · [@lobehub/icons](https://github.com/lobehub/lobe-icons) · `lucide-react`
+- **Providers**: `anthropic` SDK · `openai` SDK (also drives DeepSeek / Qwen / Kimi / Grok / Gemini via `base_url` override + the Responses API for OpenAI reasoning models)
+- **Web**: React 19 · Vite 8 · TypeScript 6 · Tailwind CSS v3 · [Tremor](https://www.tremor.so/) · [@lobehub/icons](https://github.com/lobehub/lobe-icons) · `marked` (markdown render) · `lucide-react`
 - **Test**: Vitest · `@testing-library/react` · Playwright
-- **Deploy**: GitHub Actions → GitHub Pages
+- **Deploy**: GitHub Actions → GitHub Pages (no backend; first-paint 79 KB gzip)
 
 ## Roadmap
 
-What's done is in [CHANGELOG.md](CHANGELOG.md). What isn't:
+What's done is in [CHANGELOG.md](CHANGELOG.md). What's interesting next:
 
-- **Live spectator mode** — current replay is post-hoc; a real backend service streaming session state over WebSocket would let visitors watch a live tournament in progress
-- **Web-based human vs. LLM** — currently CLI-only; a hosted variant needs auth + BYOK key handling so visitors don't burn the host's API budget
-- **Animations** — chip slide actor → pot, card flip on reveal (would add framer-motion ~50 KB)
+- **All-flagship lineup** — currently only Anthropic is upgraded; running Opus 4.7 + GPT-5.5 + Gemini 3.1-Pro + Kimi K2.6 + Qwen3-Max + DeepSeek V4-Pro side-by-side would cost ~$25 for 100 hands but settle the "do flagships actually play differently" question.
+- **Statistical significance bands** — 102 hands is enough to spot a 24 k swing but not enough to bound 5 k differences. A 500-hand run with bootstrap CIs would let the Qwen-vs-DeepSeek gap stop being anecdotal.
+- **Live spectator mode** — current replay is post-hoc; a backend streaming session state over WebSocket would let visitors watch a tournament in progress.
+- **Web-based human vs. LLM** — currently CLI-only; a hosted variant needs auth + BYOK key handling so visitors don't burn the host's API budget.
+- **Animations** — chip slide actor → pot, card flip on reveal (~50 KB framer-motion).
 
 ## License
 
