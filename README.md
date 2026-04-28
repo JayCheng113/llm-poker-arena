@@ -64,6 +64,13 @@ What the panels actually look like inside:
 
 The clearest correlation in the flagship data isn't "model size" but **AF combined with active reasoning surface**. Sonnet (5.0 + heaviest tool use) wins; Gemini (2.0 but ~no tools and tightest entry) loses. Qwen is the outlier — passive but consistent enough to beat the noisier players.
 
+For the full per-LLM behavior table — VPIP by position, action distribution by pot type (heads-up vs multi-way vs 3-bet), street-by-street fold rates, response to ≥ half-pot bets — see **[docs/llm-decision-profile.md](docs/llm-decision-profile.md)** (regenerated from the same JSONL by `scripts/analyze_decision_types.py`). Some non-obvious findings from the bucketed data:
+
+- **Position discipline** (BTN VPIP minus UTG VPIP) is widest for Qwen (+36 pp) and narrowest for Kimi (+12 pp). Kimi plays roughly the same range from any seat — a leak you can attack from late position.
+- **Sonnet folds 60 % to ≥ half-pot post-flop bets** (the highest of the field). Its "fold to discipline" stance is exploitable by polarized large bets — the same quant rigor that makes it +9k overall is the lever to lift chips off it.
+- **Qwen is the stickiest** — only 33 % fold to those same big bets. That's why it wins vs aggressive bluffs even with no math.
+- **Kimi shuts down completely in 3-bet pots**: 100 % fold rate (n=4). In the field's cheapest-to-attack spot, it surrenders without exception.
+
 You can verify any of this yourself: open the [flagship demo](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm-flagship), click around, read the right-hand panel.
 
 ## What's actually built
