@@ -4,6 +4,34 @@ All notable user-facing changes are listed here. Dates are in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Flagship variant: Anthropic-side controlled experiment (April 27, 2026)
+
+Shipped `demo-6llm-flagship` alongside the existing baseline
+`demo-6llm`. Same six providers, same seed, same engine — only the
+Anthropic seat changed from `claude-haiku-4-5` to `claude-sonnet-4-6`.
+The other five seats stay at the mini-tier model so any P&L delta is
+attributable to the upgrade, not the field as a whole.
+
+- `web/scripts/generate-demo-6llm.py` grew `--lineup mini|flagship`
+  + `--max-tokens-cap N` so the same generator drives both runs.
+- `bundle-demos.mjs` MARQUEE_ORDER includes `demo-6llm-flagship` so
+  the picker sorts the two runs side-by-side; baseline stays as the
+  landing demo.
+- 102-hand flagship run: $3.85, 3h 4min, 102/102 clean.
+
+  P&L (vs prior 30-hand baseline in parens):
+    🥇 claude-sonnet-4-6  +9,908   (Haiku was −13,750 / 30h — last → first)
+    🥈 qwen3.6-plus       +7,950   (was   +2,550 — also stronger over time)
+       gpt-5.4-mini        −258    (was  +19,200 — baseline win was 30h variance)
+       deepseek-chat     −1,300    (was     −200)
+       kimi-k2.5         −6,500    (was   −6,200)
+    ❌ gemini-2.5-flash  −9,800    (was   −1,600 — second loser)
+
+  Headline: model capability dominates per-hand variance once sample
+  size is large enough. The baseline's GPT-5 dominance was mostly an
+  artifact of 30-hand luck; over 102 hands the Anthropic upgrade swings
+  +24k chips against the same field.
+
 ### Reasoning visibility overhaul (April 27, 2026)
 
 Closed the last gap in the 6-LLM tournament demo: every seat now

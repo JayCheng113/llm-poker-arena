@@ -4,6 +4,11 @@
       "id": "demo-6llm",
       "label": "claude-haiku-4-5 + deepseek-chat + gpt-5.4-mini + qwen3.6-plus + kimi-k2.5 + gemini-2.5-flash (30 hands)",
       "hands": 30
+    },
+    {
+      "id": "demo-6llm-flagship",
+      "label": "claude-sonnet-4-6 + deepseek-chat + gpt-5.4-mini + qwen3.6-plus + kimi-k2.5 + gemini-2.5-flash (102 hands)",
+      "hands": 102
     }
   ]
 }

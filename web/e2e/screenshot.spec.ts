@@ -71,3 +71,29 @@ test('dev mode — Gemini reasoning summary + dev badges (hand 3 turn 11 dev=1)'
   await page.waitForSelector('[data-reasoning-artifact]', { timeout: 5_000 })
   await page.screenshot({ path: `${DOCS_IMAGES}/dev-mode.png`, fullPage: false })
 })
+
+// ---------------------------------------------------------------------------
+// flagship companion (102-hand, claude-sonnet-4-6 swapped for haiku-4-5).
+// Separate file names so README can show the controlled-experiment delta
+// (mini Haiku came last → Sonnet came first) side-by-side without
+// overwriting the baseline screenshots.
+// ---------------------------------------------------------------------------
+
+const FLAGSHIP = 'demo-6llm-flagship'
+
+test('flagship hero — Sonnet acting mid-hand (hand 53 turn 6)', async ({ page }) => {
+  await page.setViewportSize(VIEWPORT)
+  await page.goto(`/?session=${FLAGSHIP}&hand=53&turn=6`)
+  await page.waitForSelector('text=is acting', { timeout: 10_000 })
+  await page.waitForSelector('text=standings', { timeout: 5_000 })
+  await page.screenshot({ path: `${DOCS_IMAGES}/flagship-hero.png`, fullPage: false })
+})
+
+test('flagship summary — final P&L modal across 102 hands', async ({ page }) => {
+  await page.setViewportSize(VIEWPORT)
+  await page.goto(`/?session=${FLAGSHIP}&hand=0&turn=0`)
+  await page.waitForSelector('text=is acting', { timeout: 10_000 })
+  await page.getByLabel('open session summary').click()
+  await page.waitForSelector('text=session summary', { timeout: 5_000 })
+  await page.screenshot({ path: `${DOCS_IMAGES}/flagship-summary.png`, fullPage: false })
+})

@@ -58,13 +58,31 @@ export GEMINI_API_KEY=AIza...
 # → runs/demo-6llm/ + web/public/data/demo-6llm/ + manifest auto-rebuilt
 ```
 
-Seats: Claude Haiku 4.5 / deepseek-chat / gpt-5.4-mini / qwen3.6-plus /
-kimi-k2.5 / gemini-2.5-flash. The shipped reference run cost **$0.83** and
-took **54 min** wall time with **30/30 clean hands** (no censors) and a
-visible reasoning artifact on every LLM seat. Token cap is set to 2M ≈ $2
-budget ceiling; the exact per-seat USD breakdown lands in
-`meta.estimated_cost_breakdown`. Per-hand progress prints to stderr so the
-run isn't a black box.
+Default lineup (`--lineup mini`, also the default):
+Claude Haiku 4.5 / deepseek-chat / gpt-5.4-mini / qwen3.6-plus /
+kimi-k2.5 / gemini-2.5-flash. The shipped 30-hand reference run cost
+**$0.83** and took **54 min** wall time with **30/30 clean hands** (no
+censors) and a visible reasoning artifact on every LLM seat.
+
+Flagship lineup (`--lineup flagship`):
+
+```bash
+.venv/bin/python web/scripts/generate-demo-6llm.py \
+    --lineup flagship --hands 102 \
+    --out demo-6llm-flagship --max-tokens-cap 8000000
+```
+
+Same five mini-tier seats, but Anthropic's seat upgrades to
+`claude-sonnet-4-6`. Single-variable change so any P&L delta is
+attributable to the upgrade. The shipped 102-hand reference run cost
+**$3.85** and took **3h 4min** with 102/102 clean. Sonnet went from
+last (Haiku, −13,750 in 30 hands) to first (+9,908 in 102 hands), so
+the larger sample also surfaces what the 30-hand baseline mostly
+buried in noise.
+
+Token cap defaults to 2M (~$0.83 mini); pass `--max-tokens-cap 8000000`
+for the 102-hand flagship's ~$5 spend. Per-hand progress prints to stderr
+so the run isn't a black box.
 
 The generator refuses to overwrite an existing run unless you pass
 `--force` — useful when iterating on a test, dangerous for finished

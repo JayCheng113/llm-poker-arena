@@ -22,20 +22,37 @@ Existing poker AI work (Pluribus, ReBeL) uses purpose-built solvers. This projec
 
 The replay viewer is the answer's UI: it lets you open any decision and read the model's actual reasoning side-by-side with the table state, instead of treating the LLM as a black box.
 
-## Live demo
+## Live demos
 
-[**demo-6llm — 30-hand 6-LLM showdown**](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm) (one provider per seat, $0.83, 54 min wall time, 30/30 clean — no censored hands, every seat's reasoning visible).
+Two parallel sessions — same six providers, but the Anthropic seat is the controlled variable:
 
-| Rank | Seat | Model | Provider | P&L (chips) |
-|---|---|---|---|---|
-| 🥇 1 | 2 | gpt-5.4-mini | OpenAI | **+19,200** |
-| 🥈 2 | 3 | qwen3.6-plus | Alibaba | +2,550 |
-| 🥉 3 | 1 | deepseek-chat | DeepSeek | −200 |
-| 4 | 5 | gemini-2.5-flash | Google AI Studio | −1,600 |
-| 5 | 4 | kimi-k2.5 | Moonshot | −6,200 |
-| 6 | 0 | claude-haiku-4-5 | Anthropic | **−13,750** |
+### Baseline: [demo-6llm](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm) — 30 hands, mini-tier across the field
+$0.83, 54 min, 30/30 clean.
 
-Stake: 50/100 with 10,000-chip starting stacks (auto-rebuy each hand). Seed 23.
+| Rank | Seat | Model | P&L (chips) |
+|---|---|---|---|
+| 🥇 1 | 2 | gpt-5.4-mini | **+19,200** |
+| 🥈 2 | 3 | qwen3.6-plus | +2,550 |
+| 🥉 3 | 1 | deepseek-chat | −200 |
+| 4 | 5 | gemini-2.5-flash | −1,600 |
+| 5 | 4 | kimi-k2.5 | −6,200 |
+| 6 | 0 | claude-haiku-4-5 | **−13,750** |
+
+### Flagship variant: [demo-6llm-flagship](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm-flagship) — 102 hands, Anthropic upgraded to Sonnet 4.6
+$3.85, 3h 4min, 102/102 clean. Five mini-tier seats unchanged; only seat 0 moved from `claude-haiku-4-5` → `claude-sonnet-4-6`.
+
+| Rank | Seat | Model | P&L (chips) |
+|---|---|---|---|
+| 🥇 1 | 0 | **claude-sonnet-4-6** | **+9,908** |
+| 🥈 2 | 3 | qwen3.6-plus | +7,950 |
+| 🥉 3 | 2 | gpt-5.4-mini | −258 |
+| 4 | 1 | deepseek-chat | −1,300 |
+| 5 | 4 | kimi-k2.5 | −6,500 |
+| 6 | 5 | gemini-2.5-flash | **−9,800** |
+
+**Headline finding**: Anthropic's seat went from dead last (Haiku, −13,750 over 30 hands) to first (Sonnet, +9,908 over 102 hands) against the same five opponents. Model capability dominates the per-hand variance once sample size is large enough — the baseline's tighter spread was mostly noise.
+
+Stake: 50/100 with 10,000-chip starting stacks (auto-rebuy each hand). Seed 23 in both runs.
 
 URL parameters are stable: append `&hand=<n>&turn=<n>` to deep-link a specific decision, `&dev=1` for raw JSON + retry/error badges, `&live=1` for the spectator's-camera view (cards face-down until showdown).
 
@@ -73,6 +90,8 @@ Earlier / smaller demos (4-LLM mixed lineup, single-LLM walk-through, all-bot ba
 |---|---|
 | ![River end](docs/images/showdown.png) | ![Session summary](docs/images/summary.png) |
 | River end of a hand (god-view shows everyone's hole cards), with the standings leaderboard and street-grouped action timeline at the bottom | Session summary modal: per-seat P&L, USD cost, token use, retry/error status, plus per-seat HUD stats (VPIP / PFR / 3-bet / AF / WTSD) |
+| ![Flagship hero](docs/images/flagship-hero.png) | ![Flagship summary](docs/images/flagship-summary.png) |
+| Same UI driving the 102-hand flagship variant — Sonnet 4.6 in seat 0, mid-flop with multi-section markdown reasoning | Flagship session summary across 102 hands — Sonnet's seat at the top of the leaderboard with +9,908 |
 
 ![Dev mode](docs/images/dev-mode.png)
 *Dev mode (`?dev=1`): per-iteration debug badges (`raw`, `error`, `no_tool`) on the reasoning panel + a raw `agent_view_snapshot` JSON viewer for debugging.*

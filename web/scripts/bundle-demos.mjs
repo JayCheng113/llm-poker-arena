@@ -41,11 +41,12 @@ function lineupLabel(seatAssignment) {
 // gets it placed sensibly without an extra picker hunt — but those
 // directories are not bundled into the pages deploy.
 const MARQUEE_ORDER = [
-  'demo-6llm',         // headline 6-provider tournament — the shipped demo
-  'demo-tournament',   // 4-LLM mixed lineup (local-only)
-  'demo-6llm-smoke',   // smoke variant (local-only)
-  'demo-1',            // single-LLM walk-through (local-only)
-  'demo-bots',         // all-bot baseline (local-only)
+  'demo-6llm',           // 30-hand baseline (mini-tier across all 6) — landing demo
+  'demo-6llm-flagship',  // 102-hand controlled experiment (Anthropic→Sonnet)
+  'demo-tournament',     // 4-LLM mixed lineup (local-only)
+  'demo-6llm-smoke',     // smoke variant (local-only)
+  'demo-1',              // single-LLM walk-through (local-only)
+  'demo-bots',           // all-bot baseline (local-only)
 ]
 
 function priority(id) {
