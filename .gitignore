@@ -43,8 +43,11 @@ runs/
 node_modules/
 dist/
 .vite/
-uv.lock
 .superpowers/
+
+# uv.lock IS committed (this is an application, not a library — lock the
+# resolved deps for CI reproducibility and so anyone cloning gets the
+# exact graph that was tested).
 
 # Internal AI working docs — specs / plans driven by claude-code,
 # not for public consumption. Files stay locally; just untracked.
