@@ -4,6 +4,65 @@ All notable user-facing changes are listed here. Dates are in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### ExploitBot pilot — null result + reachability postmortem (April 28, 2026)
+
+Tried to monetize the four LLM-style "leaks" surfaced by the bucketed
+decision-type analysis (Kimi 3-bet shutdown, Kimi position-blind
+defending, Sonnet river call-down, Qwen sticky calling). Built
+`ExploitBotAgent` as a per-opponent rule layer over the `RuleBased`
+TAG baseline, ran 54 hands × 2 arms (RuleBased control vs ExploitBot,
+seed=17, flagship lineup, ~$3.79 wall cost). All 5 rules fired 0 times.
+
+Root cause was structural, not coding: bot at seat 5 + Kimi at seat 4
+means Kimi acts before bot in 5/6 button rotations, so Rule 2's "Kimi
+defends after my open-raise" condition was unreachable from the
+chosen seat; the inherited TAG range folded preflop in 52/56 turns,
+starving the four postflop rules. Findings stand — they're real but
+not exploitable from seat 5 against the current 6-LLM lineup.
+
+- New: `src/llm_poker_arena/agents/exploit_bot.py` (kept in-tree as a
+  reference for the design pitfall — the rules are correctly coded,
+  just structurally unreachable).
+- New: `scripts/analyze_pilot.py` — paired-bootstrap seat P&L
+  comparison between two run dirs + EXPLOIT-rule fire counter by tag.
+- New: `docs/exploit-pilot-postmortem.md` — gate-pass histogram, costs
+  table, and three pre-flight checks that would have caught this in
+  6 hands instead of 54.
+- Generator gains `--seed N` (was hardcoded 23 — exposed for
+  out-of-sample pilots) and `--replace-seat SEAT=AGENT` (substitutes
+  the LLM in a seat with `exploit` or `rule_based`; skips the
+  provider's env-key check). README gains a coda after the four
+  findings linking the postmortem.
+
+### Decision-type analysis (April 28, 2026)
+
+Pure-stdlib aggregator that buckets the 1,069 decisions in
+`runs/demo-6llm-flagship/canonical_private.jsonl` by VPIP-by-position,
+behavior-by-pot-type (heads-up / multi-way / 3-bet), per-street action
+distribution, and response to ≥ half-pot bets. Auto-generates five
+takeaways with sample-size gates (n≥6 for rivers, n≥8 elsewhere).
+
+- New: `scripts/analyze_decision_types.py` (no deps beyond stdlib).
+- New: `docs/llm-decision-profile.md` (re-runnable snapshot of the
+  current flagship session's behavior buckets, 125 lines).
+- README rewritten around the experiment narrative + per-LLM style
+  profiles instead of mixing development log with results (commit
+  `df8bb9e`).
+
+### Tooling — CI + repo-hygiene baseline (April 28, 2026)
+
+- New: `.github/workflows/python.yml` runs ruff + mypy + pytest on
+  every push to `main` and every PR touching `src/`, `tests/`,
+  `scripts/`, or `pyproject.toml`. Tests are the hard gate; ruff and
+  mypy are advisory (`continue-on-error: true`) until the pre-existing
+  3 ruff + 8 mypy violations in `tests/unit/test_openai_compatible_provider.py`
+  and `src/llm_poker_arena/agents/llm/providers/registry.py` are fixed.
+- New: `.github/PULL_REQUEST_TEMPLATE.md` + `.github/ISSUE_TEMPLATE/`
+  (bug + feature) for consistent PR / issue surface.
+- README gains 4 status badges (python ci / web ci / MIT / Python ≥3.11),
+  numeric corrections (502 backend tests, not 478), and Python version
+  alignment with `pyproject.toml` (≥3.11, not 3.12).
+
 ### Flagship variant: Anthropic-side controlled experiment (April 27, 2026)
 
 Shipped `demo-6llm-flagship` alongside the existing baseline

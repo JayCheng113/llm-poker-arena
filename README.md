@@ -1,5 +1,10 @@
 # ♠ LLM Poker Arena
 
+[![python ci](https://github.com/JayCheng113/llm-poker-arena/actions/workflows/python.yml/badge.svg)](https://github.com/JayCheng113/llm-poker-arena/actions/workflows/python.yml)
+[![web ci](https://github.com/JayCheng113/llm-poker-arena/actions/workflows/web.yml/badge.svg)](https://github.com/JayCheng113/llm-poker-arena/actions/workflows/web.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python ≥3.11](https://img.shields.io/badge/python-%E2%89%A53.11-blue.svg)](pyproject.toml)
+
 Six general-purpose LLMs sit at a No-Limit Hold'em table with the same tools a human pro would use — pot odds, equity vs. range, opponent stats — and play it out for chips. Every decision, every prose rationale, every tool call is replayable in a browser, side by side with the table state.
 
 **[▶ Live demo (baseline 30-hand)](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm)** · **[Flagship 102-hand](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm-flagship)** · 6 LLMs, one per seat, every reasoning step open
@@ -88,7 +93,7 @@ Seven providers shipped: Anthropic uses the native SDK; OpenAI / DeepSeek / Qwen
 
 All five forms collapse into one panel with a single `REASONING` label. Markdown is rendered (Claude emits heavy `**bold**` + `## headers`; previously they were literal characters in the panel).
 
-478 backend tests + 115 web tests, gated real-API tests for every provider. ~$5 buys all of `demo-6llm` + `demo-6llm-flagship` from scratch.
+502 backend tests + 115 web tests, gated real-API tests for every provider. ~$5 buys all of `demo-6llm` + `demo-6llm-flagship` from scratch.
 
 ## Screenshots
 
@@ -135,7 +140,7 @@ For session-config knobs, agent types, the cost guard, JSONL schema, and per-pro
 
 ## Tech stack
 
-- **Backend**: Python 3.12 · PokerKit 0.7.3 · Pydantic 2 · `pytest` · `mypy` · `ruff`
+- **Backend**: Python ≥3.11 (CI runs 3.11) · PokerKit 0.7.3 · Pydantic 2 · `pytest` · `mypy` · `ruff` · packaging via [`uv`](https://github.com/astral-sh/uv)
 - **Providers**: `anthropic` SDK · `openai` SDK (also drives DeepSeek / Qwen / Kimi / Grok / Gemini via `base_url` override + the Responses API for OpenAI reasoning models)
 - **Web**: React 19 · Vite 8 · TypeScript 6 · Tailwind CSS v3 · [Tremor](https://www.tremor.so/) · [@lobehub/icons](https://github.com/lobehub/lobe-icons) · `marked` (markdown render) · `lucide-react`
 - **Test**: Vitest · `@testing-library/react` · Playwright

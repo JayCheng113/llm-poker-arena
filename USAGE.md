@@ -361,7 +361,7 @@ inspect `state` errors.
 
 ```bash
 # Backend
-.venv/bin/pytest                        # 460+ unit + integration tests
+.venv/bin/pytest                        # 502 unit / integration / property / differential tests
 
 # Web
 cd web
