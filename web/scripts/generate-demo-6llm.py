@@ -125,18 +125,53 @@ def main() -> None:
              "flagship). 100-hand flagship runs need ~8M.",
     )
     parser.add_argument(
+        "--replace-seat", action="append", default=[], metavar="SEAT=AGENT",
+        help="Replace one of the LLM seats with a non-LLM agent. SEAT is "
+             "the seat index (0–5); AGENT is 'exploit' (per-opponent "
+             "ExploitBotAgent) or 'rule_based' (generic TAG bot). The "
+             "replaced seat skips its provider's API key check. Repeatable. "
+             "Used for the falsification experiment in "
+             "docs/llm-decision-profile.md.",
+    )
+    parser.add_argument(
         "--force", action="store_true",
         help="overwrite existing runs/<out>/ and web/public/data/<out>/. "
              "Without this flag the script aborts if either dir exists, "
              "so a $1+ tournament run is not silently nuked.",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=23,
+        help="SessionConfig.rng_seed (deck shuffle + button rotation). "
+             "Default 23 matches the historical demo runs; use a fresh "
+             "value for OUT-OF-SAMPLE pilots (the exploit rules in "
+             "ExploitBotAgent were derived from seed=23, so re-using it "
+             "would be in-sample overfit).",
     )
     args = parser.parse_args()
 
     if args.hands % 6 != 0:
         sys.exit(f"--hands ({args.hands}) must be a multiple of 6 (6 players)")
 
+    # Parse --replace-seat 5=exploit into {5: 'exploit'}.
+    replacements: dict[int, str] = {}
+    for spec in args.replace_seat:
+        if "=" not in spec:
+            sys.exit(f"--replace-seat must be SEAT=AGENT, got {spec!r}")
+        seat_str, agent_kind = spec.split("=", 1)
+        seat_idx = int(seat_str)
+        if not 0 <= seat_idx < 6:
+            sys.exit(f"--replace-seat seat must be 0–5, got {seat_idx}")
+        if agent_kind not in ("exploit", "rule_based"):
+            sys.exit(f"--replace-seat agent must be 'exploit' or 'rule_based', got {agent_kind!r}")
+        replacements[seat_idx] = agent_kind
+
     seat_lineup = LINEUPS[args.lineup]
-    required_env = tuple(PROVIDERS[tag].env_var for tag, _ in seat_lineup)
+    # Skip the env-key check for replaced seats (their provider isn't called).
+    required_env = tuple(
+        PROVIDERS[tag].env_var
+        for i, (tag, _) in enumerate(seat_lineup)
+        if i not in replacements
+    )
     for k in required_env:
         if not os.environ.get(k):
             sys.exit(f"{k} not set; check .env")
@@ -160,7 +195,7 @@ def main() -> None:
         enable_hud_tool=True,
         rationale_required=True,
         opponent_stats_min_samples=10,
-        rng_seed=23,
+        rng_seed=args.seed,
         max_total_tokens=args.max_tokens_cap,
     )
 
@@ -191,8 +226,34 @@ def main() -> None:
 
     base_profile = load_default_prompt_profile()
 
+    # ExploitBot needs to know each opponent's model identity so it can
+    # route per-target rules. Build the map once from seat_lineup before
+    # we start instantiating agents.
+    opponent_models = {i: model for i, (_, model) in enumerate(seat_lineup)}
+
     agents = []
-    for provider_tag, model in seat_lineup:
+    for i, (provider_tag, model) in enumerate(seat_lineup):
+        # Replacement seats skip the LLM entirely.
+        if i in replacements:
+            kind = replacements[i]
+            if kind == "exploit":
+                from llm_poker_arena.agents.exploit_bot import (
+                    ExploitBotAgent,
+                    ExploitTargets,
+                )
+                # Pass identities of the OTHER 5 seats (the bot itself
+                # isn't an opponent of itself).
+                targets = ExploitTargets(
+                    by_seat={s: m for s, m in opponent_models.items() if s != i}
+                )
+                agents.append(ExploitBotAgent(targets=targets))
+            elif kind == "rule_based":
+                from llm_poker_arena.agents.rule_based import RuleBasedAgent
+                agents.append(RuleBasedAgent())
+            else:
+                sys.exit(f"unknown replacement kind: {kind}")
+            continue
+
         api_key = os.environ[PROVIDERS[provider_tag].env_var]
         timeout = SLOW_TIMEOUT if provider_tag in SLOW_PROVIDERS else NORMAL_TIMEOUT
         # GPT-5 reasoning models reject explicit chain-of-thought framing.
