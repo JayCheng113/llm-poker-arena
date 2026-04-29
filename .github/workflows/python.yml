@@ -1,0 +1,80 @@
+name: python ci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/python.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/python.yml'
+
+# Cancel any in-flight run when a new push lands on the same ref.
+concurrency:
+  group: python-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Hard gate. Real-API integration tests stay skipped (gated by
+  # *_INTEGRATION_TEST env vars per .env.example) so CI runs $0.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install project + dev extras
+        run: uv sync --extra dev
+
+      - name: pytest
+        run: uv run pytest -ra
+
+  # Advisory gates — pre-existing repo state has a handful of ruff /
+  # mypy violations (see CHANGELOG 2026-04-28). They surface as PR
+  # warnings without blocking merges; tighten to required gates once
+  # the backlog is cleaned up.
+  lint:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv python install 3.11
+      - run: uv sync --extra dev
+      - name: ruff
+        run: uv run ruff check src tests scripts
+
+  type-check:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv python install 3.11
+      - run: uv sync --extra dev
+      - name: mypy
+        run: uv run mypy

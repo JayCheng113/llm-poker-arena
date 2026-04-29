@@ -82,13 +82,13 @@ def test_argparse_choices_in_sync_with_provider_table() -> None:
     """codex review IMP-1 regression: --llm-provider argparse `choices` must
     derive from _PROVIDER_TABLE so adding a new provider doesn't silently
     leave the CLI surface stale."""
-    from llm_poker_arena.cli.play import _PROVIDER_TABLE, main
-
     # Trigger argparse's help so choices=... evaluates without running a
     # session. The choices list lives inside argparse's internal state, but
     # the cleanest assertion is: every key in _PROVIDER_TABLE accepts via
     # the parser without "invalid choice" error.
     import argparse
+
+    from llm_poker_arena.cli.play import _PROVIDER_TABLE, main
 
     for provider_tag in _PROVIDER_TABLE:
         parser = argparse.ArgumentParser()
