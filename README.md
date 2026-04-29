@@ -71,6 +71,8 @@ For the full per-LLM behavior table — VPIP by position, action distribution by
 - **Qwen is the stickiest** — only 33 % fold to those same big bets. That's why it wins vs aggressive bluffs even with no math.
 - **Kimi shuts down completely in 3-bet pots**: 100 % fold rate (n=4). In the field's cheapest-to-attack spot, it surrenders without exception.
 
+A follow-up pilot tried to monetize these four findings by dropping a per-opponent ExploitBot into seat 5 and measuring P&L against a generic RuleBased control in the same seat. The result: 0 / 5 rules fired in 54 hands. **The findings are real but not exploitable from seat 5 against the current lineup** — the seat geometry blocks every "steal vs Kimi" preflop spot, and the TAG baseline range starves the postflop rules of opportunities. Postmortem with the gate-pass histogram and the cheaper checks that would have caught this in 6 hands instead of 54: [`docs/exploit-pilot-postmortem.md`](docs/exploit-pilot-postmortem.md).
+
 You can verify any of this yourself: open the [flagship demo](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm-flagship), click around, read the right-hand panel.
 
 ## What's actually built
