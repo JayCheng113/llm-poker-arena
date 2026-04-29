@@ -174,7 +174,7 @@ def resolved_temperature(
     if model is not None:
         key = f"{provider_tag}:{model}"
         if key in MODEL_OVERRIDES and "enforced_temperature" in MODEL_OVERRIDES[key]:
-            return MODEL_OVERRIDES[key]["enforced_temperature"]
+            return float(MODEL_OVERRIDES[key]["enforced_temperature"])
         return requested
     # Legacy path: no model → only honor a lock if it's unambiguous
     matches = [
@@ -183,5 +183,5 @@ def resolved_temperature(
         if k.startswith(f"{provider_tag}:") and "enforced_temperature" in v
     ]
     if len(matches) == 1:
-        return matches[0]
+        return float(matches[0])
     return requested

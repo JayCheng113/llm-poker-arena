@@ -47,13 +47,8 @@ jobs:
       - name: pytest
         run: uv run pytest -ra
 
-  # Advisory gates — pre-existing repo state has a handful of ruff /
-  # mypy violations (see CHANGELOG 2026-04-28). They surface as PR
-  # warnings without blocking merges; tighten to required gates once
-  # the backlog is cleaned up.
   lint:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
@@ -67,7 +62,6 @@ jobs:
 
   type-check:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3

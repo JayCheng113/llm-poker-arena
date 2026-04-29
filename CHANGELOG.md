@@ -53,15 +53,27 @@ takeaways with sample-size gates (n≥6 for rivers, n≥8 elsewhere).
 
 - New: `.github/workflows/python.yml` runs ruff + mypy + pytest on
   every push to `main` and every PR touching `src/`, `tests/`,
-  `scripts/`, or `pyproject.toml`. Tests are the hard gate; ruff and
-  mypy are advisory (`continue-on-error: true`) until the pre-existing
-  3 ruff + 8 mypy violations in `tests/unit/test_openai_compatible_provider.py`
-  and `src/llm_poker_arena/agents/llm/providers/registry.py` are fixed.
+  `scripts/`, or `pyproject.toml`. **All three jobs are hard gates** —
+  the pre-existing 3 ruff + 8 mypy violations in `tests/unit/test_openai_compatible_provider.py`
+  (`Optional` narrowing on `Mock.await_args`, `PT006` parametrize
+  tuple form, `PT018` compound assert split) and
+  `src/llm_poker_arena/agents/llm/providers/registry.py`
+  (`Returning Any from float-returning function`) were cleaned up in
+  the same shipping window. Lint/type are no-cost gates that catch
+  regressions before they hit a PR review.
+- Fix: `.gitignore` was excluding `uv.lock` from the "Node" section;
+  `setup-uv@v3` then failed its `cache-dependency-glob: uv.lock`
+  pre-flight check. Lock now committed (this is an application, not a
+  library — pin the resolved dep graph for CI parity with local).
 - New: `.github/PULL_REQUEST_TEMPLATE.md` + `.github/ISSUE_TEMPLATE/`
   (bug + feature) for consistent PR / issue surface.
-- README gains 4 status badges (python ci / web ci / MIT / Python ≥3.11),
-  numeric corrections (502 backend tests, not 478), and Python version
-  alignment with `pyproject.toml` (≥3.11, not 3.12).
+- README rewrite: TL;DR pull-quote, ✓ feature checklist, quick-start
+  moved above the experimental narrative, per-LLM analysis collapsed
+  into `<details>`, "What's actually built" → "Architecture" with a
+  provider-by-reasoning-surface table. Plus 4 status badges (python ci
+  / web ci / MIT / Python ≥3.11), numeric corrections (502 backend
+  tests, not 478), and Python version aligned with `pyproject.toml`
+  (≥3.11, not 3.12).
 
 ### Flagship variant: Anthropic-side controlled experiment (April 27, 2026)
 

@@ -584,7 +584,7 @@ def test_deepseek_reasoner_probe_records_raw_kind() -> None:
 
 
 @pytest.mark.parametrize(
-    "model,expected_key",
+    ("model", "expected_key"),
     [
         ("gpt-4o-mini", "max_tokens"),
         ("gpt-4o", "max_tokens"),
@@ -671,7 +671,7 @@ def _make_responses_provider_with_fake(
     )
     fake_create = AsyncMock(return_value=fake_resp)
     p._client = MagicMock()
-    p._client.responses.create = fake_create  # type: ignore[assignment]
+    p._client.responses.create = fake_create
     return p, fake_create
 
 
@@ -694,6 +694,7 @@ def test_openai_reasoning_model_routes_through_responses_api() -> None:
         )
     )
     assert fake_create.await_count == 1
+    assert fake_create.await_args is not None
     kwargs = fake_create.await_args.kwargs
     # Reasoning kwarg threaded through:
     assert kwargs["reasoning"]["summary"] == "auto"
@@ -711,6 +712,7 @@ def test_openai_reasoning_model_routes_through_responses_api() -> None:
     arts = p.extract_reasoning_artifact(out)
     assert len(arts) == 1
     assert arts[0].kind == ReasoningArtifactKind.SUMMARY
+    assert arts[0].content is not None
     assert "Bottom of range" in arts[0].content
 
 
@@ -749,7 +751,7 @@ def test_messages_to_responses_input_handles_full_conversation() -> None:
     Responses-shaped item list (developer/user messages, function_call
     items, function_call_output items). Pure function — no SDK round
     trip needed."""
-    msgs = [
+    msgs: list[dict[str, Any]] = [
         {"role": "user", "content": "you are seat 0"},
         {
             "role": "assistant",
@@ -811,9 +813,11 @@ def test_split_gemini_thought_handles_multiple_blocks() -> None:
     visible, summary = _split_gemini_thought(
         "Pre <thought>first</thought> mid <thought>second</thought> end"
     )
-    assert "first" in summary and "second" in summary
+    assert "first" in summary
+    assert "second" in summary
     assert "<thought>" not in visible
-    assert "Pre" in visible and "end" in visible
+    assert "Pre" in visible
+    assert "end" in visible
 
 
 def test_split_gemini_thought_graceful_when_unmatched_tag() -> None:
@@ -859,6 +863,7 @@ def test_complete_with_thinking_summary_injects_extra_body() -> None:
             seed=None,
         )
     )
+    assert fake_create.await_args is not None
     kwargs = fake_create.await_args.kwargs
     # Double-wrapped: AsyncOpenAI spreads its `extra_body=` dict to the
     # request body's top level, so we send {extra_body: {google: ...}}
@@ -907,6 +912,7 @@ def test_gemini_thinking_artifact_is_summary_not_raw() -> None:
     arts = p.extract_reasoning_artifact(out)
     assert len(arts) == 1
     assert arts[0].kind == ReasoningArtifactKind.SUMMARY
+    assert arts[0].content is not None
     assert "Plan" in arts[0].content
 
 
