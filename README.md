@@ -7,11 +7,13 @@
 
 Six general-purpose LLMs sit at a No-Limit Hold'em table with the same tools a human pro would use — pot odds, equity vs. range, opponent stats — and play it out for chips. Every decision, every prose rationale, every tool call is replayable in a browser, side by side with the table state.
 
-> **Same field, same seed, swap one model: Anthropic's seat went from dead last
-> (Haiku, −13,750 chips / 30 hands) to first (Sonnet, +9,908 chips / 102 hands)
-> against the same five opponents.** A +24k chip swing from a single model
-> upgrade — and the kind of cross-provider comparison no public benchmark
-> measures.
+> **Same provider, three different fields, three different ranks.**
+> Anthropic's seat finished **6th** in the mini-tier baseline (Haiku),
+> **1st** in the single-flagship-swap (Sonnet against the same minis),
+> and **6th again** in the all-flagship pilot (Opus against fellow
+> flagships). Capability is not monotonic when the rest of the table
+> upgrades too — and the only model that stays top-2 across all three
+> tiers is Qwen, which never calls a single utility tool.
 
 **[▶ Baseline 30-hand](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm)** · **[Flagship 102-hand](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm-flagship)** · **[All-flagship 30-hand](https://jaycheng113.github.io/llm-poker-arena/?session=pilot-flagship-30h)** · 6 LLMs, one per seat, every reasoning step open
 
@@ -76,67 +78,46 @@ The first two ran 100% clean. The all-flagship had one Kimi K2.6 turn exceed the
 
 ## Headline finding
 
-> **Single-model upgrade swung the field by 24,000 chips.** Anthropic's seat
-> went from **dead last** in the baseline (Haiku, −13,750 chips / 30 hands)
-> to **first** in the flagship variant (Sonnet, +9,908 chips / 102 hands)
-> against the same five opponents. The baseline's surprising "GPT-5.4-mini
-> wins" headline was mostly 30-hand variance — past one button rotation × 17
-> with the field fixed, the strong-vs-weak gap opens up.
+> **Same provider, three different fields, three different ranks.**
+> Anthropic's seat finishes 6th → 1st → 6th. OpenAI goes 1st → 3rd → 3rd.
+> The only seat that stays top-2 across all three demos is Qwen — which
+> never calls a single utility tool in the 102-hand flagship session.
 
-| Rank | Baseline (30 h, mini Haiku) | Flagship (102 h, Sonnet) | Δ |
+The headline isn't "model X is best." It's that **provider rank is not stable across opponent fields**, even when you upgrade every seat in lockstep. Here's the per-provider arc across all three demos (P&L in chips relative to the 10,000-chip starting stack):
+
+| Provider | Baseline (mini, 30 h) | Single-flagship swap (Sonnet vs minis, 102 h) | All-flagship (30 h) |
 |---|---|---|---|
-| 🥇 | gpt-5.4-mini  +19,200 | **claude-sonnet-4-6  +9,908** | Sonnet last → first |
-| 🥈 | qwen3.6-plus   +2,550 | qwen3.6-plus       +7,950 | Qwen consistent |
-| 🥉 | deepseek-chat    −200 | gpt-5.4-mini         −258 | GPT regressed to mean |
-| 4 | gemini-2.5-flash −1,600 | deepseek-chat     −1,300 | – |
-| 5 | kimi-k2.5      −6,200 | kimi-k2.5         −6,500 | Kimi consistently bad |
-| 6 | **claude-haiku-4-5 −13,750** | gemini-2.5-flash **−9,800** | Haiku → Gemini |
+| **Anthropic** | Haiku 4.5 — 6th, **−13,750** | **Sonnet 4.6 — 1st, +9,908** | Opus 4.7 — **6th, −4,700** |
+| **OpenAI** | GPT-5.4-mini — **1st, +19,200** | GPT-5.4-mini — 3rd, −258 | GPT-5.5 — 3rd, +1,350 |
+| **Qwen** | 3.6-plus — 2nd, +2,550 | 3.6-plus — 2nd, +7,950 | **3.6-Max-Preview — 1st, +4,200** |
+| **DeepSeek** | chat — 3rd, −200 | chat — 4th, −1,300 | V4-Pro — **2nd, +1,800** |
+| **Kimi** | K2.5 — 5th, −6,200 | K2.5 — 5th, −6,500 | K2.6 — 4th, −750 |
+| **Gemini** | 2.5-flash — 4th, −1,600 | 2.5-flash — 6th, −9,800 | 3.1-Pro-Preview — 5th, −1,900 |
 
-### And then we upgraded every seat
+Three things fall out:
 
-The all-flagship 30-hand pilot was run twice (same seed, fresh stochastic LLM outputs) to test whether the ranking is signal or 30-hand variance. **Identical ordering across both runs:**
+1. **A single seat upgrade swung the field by 24,000 chips.** Anthropic Haiku → Sonnet (only that one seat changed; all other five stayed at mini-tier) flipped the Anthropic seat from dead last to first against an unchanged opponent set. The baseline's "GPT-5.4-mini wins by 19k" headline was almost entirely 30-hand variance — over 102 hands with the field fixed, the strong-vs-weak gap opens up the way you'd expect.
+2. **Capability is not monotonic when the rest of the table upgrades too.** Sonnet was the strongest seat in a field of minis. Opus 4.7 — Anthropic's flagship-of-flagships at 7× Sonnet's price — was the *weakest* seat in a field of fellow flagships. Anthropic's relative position depends on the field, not on absolute model power.
+3. **The most expensive flagship lost the most chips. The cheapest flagship won the most.** Opus 4.7 burned $1.08 to lose 4,700 chips. Qwen 3.6-Max-Preview spent $0.44 to net +4,200. The all-flagship pilot was run twice at the same seed (independent stochastic outputs) — identical 1-2-3-4-5-6 ordering both times, so this isn't 30-hand luck.
 
-| Rank | Run 1 (low effort) | Run 2 (medium effort, current shipped) | Δ |
-|---|---|---|---|
-| 🥇 | qwen3.6-max-preview     +4,750 | **qwen3.6-max-preview     +4,200** | repeat |
-| 🥈 | deepseek-v4-pro         +1,300 | deepseek-v4-pro           +1,800 | repeat |
-| 🥉 | gpt-5.5                   +500 | gpt-5.5                   +1,350 | +850 (effort↑) |
-| 4 | kimi-k2.6                  +350 | kimi-k2.6                  −750 | one censored hand cost it |
-| 5 | gemini-3.1-pro-preview  −1,200 | gemini-3.1-pro-preview   −1,900 | repeat |
-| 6 | **claude-opus-4-7      −5,700** | **claude-opus-4-7       −4,700** | repeat |
-
-**The most expensive flagship lost the most chips, twice in a row.** Opus 4.7 cost $1.08 over 30 hands and dropped −4,700; Qwen 3.6-Max-Preview cost $0.44 and netted +4,200. The Anthropic-vs-rest gap from the single-flagship-swap experiment **inverts** when every other seat also upgrades — Sonnet was first against minis, Opus is last against fellow flagships.
-
-[Hand 25 in run 1](https://jaycheng113.github.io/llm-poker-arena/?session=pilot-flagship-30h&hand=25) caught Opus committing a literal card-counting hallucination on the turn — claimed "5-5-5-2-2 = fives full of deuces" with pocket 22 on a 5h-6s-9d-5d board, which only has two 5s. Then over-bet 3000 into a 5000 pot. The same setup in run 2 (different LLM stochastic output) had Opus self-correct on the turn and fold to a smaller loss. Single-hand reasoning failures aren't reproducible across re-rolls; the *aggregate* P&L pattern is.
+The Opus collapse is concrete enough to point at. **[Hand 25 in the all-flagship demo](https://jaycheng113.github.io/llm-poker-arena/?session=pilot-flagship-30h&hand=25)** caught Opus literally hallucinating cards on a 5h-6s-9d-5d board with pocket 22 — wrote *"5-5-5-2-2 = fives full of deuces"* in its rationale (the board only has two 5s) and then over-bet 3,000 into a 5,000 pot. The same setup at the same seed with re-rolled LLM stochastic output had Opus self-correct on the turn and fold for a fraction of the loss. **Single hands are noisy; the aggregate ranking is stable.** That's the only useful claim a 30-hand pilot lets you make, and it's the one we make.
 
 ## How each LLM actually played
 
-Three numbers tell most of the story per seat:
+Cross-referencing the HUD with the per-provider arc above, six clear personalities. The flagship-session tool-call / VPIP / AF table is the cleanest snapshot we have — the all-flagship pilot's 30 hands aren't enough sample for postflop buckets, but the headline behaviors carry through:
 
-| LLM (flagship lineup) | Utility-tool calls / hand | VPIP / PFR / AF | Style |
+| LLM (102 h flagship) | Util tools / hand | VPIP / PFR / AF | Style — and how it travelled across demos |
 |---|---|---|---|
-| **Claude Sonnet 4.6** | 0.55 (highest) | 31 % / 26 % / **5.0** | Tight-aggressive quant — the GTO student |
-| **Qwen 3.6-plus** | **0.00** (none) | 24 % / 9 % / 0.7 | Passive caller, no math, somehow second |
-| GPT-5.4-mini | 0.08 | 40 % / 25 % / 1.5 | Loose reasoning model, 67 % silent summaries |
-| DeepSeek-chat | 0.43 | 16 % / 6 % / 1.1 | Tight-passive math, second-guesses itself |
-| Kimi K2.5 | 0.19 | 18 % / 11 % / 1.3 | Verbose mixed — long thoughts, modest results |
-| Gemini 2.5-flash | 0.02 | 15 % / 9 % / 2.0 | Passive frequency, "weak hand / OOP / free check" |
+| **Sonnet 4.6** | 0.55 (highest) | 31 % / 26 % / **5.0** | The GTO student. Wins outright at the flagship-mini interface, **but** Anthropic's larger sibling Opus 4.7 — same school, more confident — is the bottom of the all-flagship table. Discipline beats minis; over-confidence loses to peers. |
+| **Qwen 3.6-plus** | **0.00** (none) | 24 % / 9 % / 0.7 | The only top-2 finisher in *every* demo. Never opens a single utility tool over 102 hands. Just calls down with mid-strength, takes stacks at showdown. Qwen Max-Preview keeps the formula and wins the all-flagship outright. |
+| **GPT-5.4-mini → GPT-5.5** | 0.08 → 0.00 | 40 % / 25 % / 1.5 | Loose-aggressive, summary-only reasoning surface. The 1st → 3rd → 3rd arc is exactly what regression-to-mean looks like once the sample is large enough. GPT-5.5 at `reasoning_effort=medium` (low nerfed it; see CHANGELOG) climbs to 3rd and breaks even. |
+| **DeepSeek-chat → V4-Pro** | 0.43 → 0.20 | 16 % / 6 % / 1.1 | Tight-passive math nerd, computes pot odds and then second-guesses itself. The provider's only positive arc — V4-Pro takes 2nd in all-flagship by being the least confused mid-table seat. |
+| **Kimi K2.5 → K2.6** | 0.19 → 0.00 | 18 % / 11 % / 1.3 | Verbose. Avg 1907 chars internal reasoning per turn at K2.5, often more analysis than the spot warrants. Folds 100 % of 3-bet pots (n=4). K2.6 walks back to 4th in the flagship field — same nit profile, but the field around it got worse, so it shed less. |
+| **Gemini 2.5-flash → 3.1-Pro-Preview** | 0.02 → 0.17 | 15 % / 9 % / 2.0 | Pure-intuition seat. The phrase *"weak hand / out of position / take a free check"* shows up so often in 2.5-flash panels it reads like a template. 3.1-Pro-Preview opens up slightly (uses tools 5× per 30 hands vs 0.6) and trims the loss, but the bottom-third pattern persists. |
 
-(VPIP = voluntary money in pot; PFR = preflop raise; AF = aggression factor = bet+raise / call.)
+(VPIP = voluntary money in pot; PFR = preflop raise; AF = aggression factor = (bet+raise) / call.)
 
-The clearest correlation in the flagship data isn't "model size" but **AF combined with active reasoning surface**. Sonnet (5.0 + heaviest tool use) wins; Gemini (2.0 but ~no tools and tightest entry) loses. Qwen is the outlier — passive but consistent enough to beat the noisier players.
-
-<details>
-<summary><b>Per-LLM panel-level analysis</b> (click to expand — 6 short paragraphs on what each seat actually wrote)</summary>
-
-- **Sonnet** treats every borderline spot as a homework problem: opens with `## Hand Analysis`, calls `hand_equity_vs_ranges` against narrowed opponent ranges, **revises** equity when multi-way folds inflate it, and folds even big draws when math says so. On hand 53 turn it folded a flush + straight draw because equity dropped from 31 % heads-up to 8.9 % against a tight bet — pure discipline.
-- **Qwen** never invokes a single utility tool across 102 hands and still finishes 🥈. It writes long prose, trusts its read, and makes the line. The passive-caller profile (AF 0.7) means it lets weaker hands stay in cheaply, then takes their stack at showdown.
-- **GPT-5.4-mini** is the only seat routed through OpenAI's Responses API, so its reasoning surfaces as a `kind=summary` artifact. Wide preflop range (VPIP 40 %), short summaries, lots of small bets. Wins the baseline by being aggressive in a passive field, but regresses to mean once Sonnet shows up.
-- **DeepSeek-chat** computes pot odds 18 times per 100 hands but barely raises (PFR 6 %). Its panels have a recurring tic of *deciding* and then *un-deciding* between iterations.
-- **Kimi K2.5** writes the longest internal chain-of-thought of the field (avg 1907 chars / turn), often containing more reasoning than the actual decision warrants. Verbose ≠ accurate.
-- **Gemini 2.5-flash** is the test case for "pure intuition." 1.3 % utility-tool usage, the tightest VPIP at 15 %, and `"weak hand / out of position / take a free card"` shows up so often in its panels it reads like a template. Result: most folds, fewest bets, biggest loss.
-
-</details>
+The clearest correlation isn't model size or price — it's **AF combined with whether the model actually consults the tools that are sitting in front of it**. Sonnet does both and wins the mini field. Qwen does neither and wins by being unbluffable. Gemini and Kimi do neither *and* play scared, and lose every demo. The two flagship-tier disasters (Opus, Gemini 3.1) suggest a third pattern: when a strong model gets *over*-confident in its read, the absence of tool-call discipline starts to bite — Opus's hand-25 hallucination is the cartoon version of what 4,700 chips of compounding small over-bets looks like.
 
 For the full per-LLM behavior table — VPIP by position, action distribution by pot type (heads-up vs multi-way vs 3-bet), street-by-street fold rates, response to ≥ half-pot bets — see **[docs/llm-decision-profile.md](docs/llm-decision-profile.md)** (regenerated from the same JSONL by `scripts/analyze_decision_types.py`). Some non-obvious findings from the bucketed data:
 
@@ -192,8 +173,8 @@ All five reasoning forms collapse into one `REASONING` panel; **markdown rendere
 
 What's done is in [CHANGELOG.md](CHANGELOG.md). What's interesting next:
 
-- **All-flagship lineup** — currently only Anthropic is upgraded; running Opus 4.7 + GPT-5.5 + Gemini 3.1-Pro + Kimi K2.6 + Qwen3-Max + DeepSeek V4-Pro side-by-side would cost ~$25 for 100 hands but settle the "do flagships actually play differently" question.
-- **Statistical significance bands** — 102 hands is enough to spot a 24 k swing but not enough to bound 5 k differences. A 500-hand run with bootstrap CIs would let the Qwen-vs-DeepSeek gap stop being anecdotal.
+- **All-flagship 102-hand marquee** — the 30-hand pilot already shows the Opus-bottom / Qwen-top order is reproducible across two stochastic runs at the same seed, but a full 102-hand run (~$12) would let the mid-pack ranking (DeepSeek V4-Pro ≈ GPT-5.5 ≈ Kimi K2.6) stop being noise-bounded.
+- **Statistical significance bands** — even at 102 hands a 5,000-chip difference is inside one-orbit variance. A 500-hand run with paired bootstrap CIs would let the Qwen-vs-DeepSeek gap, and the all-flagship mid-pack, stop being anecdotal.
 - **Live spectator mode** — current replay is post-hoc; a backend streaming session state over WebSocket would let visitors watch a tournament in progress.
 - **Web-based human vs. LLM** — currently CLI-only; a hosted variant needs auth + BYOK key handling so visitors don't burn the host's API budget.
 - **Animations** — chip slide actor → pot, card flip on reveal (~50 KB framer-motion).
