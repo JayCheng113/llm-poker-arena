@@ -21,6 +21,7 @@ Usage:
   .venv/bin/python web/scripts/generate-demo-6llm.py            # 30 hands
   .venv/bin/python web/scripts/generate-demo-6llm.py --hands 6  # smoke
 """
+# ruff: noqa: E402 — sys.path + .env loader must run before src/ imports
 import argparse
 import asyncio
 import os
@@ -101,6 +102,19 @@ LINEUPS: dict[str, tuple[tuple[str, str], ...]] = {
         ("qwen", "qwen3.6-plus"),                # seat 3 — same
         ("kimi", "kimi-k2.5"),                   # seat 4 — same
         ("gemini", "gemini-2.5-flash"),          # seat 5 — same
+    ),
+    # All-flagship: every seat uses each provider's strongest currently-
+    # available model. Cost projection (2026-04-29 smokes): ~$11/100hands
+    # base, $16-27 realistic. Gemini routes through OpenRouter because
+    # gemini-3.1-pro lives on Vertex AI (no AI Studio OpenAI-compat
+    # support) and OpenRouter wraps it without GCP setup overhead.
+    "flagship-all": (
+        ("anthropic", "claude-opus-4-7"),                      # seat 0
+        ("deepseek", "deepseek-v4-pro"),                       # seat 1
+        ("openai", "gpt-5.5"),                                 # seat 2
+        ("qwen", "qwen3.6-max-preview"),                       # seat 3
+        ("kimi", "kimi-k2.6"),                                 # seat 4
+        ("openrouter", "google/gemini-3.1-pro-preview"),       # seat 5
     ),
 }
 
