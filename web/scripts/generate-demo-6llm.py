@@ -237,6 +237,14 @@ def main() -> None:
     # this seat's per-iteration timeout to 90s so the SDK gets to
     # finish its retry budget without the outer wrap pulling the rug.
     GEMINI_PER_ITER_TIMEOUT = 90.0
+    # Kimi K2.6 single-call latency in flagship-all pilot (2026-04-29)
+    # exceeded 60s on hand 8 — censored that hand. K2.5 was already
+    # observed to need wider total_turn timeouts (China-region + verbose
+    # internal reasoning); K2.6 inherits the same envelope plus the
+    # 256K-context flagship is meaningfully slower per call. Same
+    # treatment as Gemini: bump per-iter to 90s so a single API call
+    # has room without the outer wrap pulling the rug.
+    KIMI_PER_ITER_TIMEOUT = 90.0
 
     base_profile = load_default_prompt_profile()
 
@@ -286,9 +294,13 @@ def main() -> None:
             "total_turn_timeout_sec": timeout,
             "prompt_profile": profile,
         }
-        # See GEMINI_PER_ITER_TIMEOUT comment above for rationale.
+        # See GEMINI_PER_ITER_TIMEOUT / KIMI_PER_ITER_TIMEOUT comments
+        # above. Both providers' single-call latency can blow past the
+        # default 60s wrap.
         if provider_tag == "gemini":
             agent_kwargs["per_iteration_timeout_sec"] = GEMINI_PER_ITER_TIMEOUT
+        elif provider_tag == "kimi":
+            agent_kwargs["per_iteration_timeout_sec"] = KIMI_PER_ITER_TIMEOUT
         agents.append(LLMAgent(**agent_kwargs))
 
     if session_dir.exists():
