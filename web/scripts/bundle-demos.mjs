@@ -10,11 +10,34 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const DATA_ROOT = join(__dirname, '..', 'public', 'data')
 const MANIFEST_PATH = join(DATA_ROOT, 'manifest.json')
 
+// OpenRouter agent ids are vendor-prefixed
+// (e.g. "openrouter:google/gemini-3.1-pro-preview"). For the manifest
+// label we want the human-friendly model name without the gateway —
+// so "openrouter:google/gemini-3.1-pro-preview" reads as
+// "gemini-3.1-pro-preview", same as if it had hit Gemini directly.
+const OPENROUTER_VENDORS = new Set([
+  'google',
+  'anthropic',
+  'openai',
+  'deepseek',
+  'qwen',
+  'moonshotai',
+  'x-ai',
+])
+
 function shortAgent(s) {
   if (s.startsWith('rule_based')) return 'RuleBased'
   // "anthropic:claude-haiku-4-5" → "claude-haiku-4-5"
   // "openai:gpt-4o" → "gpt-4o"
-  return s.split(':').slice(1).join(':') || s
+  // "openrouter:google/gemini-3.1-pro-preview" → "gemini-3.1-pro-preview"
+  const tail = s.split(':').slice(1).join(':')
+  if (s.startsWith('openrouter:')) {
+    const slash = tail.indexOf('/')
+    if (slash > 0 && OPENROUTER_VENDORS.has(tail.slice(0, slash))) {
+      return tail.slice(slash + 1)
+    }
+  }
+  return tail || s
 }
 
 function lineupLabel(seatAssignment) {
@@ -43,6 +66,7 @@ function lineupLabel(seatAssignment) {
 const MARQUEE_ORDER = [
   'demo-6llm',           // 30-hand baseline (mini-tier across all 6) — landing demo
   'demo-6llm-flagship',  // 102-hand controlled experiment (Anthropic→Sonnet)
+  'pilot-flagship-30h',  // 30-hand all-flagship lineup pilot — Opus 4.7 / GPT-5.5 / Gemini-3.1-pro-preview / etc.
   'demo-tournament',     // 4-LLM mixed lineup (local-only)
   'demo-6llm-smoke',     // smoke variant (local-only)
   'demo-1',              // single-LLM walk-through (local-only)

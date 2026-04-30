@@ -1,4 +1,37 @@
 /**
+ * OpenRouter is a multi-vendor gateway, so an agentId like
+ * "openrouter:google/gemini-3.1-pro-preview" needs to be re-keyed by
+ * the *underlying* vendor before the icon / label switches can match
+ * (otherwise the UI shows a generic "?" badge and the literal model
+ * id in place of "Gemini 3.1 pro preview"). Returns a synthetic
+ * agentId in the canonical "vendor:model" shape; pass-through for
+ * non-openrouter ids. Used by both ProviderBadge and shortAgentLabel.
+ */
+export function normalizeAgentId(agentId: string): string {
+  const [provider, ...rest] = agentId.split(':')
+  if (provider !== 'openrouter') return agentId
+  const model = rest.join(':')
+  const slash = model.indexOf('/')
+  if (slash < 0) return agentId
+  const vendor = model.slice(0, slash)
+  const inner = model.slice(slash + 1)
+  // OpenRouter vendor prefixes → our internal provider tags.
+  // Add new mappings here when we route a new vendor through OR.
+  const vendorToProvider: Record<string, string> = {
+    google: 'gemini',
+    anthropic: 'anthropic',
+    openai: 'openai',
+    deepseek: 'deepseek',
+    qwen: 'qwen',
+    moonshotai: 'kimi',
+    'x-ai': 'grok',
+  }
+  const mapped = vendorToProvider[vendor]
+  if (!mapped) return agentId
+  return `${mapped}:${inner}`
+}
+
+/**
  * Short, header-friendly label for an agentId from
  * `meta.seat_assignment` (e.g. "anthropic:claude-haiku-4-5"
  * → "Haiku 4.5").
@@ -6,7 +39,8 @@
  * Pure function; lives in its own file so ProviderBadge.tsx can
  * stay 100% component exports (react-refresh requirement).
  */
-export function shortAgentLabel(agentId: string): string {
+export function shortAgentLabel(rawAgentId: string): string {
+  const agentId = normalizeAgentId(rawAgentId)
   const [provider, ...rest] = agentId.split(':')
   const model = rest.join(':')
   switch (provider) {

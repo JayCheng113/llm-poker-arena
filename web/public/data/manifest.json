@@ -9,6 +9,11 @@
       "id": "demo-6llm-flagship",
       "label": "claude-sonnet-4-6 + deepseek-chat + gpt-5.4-mini + qwen3.6-plus + kimi-k2.5 + gemini-2.5-flash (102 hands)",
       "hands": 102
+    },
+    {
+      "id": "pilot-flagship-30h",
+      "label": "claude-opus-4-7 + deepseek-v4-pro + gpt-5.5 + qwen3.6-max-preview + kimi-k2.6 + gemini-3.1-pro-preview (30 hands)",
+      "hands": 30
     }
   ]
 }

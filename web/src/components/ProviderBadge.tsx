@@ -12,6 +12,8 @@ import GrokMono from '@lobehub/icons/es/Grok/components/Mono'
 import GeminiColor from '@lobehub/icons/es/Gemini/components/Color'
 import { Bot, HelpCircle } from 'lucide-react'
 
+import { normalizeAgentId } from './agentLabel'
+
 interface Props {
   agentId: string
   size?: number
@@ -22,8 +24,13 @@ interface Props {
  * agentId is the meta.seat_assignment string,
  * e.g. "anthropic:claude-haiku-4-5", "openai:gpt-5.4-mini",
  * "deepseek:deepseek-chat", "qwen:qwen3.6-plus", "rule_based:tag_v1".
+ *
+ * OpenRouter routes are normalized to their underlying vendor first
+ * (e.g. "openrouter:google/gemini-3.1-pro-preview" → "gemini:..."),
+ * so the icon matches the actual model not the gateway.
  */
-export function ProviderBadge({ agentId, size = 18, className }: Props) {
+export function ProviderBadge({ agentId: rawAgentId, size = 18, className }: Props) {
+  const agentId = normalizeAgentId(rawAgentId)
   const [provider] = agentId.split(':')
   switch (provider) {
     case 'anthropic':
