@@ -4,6 +4,84 @@ All notable user-facing changes are listed here. Dates are in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### All-flagship lineup — third demo + protocol fixes for 6 new flagship models (April 29, 2026)
+
+Shipped `pilot-flagship-30h` as a third Pages-bundled demo alongside
+the existing `demo-6llm` (mini-tier baseline) and `demo-6llm-flagship`
+(single-Anthropic-swap). Every seat now uses the strongest currently-
+available model from its provider:
+
+  - seat 0: claude-opus-4-7   (Anthropic)
+  - seat 1: deepseek-v4-pro   (DeepSeek)
+  - seat 2: gpt-5.5           (OpenAI)
+  - seat 3: qwen3.6-max-preview (Alibaba)
+  - seat 4: kimi-k2.6         (Moonshot)
+  - seat 5: gemini-3.1-pro-preview (Google, routed via OpenRouter —
+            see protocol notes below)
+
+30 hands, $2.92, 1h 46min wall, 1 censored (Kimi K2.6 single-call
+timeout). Headline: the field's most expensive flagship lost the most
+chips (Opus 4.7 −4,700 / $1.08), the cheapest flagship won the most
+(Qwen 3.6-Max-Preview +4,200 / $0.44). Reproduced across two
+independent stochastic runs at the same seed.
+
+**Protocol issues surfaced + fixed (one per per-provider smoke):**
+
+- **Opus 4.7 deprecates all sampling params.** Passing `temperature`
+  to claude-opus-4-7 returns 400 "temperature is deprecated for this
+  model" (also applies to top_p / top_k per Anthropic migration guide,
+  though we never sent those). `AnthropicProvider.complete()` now
+  skips `temperature` when the model id starts with `claude-opus-4-7`.
+
+- **Kimi K2.6 inherits K2.5's temperature lock.** First Kimi K2.6
+  smoke censored 2/2 hands with "invalid temperature: only 1 is
+  allowed for this model" — same constraint as K2.5, undocumented in
+  release notes. Added `kimi:kimi-k2.6 → enforced_temperature=1.0`
+  to `MODEL_OVERRIDES`.
+
+- **Gemini 3.x lives on Vertex AI, not AI Studio's OpenAI-compat
+  shim.** Direct call to `gemini-3.1-pro` via the existing shim
+  returns 404 "model not found for API version v1main". OpenRouter
+  exposes the same model via standard OpenAI-compat surface; added a
+  new `openrouter` provider config (base_url
+  `https://openrouter.ai/api/v1`) so `openrouter:google/gemini-3.1-
+  pro-preview` works without GCP setup. Future workflow can migrate
+  to native Vertex if/when our auth layer grows OAuth refresh.
+
+- **Frontend OpenRouter normalization.** `openrouter:google/gemini-
+  3.1-pro-preview` rendered as the generic `?` badge with the gateway
+  prefix leaking into UI labels. New shared `normalizeAgentId()`
+  helper in `web/src/components/agentLabel.ts` (and a JS twin in
+  `web/scripts/bundle-demos.mjs`) maps OpenRouter routes back to the
+  underlying vendor for badge + label lookup. Currently covers
+  google / anthropic / openai / deepseek / qwen / moonshotai / x-ai
+  vendor prefixes.
+
+- **GPT-5.5 reasoning_effort knob exposed.** `OpenAICompatibleProvider`
+  used to hardcode `reasoning.effort="low"` on every Responses API
+  call (cost-conscious default for mini-tier reasoning models). At
+  the all-flagship tier this nerfs GPT-5.5 — output tokens averaged
+  70/turn and only 10% of turns surfaced a visible reasoning summary.
+  New per-(provider,model) `reasoning_effort` field in
+  `MODEL_OVERRIDES`; `openai:gpt-5.5 → "medium"` (mini stays "low").
+  At medium, output tokens average 157/turn and 21% of turns surface
+  real strategic prose summaries. `agent_config_per_seat[N].
+  reasoning_effort` now records the actual setting per session.
+
+**New CLI / scripts:**
+
+- `web/scripts/generate-demo-6llm.py` gains `LINEUPS["flagship-all"]`.
+- `scripts/smoke_opus.py` — measure Opus 4.7 verbosity baseline
+- `scripts/smoke_gemini.py` — confirms gemini-3.1-pro 404 on shim
+- `scripts/smoke_openrouter_gemini.py` — validates OpenRouter route
+- `scripts/smoke_gpt55_effort.py` — quantifies low vs medium effort
+  delta on GPT-5.5
+
+**Pricing table additions** (`src/llm_poker_arena/storage/pricing.py`):
+
+  - `qwen:qwen3.6-max-preview`              ($1.30 / $7.80, ≤128K tier)
+  - `openrouter:google/gemini-3.1-pro-preview` ($2.00 / $12.00)
+
 ### ExploitBot pilot — null result + reachability postmortem (April 28, 2026)
 
 Tried to monetize the four LLM-style "leaks" surfaced by the bucketed

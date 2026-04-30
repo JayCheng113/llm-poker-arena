@@ -13,7 +13,7 @@ Six general-purpose LLMs sit at a No-Limit Hold'em table with the same tools a h
 > upgrade — and the kind of cross-provider comparison no public benchmark
 > measures.
 
-**[▶ Live demo (baseline 30-hand)](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm)** · **[Flagship 102-hand](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm-flagship)** · 6 LLMs, one per seat, every reasoning step open
+**[▶ Baseline 30-hand](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm)** · **[Flagship 102-hand](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm-flagship)** · **[All-flagship 30-hand](https://jaycheng113.github.io/llm-poker-arena/?session=pilot-flagship-30h)** · 6 LLMs, one per seat, every reasoning step open
 
 ![hero](docs/images/hero.png)
 
@@ -42,8 +42,16 @@ uv run poker-play --llm-seat 0 --llm-provider anthropic --llm-model claude-haiku
 
 Reproduce the headline tournament (needs all 6 provider keys — see [`.env.example`](.env.example)):
 ```bash
+# Single-flagship: Anthropic→Sonnet, rest mini-tier (102 hands, ~$4)
 uv run python web/scripts/generate-demo-6llm.py \
     --lineup flagship --hands 102 --out demo-6llm-flagship --max-tokens-cap 8000000
+
+# All-flagship: every seat upgraded (Opus 4.7, GPT-5.5, V4-Pro, Qwen Max,
+# K2.6, Gemini 3.1 Pro). Needs OPENROUTER_API_KEY for Gemini 3.x (Vertex
+# AI route — AI Studio's OpenAI-compat shim doesn't ship 3.x yet).
+uv run python web/scripts/generate-demo-6llm.py \
+    --lineup flagship-all --hands 30 --out pilot-flagship-30h \
+    --seed 17 --max-tokens-cap 3000000
 ```
 
 Per-hand progress prints to stderr — a 3-hour run isn't a black box. Generators refuse to overwrite an existing session without `--force`. The replay viewer is local with `cd web && npm install --legacy-peer-deps && npm run dev`. For full session-config knobs, agent types, JSONL schema, and per-provider quirks, see [USAGE.md](USAGE.md).
@@ -56,14 +64,15 @@ Existing poker-AI work (Pluribus, ReBeL) uses purpose-built solvers. This projec
 
 The setup is intentionally controlled. Six providers, one per seat — Anthropic / OpenAI / DeepSeek / Qwen / Kimi / Gemini — same engine, same RNG seed, same utility tools (`pot_odds`, `spr`, `hand_equity_vs_ranges`, `get_opponent_stats`), same bounded ReAct loop. The only thing that changes is the model.
 
-Two parallel demos are shipped:
+Three demos shipped, escalating from cheap to all-out flagship:
 
-| | Lineup | Hands | Cost | Wall time |
-|---|---|---|---|---|
-| **[Baseline](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm)** | mini-tier across all 6 (Haiku 4.5, GPT-5.4-mini, etc.) | 30 | $0.83 | 54 min |
-| **[Flagship](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm-flagship)** | same field, but Anthropic upgraded to Sonnet 4.6 | 102 | $3.85 | 3 h 4 min |
+| | Lineup | Hands | Cost | Wall time | Censored |
+|---|---|---|---|---|---|
+| **[Baseline](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm)** | mini-tier across all 6 (Haiku 4.5, GPT-5.4-mini, etc.) | 30 | $0.83 | 54 min | 0 / 30 |
+| **[Single-flagship swap](https://jaycheng113.github.io/llm-poker-arena/?session=demo-6llm-flagship)** | same field, Anthropic upgraded Haiku→Sonnet 4.6 | 102 | $3.85 | 3 h 4 min | 0 / 102 |
+| **[All-flagship](https://jaycheng113.github.io/llm-poker-arena/?session=pilot-flagship-30h)** | every seat upgraded — Opus 4.7 / GPT-5.5 / DeepSeek V4-Pro / Qwen 3.6-Max-Preview / Kimi K2.6 / Gemini 3.1-Pro-Preview | 30 | $2.92 | 1 h 46 min | 1 / 30 |
 
-Both ran 100 % clean — zero censored hands, zero protocol failures, every seat surfaces its reasoning to the panel.
+The first two ran 100% clean. The all-flagship had one Kimi K2.6 turn exceed the 60s per-iteration timeout — surfaced as a config-tuning TODO for the next-flagship lineup, not a protocol bug.
 
 ## Headline finding
 
@@ -82,6 +91,23 @@ Both ran 100 % clean — zero censored hands, zero protocol failures, every seat
 | 4 | gemini-2.5-flash −1,600 | deepseek-chat     −1,300 | – |
 | 5 | kimi-k2.5      −6,200 | kimi-k2.5         −6,500 | Kimi consistently bad |
 | 6 | **claude-haiku-4-5 −13,750** | gemini-2.5-flash **−9,800** | Haiku → Gemini |
+
+### And then we upgraded every seat
+
+The all-flagship 30-hand pilot was run twice (same seed, fresh stochastic LLM outputs) to test whether the ranking is signal or 30-hand variance. **Identical ordering across both runs:**
+
+| Rank | Run 1 (low effort) | Run 2 (medium effort, current shipped) | Δ |
+|---|---|---|---|
+| 🥇 | qwen3.6-max-preview     +4,750 | **qwen3.6-max-preview     +4,200** | repeat |
+| 🥈 | deepseek-v4-pro         +1,300 | deepseek-v4-pro           +1,800 | repeat |
+| 🥉 | gpt-5.5                   +500 | gpt-5.5                   +1,350 | +850 (effort↑) |
+| 4 | kimi-k2.6                  +350 | kimi-k2.6                  −750 | one censored hand cost it |
+| 5 | gemini-3.1-pro-preview  −1,200 | gemini-3.1-pro-preview   −1,900 | repeat |
+| 6 | **claude-opus-4-7      −5,700** | **claude-opus-4-7       −4,700** | repeat |
+
+**The most expensive flagship lost the most chips, twice in a row.** Opus 4.7 cost $1.08 over 30 hands and dropped −4,700; Qwen 3.6-Max-Preview cost $0.44 and netted +4,200. The Anthropic-vs-rest gap from the single-flagship-swap experiment **inverts** when every other seat also upgrades — Sonnet was first against minis, Opus is last against fellow flagships.
+
+[Hand 25 in run 1](https://jaycheng113.github.io/llm-poker-arena/?session=pilot-flagship-30h&hand=25) caught Opus committing a literal card-counting hallucination on the turn — claimed "5-5-5-2-2 = fives full of deuces" with pocket 22 on a 5h-6s-9d-5d board, which only has two 5s. Then over-bet 3000 into a 5000 pot. The same setup in run 2 (different LLM stochastic output) had Opus self-correct on the turn and fold to a smaller loss. Single-hand reasoning failures aren't reproducible across re-rolls; the *aggregate* P&L pattern is.
 
 ## How each LLM actually played
 
