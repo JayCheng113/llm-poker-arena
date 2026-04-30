@@ -62,10 +62,18 @@ class AnthropicProvider(LLMProvider):
             create_kwargs: dict[str, Any] = {
                 "model": self._model,
                 "max_tokens": self._max_tokens,
-                "temperature": temperature,
                 "messages": cast("Any", messages),
                 "tools": cast("Any", tools) if tools else cast("Any", None),
             }
+            # Opus 4.7 deprecated all sampling params (temperature, top_p,
+            # top_k); any non-default value returns 400 "X is deprecated
+            # for this model". Other Anthropic models still accept
+            # temperature. We don't pass top_p/top_k anywhere, so only
+            # temperature needs the gate. startswith() catches future
+            # dated variants (claude-opus-4-7-20260415 etc.).
+            # https://platform.claude.com/docs/en/about-claude/models/migration-guide
+            if not self._model.startswith("claude-opus-4-7"):
+                create_kwargs["temperature"] = temperature
             if system is not None:
                 # Anthropic prompt caching: structured system block with
                 # cache_control marks this as a cacheable boundary. The

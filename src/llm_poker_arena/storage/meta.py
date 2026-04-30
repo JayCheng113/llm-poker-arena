@@ -77,6 +77,7 @@ def _agent_args_summary(
         return {}
     out: dict[str, dict[str, Any]] = {}
     for seat, agent in enumerate(agents):
+        provider = getattr(agent, "_provider", None)
         out[str(seat)] = {
             "provider_id": getattr(agent, "provider_id", lambda: "unknown")(),
             "model": getattr(agent, "_model", None),
@@ -84,6 +85,11 @@ def _agent_args_summary(
             "per_iteration_timeout_sec": getattr(agent, "_per_iter_timeout", None),
             "total_turn_timeout_sec": getattr(agent, "_total_turn_timeout", None),
             "version": getattr(agent, "_version", None),
+            # OpenAI Responses API reasoning.effort knob — surfaced for
+            # OpenAI-compat providers; None for everyone else (Anthropic
+            # has adaptive thinking which is mode=off by default at the
+            # provider level here, see anthropic_provider.py).
+            "reasoning_effort": getattr(provider, "_reasoning_effort", None),
         }
     return out
 

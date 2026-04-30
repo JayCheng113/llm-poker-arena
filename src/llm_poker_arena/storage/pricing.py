@@ -60,6 +60,10 @@ _TABLE: dict[str, tuple[float, float, float, float]] = {
     "qwen:qwen3.6-plus":            (0.28,  0.66,  0.0,   0.0),  # was 0.325/1.95 (off)
     "qwen:qwen3.5-flash":           (0.10,  0.40,  0.0,   0.0),
     "qwen:qwen3-max":               (0.78,  3.90,  0.0,   0.0),  # was 1.04/4.16 (off)
+    # Two-tier on DashScope: ≤128K = $1.30/$7.80, 128K-256K = $2/$12.
+    # Our turn-level input never approaches 128K (a session history
+    # caps ~50K), so we ship the lower tier. Revise if context > 128K.
+    "qwen:qwen3.6-max-preview":     (1.30,  7.80,  0.0,   0.0),
 
     # --- Kimi (Moonshot) ---
     "kimi:kimi-k2.5":               (0.60,  2.50,  0.10,  0.0),  # was 0.44/2.00 (low)
@@ -75,6 +79,13 @@ _TABLE: dict[str, tuple[float, float, float, float]] = {
     "grok:grok-4.20-beta-2":        (2.00,  6.00,  0.0,   0.0),
     "grok:grok-4.1-fast":           (0.20,  0.50,  0.0,   0.0),
     "grok:grok-4":                  (3.00, 15.00,  0.0,   0.0),
+
+    # --- OpenRouter (multi-vendor gateway). Model id is the vendor-
+    # prefixed form OpenRouter exposes, e.g. "google/gemini-3.1-pro-
+    # preview". OpenRouter quotes "the same as the underlying provider"
+    # for these flagship models, so the rates here mirror Vertex AI's
+    # native gemini-3.1-pro pricing ($2/$12).
+    "openrouter:google/gemini-3.1-pro-preview": (2.00, 12.00, 0.0, 0.0),
 }
 
 

@@ -57,6 +57,21 @@ MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
     # Kimi K2.5 enforces temperature=1.0 (any other value 400s with
     # "invalid temperature: only 1 is allowed for this model").
     "kimi:kimi-k2.5": {"enforced_temperature": 1.0},
+    # Kimi K2.6 inherits the same temperature constraint — empirically
+    # verified 2026-04-29 (flagship-all smoke censored 2/2 K2.6 hands
+    # with "invalid temperature: only 1 is allowed for this model"
+    # before this lock was added). The k2.5→k2.6 release notes don't
+    # mention this; verify per-model on each new variant.
+    "kimi:kimi-k2.6": {"enforced_temperature": 1.0},
+    # OpenAI Responses API `reasoning.effort` per-model. Default in the
+    # provider is "low" (cheap, terse summaries). Bump to "medium" or
+    # "high" for flagship comparisons where we want the model to
+    # actually think — at the cost of 3-10x reasoning tokens, billed
+    # at output rate. The mini variant stays "low" since the model
+    # itself is cost-targeted; pulling the lever wouldn't be apples-
+    # to-apples with the rest of the mini lineup.
+    "openai:gpt-5.4-mini": {"reasoning_effort": "low"},
+    "openai:gpt-5.5":      {"reasoning_effort": "medium"},
 }
 
 
@@ -93,6 +108,18 @@ PROVIDERS: dict[str, ProviderConfig] = {
         provider_name="grok",
         env_var="GROK_API_KEY",
         base_url="https://api.x.ai/v1",
+    ),
+    "openrouter": ProviderConfig(
+        provider_name="openrouter",
+        env_var="OPENROUTER_API_KEY",
+        # OpenRouter is a multi-provider gateway with a single OpenAI-
+        # compatible endpoint — useful for models that aren't on AI
+        # Studio (e.g. gemini-3.x lives on Vertex AI; OpenRouter wraps
+        # Vertex into the same OpenAI surface as everything else).
+        # Model id includes a "vendor/" prefix, e.g.
+        # "google/gemini-3.1-pro-preview". OpenRouter forwards a flat
+        # ~5% markup over the underlying provider's pricing.
+        base_url="https://openrouter.ai/api/v1",
     ),
     "gemini": ProviderConfig(
         provider_name="gemini",
@@ -156,6 +183,12 @@ def make_provider(provider_tag: str, model: str, api_key: str) -> Any:
         kwargs["sdk_max_retries"] = cfg.sdk_max_retries
     if cfg.enable_thinking_summary:
         kwargs["enable_thinking_summary"] = True
+    # Per-(provider,model) reasoning_effort override for the OpenAI
+    # Responses API path (gpt-5.x / o-series). Provider's default is
+    # "low"; MODEL_OVERRIDES lifts it for flagship models.
+    eff = MODEL_OVERRIDES.get(f"{provider_tag}:{model}", {}).get("reasoning_effort")
+    if eff is not None:
+        kwargs["reasoning_effort"] = eff
     return OpenAICompatibleProvider(**kwargs)
 
 

@@ -116,6 +116,7 @@ class OpenAICompatibleProvider(LLMProvider):
         max_tokens: int = 1024,
         sdk_max_retries: int | None = None,
         enable_thinking_summary: bool = False,
+        reasoning_effort: str = "low",
     ) -> None:
         self._provider_name = provider_name_value
         self._model = model
@@ -141,6 +142,17 @@ class OpenAICompatibleProvider(LLMProvider):
         # a SUMMARY-kind reasoning artifact. Only Gemini supports this
         # surface today; verified 2026-04-27.
         self._enable_thinking_summary = enable_thinking_summary
+        # OpenAI Responses API `reasoning.effort` knob — low/medium/high.
+        # Default "low" is cost-conscious for non-flagship reasoning
+        # models; flagships are bumped to "medium" or "high" via
+        # MODEL_OVERRIDES (see registry.py). Higher = more reasoning
+        # tokens billed at output rate, deeper chain-of-thought
+        # captured in the SUMMARY artifact.
+        if reasoning_effort not in ("low", "medium", "high"):
+            raise ValueError(
+                f"reasoning_effort must be low/medium/high, got {reasoning_effort!r}"
+            )
+        self._reasoning_effort = reasoning_effort
 
     def provider_name(self) -> str:
         return self._provider_name
@@ -374,7 +386,7 @@ class OpenAICompatibleProvider(LLMProvider):
             # of the model's reasoning. "auto" lets the API pick concise
             # vs detailed; effort "low" matches our token budget profile
             # (we want fast turns, not deep reasoning).
-            "reasoning": {"effort": "low", "summary": "auto"},
+            "reasoning": {"effort": self._reasoning_effort, "summary": "auto"},
         }
         if responses_tools:
             kwargs["tools"] = cast("Any", responses_tools)
